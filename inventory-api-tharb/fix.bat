@@ -1,0 +1,6 @@
+@echo off
+echo Running Stock Quantity Fix...
+node fixStockQuantities.js
+echo.
+echo Done! Press any key to close...
+pause > nul

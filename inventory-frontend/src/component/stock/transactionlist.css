@@ -1,0 +1,28 @@
+.default-color {
+    color: white;
+    background-color: blue ; 
+}
+.expiry-red{
+    color: white;
+    background-color: red ;
+}
+.expiry-red:hover{
+    color: white;
+    background-color: red !important;
+}
+.expiry-yellow{
+    color: white;
+    background-color: blueviolet ;
+}
+.expiry-yellow:hover{
+    color: white;
+    background-color: blueviolet !important;
+}
+.expiry-orange{
+    color: white;
+    background-color: orange ;
+}
+.expiry-orange:hover{
+    color: white;
+    background-color: orange !important;
+}

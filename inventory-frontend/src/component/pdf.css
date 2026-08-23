@@ -1,0 +1,98 @@
+body {
+  /* font-family: Arial, sans-serif; */
+  margin: 0;
+  padding: 0;
+  height: 0;
+}
+div.page-footer {
+    /* text-align: center; */
+    /* height: 50px; */
+    font-size: 10px;
+    opacity: 0.8;
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+  }
+  
+  div.page-footer p {
+    margin: 0;
+  }
+  .border{
+    border:1px solid black !important;
+  }
+  .lastborder{
+    border-right: 1px solid black;
+    border-bottom: 1px solid black;
+  }
+  .secondlastborder{
+    /* border-right: 1px solid black; */
+    border-bottom: 1px solid black;
+  }
+  .watermark {
+    display: none;
+    top: 50vh;
+    z-index: -9;
+    width: 50vw;
+    page-break-after: always;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    opacity: .1;
+  }
+  
+  table.report-container {
+    page-break-after: always;
+    width: 100%;
+  }
+  
+  thead.report-header {
+    display: table-header-group;
+  }
+  
+  tfoot.report-footer {
+    display: table-footer-group;
+  }
+  
+  div.footer-info, div.page-footer {
+    display: none;
+    height: 70px;
+  }
+  .comments{
+    font-weight: bold;
+    font-size: 18px;
+    position: relative;
+    bottom: 23px;
+  }
+  /* .grandTotal{
+    width: 320px;
+  } */
+  .logo{
+    position: relative;
+    bottom: 3px;
+  }
+  @media print {
+    @page {
+        size: A4;
+        margin: 16mm 16mm 16mm 16mm;
+        
+    }
+  .item{
+    width: 770px;
+  }
+    .watermark {
+        display: block;
+        counter-increment: page;
+        position: fixed;
+    }
+   
+    div.page-footer, div.footer-info {
+        display: block;
+    }
+  table.report-container {
+    page-break-after: auto; /* You can also use avoid, left, right, inherit, etc. */
+  }
+
+  }
+
+
+
+  

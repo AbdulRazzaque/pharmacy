@@ -1,0 +1,241 @@
+.pdf-viewport {
+  background-color: #f3f4f6;
+  min-height: 100vh;
+  padding: 20px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Arial', sans-serif;
+}
+
+.pdf-page {
+  background-color: #ffffff;
+  width: 210mm;
+  height: 297mm;
+  padding: 15mm 20mm;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  color: #000;
+}
+
+.pdf-banner {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.pdf-banner img {
+  width: 80%;
+  height: auto;
+  display: block;
+}
+
+.pdf-header-fields {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.pdf-title-container {
+  flex: 1;
+  margin-left: 58px;
+}
+
+
+.pdf-title {
+  font-size: 20px;
+  font-weight: bold;
+  text-decoration: underline;
+  text-transform: capitalize;
+}
+
+.pdf-meta-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.pdf-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+
+.pdf-table th,
+.pdf-table td {
+  border: 1px solid #000;
+  padding: 6px 8px;
+  text-align: left;
+  height: 28px;
+  /* Fixed height for rows to match design */
+}
+
+.pdf-table th {
+  background-color: transparent;
+  font-weight: bold;
+}
+
+.pdf-table th:nth-child(1),
+.pdf-table td:nth-child(1) {
+  width: 5%;
+  text-align: center;
+}
+
+.pdf-table th:nth-child(2),
+.pdf-table td:nth-child(2) {
+  width: 45%;
+}
+
+.pdf-table th:nth-child(3),
+.pdf-table td:nth-child(3) {
+  width: 12%;
+  text-align: center;
+}
+
+.pdf-table th:nth-child(4),
+.pdf-table td:nth-child(4) {
+  width: 12%;
+  text-align: center;
+}
+
+.pdf-table th:nth-child(5),
+.pdf-table td:nth-child(5) {
+  width: 13%;
+  text-align: right;
+}
+
+.pdf-table th:nth-child(6),
+.pdf-table td:nth-child(6) {
+  width: 13%;
+  text-align: right;
+}
+
+.pdf-signatures-section {
+  margin-top: 15px;
+  font-size: 13px;
+}
+
+.pdf-signatures-title {
+  font-weight: bold;
+  text-decoration: underline;
+  margin-bottom: 15px;
+}
+
+.pdf-signatures-grid {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.pdf-sig-left {
+  width: 45%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.pdf-sig-right {
+  width: 45%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pdf-field-line {
+  border-bottom: 1px dotted #000;
+  display: inline-block;
+  min-width: 150px;
+  padding-left: 5px;
+  font-weight: normal;
+  text-align: left;
+}
+
+.pdf-field-line-dashed {
+  border-bottom: 1px dashed #000;
+  display: inline-block;
+  min-width: 150px;
+  padding-left: 5px;
+  font-weight: normal;
+  text-align: center;
+}
+
+.pdf-comments-section {
+  margin-top: 15px;
+  font-size: 13px;
+}
+
+.pdf-comments-row {
+  margin-top: 5px;
+  line-height: 1.6;
+}
+
+.pdf-comment-line {
+  border-bottom: 1px dotted #000;
+  min-height: 20px;
+  margin-bottom: 5px;
+  word-break: break-all;
+}
+
+.pdf-action-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background-color: #fff;
+    overflow: visible;
+  }
+
+  .pdf-viewport {
+    background-color: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+    height: auto !important;
+    display: block !important;
+  }
+
+  .pdf-page {
+    width: 210mm;
+    height: 296.5mm;
+    /* Slightly less than A4 to prevent boundary page overflow */
+    padding: 10mm 15mm;
+    box-shadow: none;
+    margin: 0 auto;
+    page-break-after: always;
+    page-break-inside: avoid;
+    break-after: page;
+    break-inside: avoid;
+    box-sizing: border-box;
+  }
+
+  .pdf-page:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+}
