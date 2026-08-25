@@ -11,6 +11,7 @@ const Stockoutpdf = () => {
   const [pdfData, setPdfData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [hidePrice, setHidePrice] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -185,6 +186,15 @@ const Stockoutpdf = () => {
         >
           ← Back to Application
         </button>
+        <label className="flex items-center gap-2 text-white font-semibold text-sm cursor-pointer select-none bg-slate-700 px-3 py-2 rounded shadow hover:bg-slate-600 transition">
+          <input
+            type="checkbox"
+            checked={hidePrice}
+            onChange={(e) => setHidePrice(e.target.checked)}
+            className="w-4 h-4 text-red-600 rounded focus:ring-red-500 cursor-pointer"
+          />
+          <span>Hide Price</span>
+        </label>
         <button
           onClick={() => window.print()}
           className="px-4 py-2 bg-red-600 text-white font-semibold rounded hover:bg-red-700 transition flex items-center gap-2 shadow"
@@ -246,19 +256,23 @@ const Stockoutpdf = () => {
             </div>
 
             {/* 4. Items Table (Exactly 15 rows) */}
-            <table className="pdf-table">
+            <table className={`pdf-table ${hidePrice ? 'hide-price' : ''}`}>
               <thead>
                 <tr>
                   <th>No.</th>
                   <th>Item</th>
                   <th>Unit</th>
                   <th>Quantity</th>
-                  <th>Unit Price
-                    <p className='qr'>QR</p>
-                  </th>
-                  <th>Total Price
-                    <p className='qr'>QR</p>
-                  </th>
+                  {!hidePrice && (
+                    <>
+                      <th>Unit Price
+                        <p className='qr'>QR</p>
+                      </th>
+                      <th>Total Price
+                        <p className='qr'>QR</p>
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -273,13 +287,17 @@ const Stockoutpdf = () => {
                       <td className="pdf-cell-item">{item ? `${item.productName}` : ''}</td>
                       <td>{item ? item.unit : ''}</td>
                       <td>{item ? item.quantity : ''}</td>
-                      <td className="pdf-cell-num">{item ? ` ${unitPrice.toFixed(2)}` : ''}</td>
-                      <td className="pdf-cell-num">{item ? ` ${totalPrice.toFixed(2)}` : ''}</td>
+                      {!hidePrice && (
+                        <>
+                          <td className="pdf-cell-num">{item ? ` ${unitPrice.toFixed(2)}` : ''}</td>
+                          <td className="pdf-cell-num">{item ? ` ${totalPrice.toFixed(2)}` : ''}</td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}
                 {/* Grand Total Row on the last page */}
-                {pageIndex === itemChunks.length - 1 && (
+                {!hidePrice && pageIndex === itemChunks.length - 1 && (
                   <tr className="pdf-total-row">
                     <td colSpan="4" className="pdf-total-words" dir="rtl">
                       {numberToArabicWords(getGrandTotal())}

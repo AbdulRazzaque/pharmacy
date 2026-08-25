@@ -189,6 +189,16 @@ const StockOutDocExcelEdit = () => {
 
       if (docRes.data?.msg === 'success' && docRes.data.result?.[0]) {
         const rawItems = docRes.data.result[0].doc || [];
+        if (rawItems.length > 0) {
+          const firstLoc = rawItems[0].locationId || rawItems[0].location?._id || (typeof rawItems[0].location === 'string' ? rawItems[0].location : '');
+          if (firstLoc) {
+            setDocLocationId(prev => prev || String(firstLoc));
+            setDocLocationName(prev => prev || rawItems[0].locationName || rawItems[0].location?.name || '');
+          }
+          if (rawItems[0].trainerName) {
+            setTrainerName(prev => prev || rawItems[0].trainerName);
+          }
+        }
         // Map to format editable state and look up current available quantity
         const mapped = rawItems.map(item => {
           const matchingStock = (stockMap ? Array.from(stockMap.values()) : []).find(s => 
@@ -411,9 +421,15 @@ const StockOutDocExcelEdit = () => {
 
     try {
       setSaving(true);
+      const locToUse = docLocationId || modifiedList.find(i => i.locationId)?.locationId || items.find(i => i.locationId)?.locationId || locations[0]?._id || '';
       const res = await axios.post(
         `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOutBulkUpdate`,
-        { docNo: parseInt(docNo, 10), updates: modifiedList },
+        { 
+          docNo: parseInt(docNo, 10), 
+          updates: modifiedList,
+          location: locToUse,
+          locationId: locToUse
+        },
         { headers: { token } }
       );
 
@@ -436,6 +452,7 @@ const StockOutDocExcelEdit = () => {
     // Clear search filter to ensure the new row is visible
     setSearchQuery('');
     
+    const locToUse = docLocationId || items.find(i => i.locationId)?.locationId || locations[0]?._id || '';
     const newItem = {
       _id: `new_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       name: '',
@@ -445,7 +462,7 @@ const StockOutDocExcelEdit = () => {
       expiry: '',
       quantity: 0,
       sellingPrice: 0,
-      locationId: docLocationId || (locations[0]?._id) || '',
+      locationId: locToUse,
       availableQty: 0,
       isDeleted: false,
       isNew: true
