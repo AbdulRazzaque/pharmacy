@@ -522,3 +522,8 @@
   position: relative;
   right: 20px;
 }
+
+.qr {
+  font-size: small;
+  text-align: center;
+}

@@ -253,8 +253,12 @@ const Stockoutpdf = () => {
                   <th>Item</th>
                   <th>Unit</th>
                   <th>Quantity</th>
-                  <th>Unit Price</th>
-                  <th>Total Price</th>
+                  <th>Unit Price
+                    <p className='qr'>QR</p>
+                  </th>
+                  <th>Total Price
+                    <p className='qr'>QR</p>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -269,8 +273,8 @@ const Stockoutpdf = () => {
                       <td className="pdf-cell-item">{item ? `${item.productName}` : ''}</td>
                       <td>{item ? item.unit : ''}</td>
                       <td>{item ? item.quantity : ''}</td>
-                      <td className="pdf-cell-num">{item ? `QR ${unitPrice.toFixed(2)}` : ''}</td>
-                      <td className="pdf-cell-num">{item ? `QR ${totalPrice.toFixed(2)}` : ''}</td>
+                      <td className="pdf-cell-num">{item ? ` ${unitPrice.toFixed(2)}` : ''}</td>
+                      <td className="pdf-cell-num">{item ? ` ${totalPrice.toFixed(2)}` : ''}</td>
                     </tr>
                   );
                 })}
@@ -326,7 +330,6 @@ const Stockoutpdf = () => {
               <strong className="pdf-comments-title">Comments:</strong>
               <div className="pdf-comments-lines">
                 <div className="pdf-comment-line-solid"></div>
-                <div className="pdf-comment-line-dotted"></div>
               </div>
             </div>
           </div>
