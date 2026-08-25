@@ -26,8 +26,8 @@ const Stockoutpdf = () => {
           const autoPrint = queryParams.get('autoPrint') !== 'false';
           if (autoPrint) {
             setTimeout(() => {
-              window.print();
-            }, 2000);
+              // window.print();
+            }, 1500);
           }
         })
         .catch(err => {
@@ -74,6 +74,96 @@ const Stockoutpdf = () => {
     return items.reduce((sum, item) => sum + (item.quantity * (item.sellingPrice ?? 0)), 0);
   };
 
+  // Convert number to Arabic words (Tafqeet in Qatari Riyals and Dirhams)
+  const numberToArabicWords = (number) => {
+    if (number === null || number === undefined || isNaN(number)) return '';
+
+    const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة', 'عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
+    const tens = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
+    const hundreds = ['', 'مائة', 'مائتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة'];
+
+    const convertChunk = (n) => {
+      if (n === 0) return '';
+      let res = [];
+      const h = Math.floor(n / 100);
+      const rem = n % 100;
+
+      if (h > 0) {
+        res.push(hundreds[h]);
+      }
+
+      if (rem > 0) {
+        if (rem < 20) {
+          res.push(ones[rem]);
+        } else {
+          const t = Math.floor(rem / 10);
+          const o = rem % 10;
+          if (o > 0) {
+            res.push(ones[o] + ' و' + tens[t]);
+          } else {
+            res.push(tens[t]);
+          }
+        }
+      }
+      return res.join(' و');
+    };
+
+    const convertWholeNumber = (n) => {
+      if (n === 0) return 'صفر';
+
+      const parts = [];
+
+      // Millions
+      const millions = Math.floor(n / 1000000);
+      const remMillion = n % 1000000;
+      if (millions > 0) {
+        if (millions === 1) parts.push('مليون');
+        else if (millions === 2) parts.push('مليونان');
+        else if (millions >= 3 && millions <= 10) parts.push(convertChunk(millions) + ' ملايين');
+        else parts.push(convertChunk(millions) + ' مليون');
+      }
+
+      // Thousands
+      const thousands = Math.floor(remMillion / 1000);
+      const remThousand = remMillion % 1000;
+      if (thousands > 0) {
+        if (thousands === 1) parts.push('ألف');
+        else if (thousands === 2) parts.push('ألفان');
+        else if (thousands >= 3 && thousands <= 10) parts.push(convertChunk(thousands) + ' آلاف');
+        else parts.push(convertChunk(thousands) + ' ألف');
+      }
+
+      // Remaining hundreds/tens/ones
+      if (remThousand > 0) {
+        parts.push(convertChunk(remThousand));
+      }
+
+      return parts.join(' و');
+    };
+
+    const rounded = Number(number).toFixed(2);
+    const [wholeStr, decStr] = rounded.split('.');
+    const whole = parseInt(wholeStr, 10);
+    const dec = parseInt(decStr, 10);
+
+    let result = 'فقط ';
+    if (whole > 0) {
+      result += convertWholeNumber(whole) + ' ريالاً قطرياً';
+    }
+
+    if (dec > 0) {
+      if (whole > 0) result += ' و';
+      result += convertChunk(dec) + ' درهماً';
+    }
+
+    if (whole === 0 && dec === 0) {
+      result += 'صفر ريال قطري';
+    }
+
+    result += ' لا غير';
+    return result;
+  };
+
   // Helper to chunk items into arrays of size 15
   const chunkArray = (arr, size) => {
     const chunks = [];
@@ -91,7 +181,7 @@ const Stockoutpdf = () => {
       <div className="pdf-action-bar no-print">
         <button
           onClick={() => navigate('/dashboard/stockout')}
-          className="px-4 py-2 bg-gray-800 text-white font-semibold rounded hover:bg-gray-900 transition flex items-center gap-2 shadow"
+          className="px-4 py-2 bg-gray-800 text-white font-semibold rounded hover:bg-gray-700 transition flex items-center gap-2 shadow"
         >
           ← Back to Application
         </button>
@@ -103,107 +193,145 @@ const Stockoutpdf = () => {
         </button>
       </div>
 
-      {itemChunks.map((chunk, pageIndex) => (
-        <div key={pageIndex} className="pdf-page">
-          {/* Banner */}
-          <div className="pdf-banner">
-            <img src="/images/banner.png" alt="Tharb Camel Hospital Banner" />
-          </div>
+      <div className="pdf-page-container">
+        {itemChunks.map((chunk, pageIndex) => (
+          <div key={pageIndex} className="pdf-page">
+            {/* 1. Header Banner: Side-by-Side Images */}
+            <div className="pdf-banner">
+              <img src="/images/imstharb.png" alt="Tharb Camel Hospital Logo" className="pdf-banner-logo" />
+              <img src="/images/tharbName.png" alt="Tharb Camel Hospital Name" className="pdf-banner-name" />
+            </div>
 
-          {/* Date and Title Row */}
-          <div className="pdf-header-fields">
-            <div className="pdf-date-field">
-              Date: <span className="pdf-field-line">{moment(pdfData.date).format('DD/MM/YYYY')}</span>
-            </div>
-            <div className="pdf-title-container">
-              <h1 className="pdf-title">Drug Issued form</h1>
-            </div>
-          </div>
+            {/* 2. Header Fields: Date & Title */}
+            <div className="pdf-header-fields">
+              <div className="pdf-title-container">
+                <h1 className="pdf-title">Invoice & Delivery Note</h1>
+              </div>
 
-          {/* Location and Trainer Row */}
-          <div className="pdf-meta-row">
-            <div>
-              Location: <span className="pdf-field-line">{pdfData.locationName}</span>
-            </div>
-            <div>
-              Trainer: <span className="pdf-field-line" style={{ minWidth: '240px' }}>{pdfData.trainerName}</span>
-            </div>
-          </div>
 
-          {/* Table of exactly 15 rows */}
-          <table className="pdf-table">
-            <thead>
-              <tr>
-                <th>No.</th>
-                <th>Item</th>
-                <th>Unit</th>
-                <th>Quantity</th>
-                <th>Unit Price</th>
-                <th>Total Price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: 15 }).map((_, index) => {
-                const itemIndex = pageIndex * 15 + index;
-                const item = chunk[index];
-                const unitPrice = item ? (item.sellingPrice ?? 0) : 0;
-                const totalPrice = item ? (item.quantity * unitPrice) : 0;
-                return (
-                  <tr key={index}>
-                    <td>{itemIndex + 1}</td>
-                    <td>{item ? `${item.productName}` : ''}</td>
-                    <td>{item ? item.unit : ''}</td>
-                    <td>{item ? item.quantity : ''}</td>
-                    <td>{item ? `QR${unitPrice.toFixed(2)}` : ''}</td>
-                    <td>{item ? `QR${totalPrice.toFixed(2)}` : ''}</td>
-                  </tr>
-                );
-              })}
-              {/* Grand Total Row on the last page */}
-              {pageIndex === itemChunks.length - 1 && (
-                <tr className="pdf-total-row">
-                  <td colSpan="5" style={{ textAlign: 'right', fontWeight: 'bold' }}>Grand Total:</td>
-                  <td style={{ textAlign: 'right', fontWeight: 'bold' }}>QR{getGrandTotal().toFixed(2)}</td>
+            </div>
+
+            <div className="pdf-header-fields">
+              <div className="pdf-header-left">
+                <span className="pdf-field-label">Date:</span>
+                <span className="pdf-field-line pdf-date-line">
+                  {moment(pdfData.date).format('DD/MM/YYYY')}
+                </span>
+              </div>
+              <div className="pdf-header-right">
+                <span className="pdf-field-label pdf-document-number-label">Document No: </span>
+                <span className="pdf-field-line pdf-date-line">
+                  {pdfData.docNo}
+                </span>
+              </div>
+            </div>
+
+            {/* 3. Meta Row: Location & Trainer */}
+            <div className="pdf-meta-row">
+              <div className="pdf-meta-left">
+                <span className="pdf-field-label">Location:</span>
+                <span className="pdf-field-line pdf-location-line">
+                  {pdfData.locationName}
+                </span>
+              </div>
+
+              <div className="pdf-meta-right">
+                <span className="pdf-field-label">Trainer:</span>
+                <span className="pdf-field-line pdf-trainer-line">
+                  {pdfData.trainerName}
+                </span>
+
+
+              </div>
+            </div>
+
+            {/* 4. Items Table (Exactly 15 rows) */}
+            <table className="pdf-table">
+              <thead>
+                <tr>
+                  <th>No.</th>
+                  <th>Item</th>
+                  <th>Unit</th>
+                  <th>Quantity</th>
+                  <th>Unit Price</th>
+                  <th>Total Price</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {Array.from({ length: 15 }).map((_, index) => {
+                  const itemIndex = pageIndex * 15 + index;
+                  const item = chunk[index];
+                  const unitPrice = item ? (item.sellingPrice ?? 0) : 0;
+                  const totalPrice = item ? (item.quantity * unitPrice) : 0;
+                  return (
+                    <tr key={index}>
+                      <td>{itemIndex + 1}</td>
+                      <td className="pdf-cell-item">{item ? `${item.productName}` : ''}</td>
+                      <td>{item ? item.unit : ''}</td>
+                      <td>{item ? item.quantity : ''}</td>
+                      <td className="pdf-cell-num">{item ? `QR ${unitPrice.toFixed(2)}` : ''}</td>
+                      <td className="pdf-cell-num">{item ? `QR ${totalPrice.toFixed(2)}` : ''}</td>
+                    </tr>
+                  );
+                })}
+                {/* Grand Total Row on the last page */}
+                {pageIndex === itemChunks.length - 1 && (
+                  <tr className="pdf-total-row">
+                    <td colSpan="4" className="pdf-total-words" dir="rtl">
+                      {numberToArabicWords(getGrandTotal())}
+                    </td>
+                    <td className="pdf-total-label">Grand Total:</td>
+                    <td className="pdf-total-value">QR{getGrandTotal().toFixed(2)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
 
-          {/* Signatures section */}
-          <div className="pdf-signatures-section">
-            <h2 className="pdf-signatures-title">Signatures:</h2>
-            <div className="pdf-signatures-grid">
-              <div className="pdf-sig-left">
-                <div>
-                  Store Incharge: <span className="pdf-field-line" style={{ minWidth: '160px' }}></span>
+            {/* 5. Delivery Confirmation Notice */}
+            <p className="pdf-delivery-note">
+              Delivery Confirmation :- I confirm that the above items have been received in good condition.
+            </p>
+
+            {/* 6. Signatures Section */}
+            <div className="pdf-signatures-section">
+              <h2 className="pdf-signatures-title">Signatures:</h2>
+              <div className="pdf-signatures-grid">
+                <div className="pdf-sig-left">
+                  <div className="pdf-sig-row">
+                    <span className="pdf-field-label">Store Incharge:</span>
+                    <span className="pdf-field-line pdf-sig-line"></span>
+                  </div>
+                  <div className="pdf-sig-row" style={{ marginTop: '18px' }}>
+                    <span className="pdf-field-label">Accountant:</span>
+                    <span className="pdf-field-line pdf-sig-line"></span>
+                  </div>
                 </div>
-              </div>
-              <div className="pdf-sig-right">
-                <div className="font-bold">Trainer / ASST. Trainer</div>
-                <div>
-                  Taken by: <span className="pdf-field-line-dashed"></span>
-                </div>
-                <div>
-                  Veterinarian: <span className="pdf-field-line" style={{ minWidth: '160px' }}></span>
+
+                <div className="pdf-sig-right">
+                  <div className="pdf-sig-role">Trainer / ASST. Trainer</div>
+                  <div className="pdf-sig-row">
+                    <span className="pdf-field-label">Received by:</span>
+                    <span className="pdf-field-line-dotted pdf-sig-line"></span>
+                  </div>
+                  <div className="pdf-sig-row">
+                    <span className="pdf-field-label">Veterinarian:</span>
+                    <span className="pdf-field-line pdf-sig-line"></span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Comments section with exact template spacing */}
-          <div className="pdf-comments-section">
-            <strong>Comments:</strong>
-            <div className="pdf-comments-row">
-              <div className="pdf-comment-line">
-
-              </div>
-              <div className="pdf-comment-line">
-
+            {/* 7. Comments Section */}
+            <div className="pdf-comments-section">
+              <strong className="pdf-comments-title">Comments:</strong>
+              <div className="pdf-comments-lines">
+                <div className="pdf-comment-line-solid"></div>
+                <div className="pdf-comment-line-dotted"></div>
               </div>
             </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 };

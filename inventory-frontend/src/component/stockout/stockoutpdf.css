@@ -1,86 +1,177 @@
+/* ================================================
+   SCREEN PREVIEW STYLES
+   ================================================ */
 .pdf-viewport {
-  background-color: #f3f4f6;
+  background-color: #f1f5f9;
   min-height: 100vh;
-  padding: 20px 0;
+  padding: 15px 10px 30px 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  font-family: 'Arial', sans-serif;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
+.pdf-action-bar {
+  display: flex;
+  gap: 15px;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 15px;
+  background-color: #1e293b;
+  padding: 10px 20px;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  position: sticky;
+  top: 10px;
+  width: auto;
+}
+
+.pdf-page-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* ─── Screen A4 Page Box (210mm x 297mm) ─── */
 .pdf-page {
   background-color: #ffffff;
   width: 210mm;
-  height: 297mm;
-  padding: 15mm 20mm;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  min-height: 297mm;
+  padding: 6mm 12mm 6mm 12mm;
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  position: relative;
-  color: #000;
+  color: #000000;
+  margin: 0 auto 25px auto;
+  font-size: 13.5px;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
+/* 1. Header Banner (Side-by-Side Images) */
 .pdf-banner {
+  display: flex;
+  align-items: center;
+  gap: 15px;
   width: 100%;
-  margin-bottom: 20px;
+  margin-top: 0;
+  padding-top: 0;
+  margin-bottom: 8px;
 }
 
-.pdf-banner img {
-  width: 80%;
-  height: auto;
+.pdf-banner-logo {
+  height: 70px;
+  width: auto;
+  object-fit: contain;
+  flex-shrink: 0;
   display: block;
 }
 
+.pdf-banner-name {
+  height: 38px;
+  max-width: calc(100% - 90px);
+  width: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* 2. Header Fields: Date & Title */
 .pdf-header-fields {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  margin-bottom: 10px;
-  font-size: 14px;
+  margin-bottom: 8px;
+  font-size: 14.5px;
   font-weight: bold;
+}
+
+.pdf-header-left {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.pdf-field-label {
+  font-weight: bold;
+}
+
+.pdf-date-line {
+  border-bottom: 1.5px solid #000;
+  min-width: 140px;
+  display: inline-block;
+  padding: 0 4px;
+  font-weight: normal;
 }
 
 .pdf-title-container {
   flex: 1;
-  margin-left: 58px;
+  text-align: center;
 }
-
 
 .pdf-title {
-  font-size: 20px;
+  font-size: 21px;
   font-weight: bold;
   text-decoration: underline;
-  text-transform: capitalize;
+  margin: 0;
 }
 
+/* 3. Meta Row: Location & Trainer */
 .pdf-meta-row {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 15px;
-  font-size: 14px;
+  align-items: flex-end;
+  margin-bottom: 10px;
+  font-size: 14.5px;
   font-weight: bold;
 }
 
+.pdf-meta-left,
+.pdf-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pdf-location-line {
+  border-bottom: 1.5px solid #000;
+  min-width: 160px;
+  display: inline-block;
+  padding: 0 4px;
+  font-weight: normal;
+}
+
+.pdf-trainer-line {
+  border-bottom: 1.5px solid #000;
+  min-width: 200px;
+  display: inline-block;
+  padding: 0 4px;
+  font-weight: normal;
+}
+
+/* 4. Items Table (15 rows - Compact 30px Row Height) */
 .pdf-table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 20px;
-  font-size: 12px;
+  margin-bottom: 10px;
+  font-size: 13px;
 }
 
 .pdf-table th,
 .pdf-table td {
-  border: 1px solid #000;
-  padding: 6px 8px;
+  border: 1.5px solid #000;
+  padding: 4px 7px;
   text-align: left;
-  height: 28px;
-  /* Fixed height for rows to match design */
+  height: 30px;
+  box-sizing: border-box;
 }
 
 .pdf-table th {
-  background-color: transparent;
   font-weight: bold;
+  background-color: #f4f6f8;
+  font-size: 13.5px;
 }
 
 .pdf-table th:nth-child(1),
@@ -91,151 +182,343 @@
 
 .pdf-table th:nth-child(2),
 .pdf-table td:nth-child(2) {
-  width: 45%;
+  /* width: 43%; */
 }
 
 .pdf-table th:nth-child(3),
 .pdf-table td:nth-child(3) {
-  width: 12%;
+  width: 13%;
   text-align: center;
 }
 
 .pdf-table th:nth-child(4),
 .pdf-table td:nth-child(4) {
-  width: 12%;
+  width: 9%;
   text-align: center;
 }
 
 .pdf-table th:nth-child(5),
 .pdf-table td:nth-child(5) {
-  width: 13%;
+  width: 4%;
   text-align: right;
 }
 
 .pdf-table th:nth-child(6),
 .pdf-table td:nth-child(6) {
-  width: 13%;
+  width: 15%;
   text-align: right;
 }
 
-.pdf-signatures-section {
-  margin-top: 15px;
+.pdf-cell-item {
+  text-align: left;
+}
+
+.pdf-cell-num {
+  text-align: right;
+}
+
+.pdf-total-row td {
+  font-weight: bold;
+  font-size: 13.5px;
+  height: 30px;
+  background-color: #f9fafb;
+}
+
+.pdf-total-words {
+  text-align: right;
+  font-weight: 600;
   font-size: 13px;
+  padding: 0 10px !important;
+  font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+}
+
+.pdf-total-label {
+  text-align: right;
+  padding-right: 8px;
+  font-weight: bold;
+  white-space: nowrap;
+}
+
+.pdf-total-value {
+  text-align: right;
+  font-weight: bold;
+}
+
+/* 5. Delivery Confirmation */
+.pdf-delivery-note {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  line-height: 1.3;
+}
+
+/* 6. Signatures Section */
+.pdf-signatures-section {
+  font-size: 13.5px;
+  margin-top: 4px;
 }
 
 .pdf-signatures-title {
   font-weight: bold;
+  font-size: 14px;
   text-decoration: underline;
-  margin-bottom: 15px;
+  margin-bottom: 8px;
 }
 
 .pdf-signatures-grid {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .pdf-sig-left {
   width: 45%;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  gap: 14px;
 }
 
 .pdf-sig-right {
   width: 45%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.pdf-field-line {
-  border-bottom: 1px dotted #000;
-  display: inline-block;
-  min-width: 150px;
-  padding-left: 5px;
-  font-weight: normal;
-  text-align: left;
-}
-
-.pdf-field-line-dashed {
-  border-bottom: 1px dashed #000;
-  display: inline-block;
-  min-width: 150px;
-  padding-left: 5px;
-  font-weight: normal;
-  text-align: center;
-}
-
-.pdf-comments-section {
-  margin-top: 15px;
-  font-size: 13px;
-}
-
-.pdf-comments-row {
-  margin-top: 5px;
-  line-height: 1.6;
-}
-
-.pdf-comment-line {
-  border-bottom: 1px dotted #000;
-  min-height: 20px;
-  margin-bottom: 5px;
-  word-break: break-all;
-}
-
-.pdf-action-bar {
+.pdf-sig-row {
   display: flex;
-  gap: 10px;
-  margin-bottom: 15px;
+  align-items: flex-end;
+  gap: 4px;
 }
 
+.pdf-sig-role {
+  font-weight: bold;
+  font-size: 13.5px;
+  margin-bottom: 2px;
+}
+
+.pdf-sig-line {
+  border-bottom: 1.5px solid #000;
+  flex: 1;
+  min-width: 140px;
+  display: inline-block;
+  height: 15px;
+}
+
+.pdf-field-line-dotted {
+  border-bottom: 1.5px dotted #000;
+  flex: 1;
+  min-width: 140px;
+  display: inline-block;
+  height: 15px;
+}
+
+/* 7. Comments Section */
+.pdf-comments-section {
+  margin-top: 4px;
+  font-size: 13.5px;
+}
+
+.pdf-comments-title {
+  font-weight: bold;
+}
+
+.pdf-comments-lines {
+  margin-top: 4px;
+}
+
+.pdf-comment-line-solid {
+  border-bottom: 1.5px solid #000;
+  min-height: 22px;
+  margin-bottom: 6px;
+}
+
+.pdf-comment-line-dotted {
+  border-bottom: 1.5px dotted #000;
+  min-height: 22px;
+  margin-bottom: 6px;
+}
+
+/* ================================================
+   PRINT STYLES (A4 Portrait - Guaranteed 1 Page)
+   ================================================ */
 @page {
-  size: A4;
-  margin: 0;
+  size: A4 portrait;
+  margin: 5mm 10mm 5mm 10mm;
 }
 
 @media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box !important;
+  }
 
   html,
   body {
     margin: 0 !important;
     padding: 0 !important;
-    height: auto !important;
-    min-height: 0 !important;
-    background-color: #fff;
-    overflow: visible;
+    width: 100% !important;
+    height: 100% !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    overflow: visible !important;
   }
 
-  .pdf-viewport {
-    background-color: transparent !important;
-    padding: 0 !important;
+  #root,
+  .pdf-viewport,
+  .pdf-page-container {
     margin: 0 !important;
-    min-height: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
     height: auto !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
     display: block !important;
-  }
-
-  .pdf-page {
-    width: 210mm;
-    height: 296.5mm;
-    /* Slightly less than A4 to prevent boundary page overflow */
-    padding: 10mm 15mm;
-    box-shadow: none;
-    margin: 0 auto;
-    page-break-after: always;
-    page-break-inside: avoid;
-    break-after: page;
-    break-inside: avoid;
-    box-sizing: border-box;
-  }
-
-  .pdf-page:last-child {
-    page-break-after: avoid !important;
-    break-after: avoid !important;
+    box-shadow: none !important;
   }
 
   .no-print {
     display: none !important;
   }
+
+  .pdf-page {
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    background-color: #ffffff !important;
+    display: flex !important;
+    flex-direction: column !important;
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+    break-after: avoid !important;
+    break-inside: avoid !important;
+    font-size: 13px !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+  }
+
+  .pdf-banner {
+    display: flex !important;
+    align-items: center !important;
+    gap: 15px !important;
+    width: 100% !important;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
+    margin-bottom: 8px !important;
+  }
+
+  .pdf-banner-logo {
+    height: 100px !important;
+    width: auto !important;
+    object-fit: contain !important;
+    flex-shrink: 0 !important;
+    display: block !important;
+  }
+
+  .pdf-banner-name {
+    height: 36px !important;
+    max-width: calc(100% - 90px) !important;
+    width: auto !important;
+    object-fit: contain !important;
+    display: block !important;
+  }
+
+  .pdf-title {
+    font-size: 20px !important;
+  }
+
+  .pdf-header-fields,
+  .pdf-meta-row {
+    font-size: 13.5px !important;
+    font-weight: bold !important;
+    margin-bottom: 5px !important;
+  }
+
+  .pdf-table {
+    font-size: 12px !important;
+    margin-bottom: 6px !important;
+    width: 100% !important;
+  }
+
+  .pdf-table th,
+  .pdf-table td {
+    height: 29px !important;
+    padding: 3px 6px !important;
+    border: 1px solid #000 !important;
+  }
+
+  .pdf-table th {
+    background-color: #f4f6f8 !important;
+  }
+
+  .pdf-total-row td {
+    background-color: #f9fafb !important;
+    font-size: 13px !important;
+    font-weight: bold !important;
+    height: 29px !important;
+  }
+
+  .pdf-total-words {
+    text-align: right !important;
+    font-weight: 600 !important;
+    font-size: 12px !important;
+    padding: 0 8px !important;
+    font-family: 'Segoe UI', Tahoma, Arial, sans-serif !important;
+  }
+
+  .pdf-total-label {
+    text-align: right !important;
+    padding-right: 8px !important;
+    font-weight: bold !important;
+    white-space: nowrap !important;
+  }
+
+  .pdf-delivery-note {
+    font-size: 12.5px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .pdf-signatures-section {
+    font-size: 13px !important;
+    margin-top: 4px !important;
+  }
+
+  .pdf-signatures-title {
+    font-size: 13.5px !important;
+    margin-bottom: 6px !important;
+  }
+
+  .pdf-signatures-grid {
+    margin-bottom: 10px !important;
+  }
+
+  .pdf-sig-left {
+    gap: 14px !important;
+  }
+
+  .pdf-sig-right {
+    gap: 8px !important;
+  }
+
+  .pdf-comments-section {
+    font-size: 13px !important;
+    margin-top: 4px !important;
+  }
+
+  .pdf-comment-line-solid,
+  .pdf-comment-line-dotted {
+    min-height: 22px !important;
+    margin-bottom: 6px !important;
+  }
+}
+
+.pdf-document-number-label {
+  position: relative;
+  right: 20px;
 }
