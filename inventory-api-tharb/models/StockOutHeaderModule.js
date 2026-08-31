@@ -7,7 +7,10 @@ const stockOutHeaderSchema = new mongoose.Schema(
     date: { type: Date, required: true, default: Date.now },
     remarks: { type: String, default: "" },
     createdBy: { type: mongoose.Types.ObjectId, ref: "User" },
-    createdByRole: { type: String, enum: ['admin', 'user'], default: 'user' }
+    createdByRole: { type: String, enum: ['admin', 'user'], default: 'user' },
+    subTotal: { type: Number, default: 0 },
+    totalDiscount: { type: Number, default: 0 },
+    grandTotal: { type: Number, default: 0 }
   },
   { timestamps: true }
 );

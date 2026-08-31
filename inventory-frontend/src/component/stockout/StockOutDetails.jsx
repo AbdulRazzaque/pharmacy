@@ -275,6 +275,21 @@ const StockOutDetails = () => {
     return stockOutData.doc.reduce((sum, item) => sum + (item.quantity || 0), 0);
   };
 
+  const getSubTotal = () => {
+    if (!stockOutData || !stockOutData.doc) return 0;
+    return stockOutData.doc.reduce((sum, item) => sum + (item.itemTotal !== undefined && item.itemTotal !== 0 ? item.itemTotal : (Math.abs(item.quantity || 0) * Number(item.sellingPrice || 0))), 0);
+  };
+
+  const getTotalDiscount = () => {
+    if (!stockOutData || !stockOutData.doc) return 0;
+    return stockOutData.doc.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+  };
+
+  const getGrandTotal = () => {
+    if (!stockOutData || !stockOutData.doc) return 0;
+    return stockOutData.doc.reduce((sum, item) => sum + (item.netTotal !== undefined && item.netTotal !== 0 ? item.netTotal : ((Math.abs(item.quantity || 0) * Number(item.sellingPrice || 0)) - (item.discountAmount || 0))), 0);
+  };
+
   const getLocationName = () => {
     if (!stockOutData || !stockOutData.doc || !stockOutData.doc[0]) return 'N/A';
     return stockOutData.doc[0].locationName || 'N/A';
@@ -493,7 +508,7 @@ const StockOutDetails = () => {
       ) : (
         <>
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
             <Card>
               <CardContent className="pt-6">
                 <div className="flex items-center gap-2">
@@ -529,12 +544,31 @@ const StockOutDetails = () => {
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="flex items-center gap-2">
-                  <User className="h-5 w-5 text-blue-600" />
-                  <div>
-                    <div className="text-lg font-bold truncate">{getDoctorName()}</div>
-                    <p className="text-xs text-muted-foreground">Doctor</p>
+                <div>
+                  <div className="text-lg font-bold text-gray-800">
+                    QR{getSubTotal().toFixed(2)}
                   </div>
+                  <p className="text-xs text-muted-foreground">Subtotal</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-orange-50/50 border-orange-200">
+              <CardContent className="pt-6">
+                <div>
+                  <div className="text-lg font-bold text-orange-700">
+                    QR{getTotalDiscount().toFixed(2)}
+                  </div>
+                  <p className="text-xs text-orange-600 font-medium">Total Discount</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-red-50/50 border-red-200">
+              <CardContent className="pt-6">
+                <div>
+                  <div className="text-xl font-black text-red-700">
+                    QR{getGrandTotal().toFixed(2)}
+                  </div>
+                  <p className="text-xs text-red-600 font-bold uppercase tracking-wider">Grand Total</p>
                 </div>
               </CardContent>
             </Card>
@@ -554,36 +588,49 @@ const StockOutDetails = () => {
                       <TableHead>Company Name</TableHead>
                       <TableHead>Unit</TableHead>
                       <TableHead className="text-right">Quantity</TableHead>
-                      <TableHead className="text-right">Previous Stock</TableHead>
+                      <TableHead className="text-right">Sell. Price</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right">Disc %</TableHead>
+                      <TableHead className="text-right">Disc Amt</TableHead>
+                      <TableHead className="text-right">Net Total</TableHead>
                       <TableHead>Doctor Name</TableHead>
                       <TableHead>Trainer Name</TableHead>
                       <TableHead className="text-right">Expiry Date</TableHead>
                       <TableHead>Date Issued</TableHead>
-                      {isAdmin && <TableHead className="text-center">Actions</TableHead>}
+                      <TableHead className="text-center">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {stockOutData.doc.map((item, index) => (
-                      <TableRow key={item._id || index}>
-                        <TableCell className="font-medium">{item.name || '-'}</TableCell>
-                        <TableCell>{item.companyName || item.productId?.companyName || '-'}</TableCell>
-                        <TableCell>{item.unit || '-'}</TableCell>
-                        <TableCell className="text-right font-semibold text-red-600">
-                          -{Math.abs(item.quantity) || 0}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {item.prevQuantity || 0}
-                        </TableCell>
-                        <TableCell>{item.doctorName || '-'}</TableCell>
-                        <TableCell>{item.trainerName || '-'}</TableCell>
-                        <TableCell>
-                          {item.expiry ? moment(item.expiry).format('DD/MM/YYYY') : '-'}
-                        </TableCell>
-                        <TableCell>
-                          {item.date ? moment(item.date).format('DD/MM/YYYY') :
-                            item.createdAt ? moment(item.createdAt).format('DD/MM/YYYY HH:mm') : '-'}
-                        </TableCell>
-                        {isAdmin && (
+                    {stockOutData.doc.map((item, index) => {
+                      const qty = Math.abs(item.quantity) || 0;
+                      const price = item.sellingPrice || 0;
+                      const itemTotal = item.itemTotal !== undefined ? item.itemTotal : (qty * price);
+                      const discPct = item.discountPercentage || 0;
+                      const discAmt = item.discountAmount !== undefined ? item.discountAmount : ((itemTotal * discPct) / 100);
+                      const netTotal = item.netTotal !== undefined ? item.netTotal : (itemTotal - discAmt);
+
+                      return (
+                        <TableRow key={item._id || index}>
+                          <TableCell className="font-medium">{item.name || '-'}</TableCell>
+                          <TableCell>{item.companyName || item.productId?.companyName || '-'}</TableCell>
+                          <TableCell>{item.unit || '-'}</TableCell>
+                          <TableCell className="text-right font-semibold text-gray-900">
+                            -{qty}
+                          </TableCell>
+                          <TableCell className="text-right">QR{price.toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-gray-700 font-medium">QR{itemTotal.toFixed(2)}</TableCell>
+                          <TableCell className="text-right text-orange-700 font-medium">{discPct > 0 ? `${discPct}%` : '0%'}</TableCell>
+                          <TableCell className="text-right text-orange-700 font-medium">QR{discAmt.toFixed(2)}</TableCell>
+                          <TableCell className="text-right font-bold text-red-600">QR{netTotal.toFixed(2)}</TableCell>
+                          <TableCell>{item.doctorName || '-'}</TableCell>
+                          <TableCell>{item.trainerName || '-'}</TableCell>
+                          <TableCell>
+                            {item.expiry ? moment(item.expiry).format('DD/MM/YYYY') : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {item.date ? moment(item.date).format('DD/MM/YYYY') :
+                              item.createdAt ? moment(item.createdAt).format('DD/MM/YYYY HH:mm') : '-'}
+                          </TableCell>
                           <TableCell className="text-center">
                             <div className="flex items-center justify-center gap-2">
                               <Button
@@ -628,9 +675,9 @@ const StockOutDetails = () => {
                               </Button>
                             </div>
                           </TableCell>
-                        )}
-                      </TableRow>
-                    ))}
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
@@ -962,7 +1009,7 @@ const StockOutDetails = () => {
                         </div>
                       </div>
 
-                       <div className={`col-span-6 sm:col-span-3 ${isAdmin ? 'lg:col-span-1' : 'lg:col-span-2'}`}>
+                      <div className={`col-span-6 sm:col-span-3 ${isAdmin ? 'lg:col-span-1' : 'lg:col-span-2'}`}>
                         <label className="block text-xs font-semibold text-gray-800 mb-1.5">Available</label>
                         <div className="h-10 px-3 flex items-center bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-lg shadow-sm">
                           <span className="text-sm font-bold text-blue-700">{outSelectedStock?.quantity || 0}</span>

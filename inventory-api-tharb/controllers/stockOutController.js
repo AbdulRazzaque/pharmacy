@@ -16,6 +16,20 @@ const getNextStockOutDocNo = async (session = null) => {
     return Number(seqDoc.seq);
 };
 
+const updateHeaderTotals = async (headerId, session = null) => {
+    if (!headerId) return;
+    const header = await StockOutHeader.findById(headerId).session(session);
+    if (!header) return;
+    const items = await StockOutItem.find({ stockOutHeaderId: header._id }).session(session);
+    const subTotal = items.reduce((sum, i) => sum + (i.itemTotal !== undefined && i.itemTotal !== 0 ? i.itemTotal : ((i.quantity || 0) * (i.sellingPrice || 0))), 0);
+    const totalDiscount = items.reduce((sum, i) => sum + (i.discountAmount || 0), 0);
+    const grandTotal = items.reduce((sum, i) => sum + (i.netTotal !== undefined && i.netTotal !== 0 ? i.netTotal : ((i.quantity || 0) * (i.sellingPrice || 0) - (i.discountAmount || 0))), 0);
+    header.subTotal = Math.round(subTotal * 100) / 100;
+    header.totalDiscount = Math.round(totalDiscount * 100) / 100;
+    header.grandTotal = Math.round(grandTotal * 100) / 100;
+    await header.save(session ? { session } : {});
+};
+
 const stockOutController = {
 
     async getStockOutDocNo(req, res) {
@@ -47,15 +61,16 @@ const stockOutController = {
                     productId: body.productId || body.stockId,
                     quantity: body.quantity,
                     sellingPrice: body.sellingPrice,
+                    discountPercentage: body.discountPercentage !== undefined ? body.discountPercentage : 0,
                     remarks: body.remarks || body.doctorName || body.trainerName || ""
                 }];
             }
 
-            const location = body.location || 
-                             body.locationId || 
-                             existingHeader?.location || 
-                             items.find(i => i.locationId || i.location)?.locationId || 
-                             items.find(i => i.locationId || i.location)?.location;
+            const location = body.location ||
+                body.locationId ||
+                existingHeader?.location ||
+                items.find(i => i.locationId || i.location)?.locationId ||
+                items.find(i => i.locationId || i.location)?.location;
 
             const date = body.date ? new Date(body.date) : (existingHeader?.date || new Date());
             const remarks = body.remarks || body.doctorName || body.trainerName || existingHeader?.remarks || "";
@@ -122,15 +137,29 @@ const stockOutController = {
                     bal.quantity -= takeQty;
                     await bal.save();
 
+                    const rawDisc = item.discountPercentage !== undefined ? item.discountPercentage : (body.discountPercentage !== undefined ? body.discountPercentage : 0);
+                    const itemDiscPct = Number(rawDisc || 0);
+                    if (isNaN(itemDiscPct) || itemDiscPct < 0 || itemDiscPct > 100) {
+                        return res.status(400).json({ msg: "error", error: `Invalid discount percentage (${rawDisc}) for item` });
+                    }
+                    const itemPrice = Number(item.sellingPrice ?? bal.sellingPrice ?? 0);
+                    const itemTotal = Math.round((takeQty * itemPrice) * 100) / 100;
+                    const discountAmount = Math.round((itemTotal * itemDiscPct / 100) * 100) / 100;
+                    const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
+
                     const outItem = await StockOutItem.create({
                         stockOutHeaderId: header._id,
                         productId: pId,
                         quantity: takeQty,
-                        sellingPrice: Number(item.sellingPrice ?? bal.sellingPrice ?? 0),
+                        sellingPrice: itemPrice,
                         purchasingPrice: bal.purchasingPrice || 0,
                         expiry: bal.expiry,
                         batchNumber: bal.batchNumber || "",
-                        remarks: item.remarks || remarks || ""
+                        remarks: item.remarks || remarks || "",
+                        discountPercentage: itemDiscPct,
+                        discountAmount,
+                        itemTotal,
+                        netTotal
                     });
 
                     const txn = new InventoryTransaction({
@@ -163,10 +192,13 @@ const stockOutController = {
                 await recalculateRunningBalances(pId);
             }
 
+            await updateHeaderTotals(header._id);
+            const updatedHeader = await StockOutHeader.findById(header._id).lean();
+
             return res.status(200).json({
                 msg: "success",
                 result: {
-                    ...header.toObject(),
+                    ...updatedHeader,
                     items: issuedItems
                 }
             });
@@ -195,6 +227,9 @@ const stockOutController = {
             const docs = await Promise.all(headers.map(async (h) => {
                 const items = await StockOutItem.find({ stockOutHeaderId: h._id }).lean();
                 const totalQuantity = items.reduce((sum, i) => sum + (i.quantity || 0), 0);
+                const subTotal = items.reduce((sum, i) => sum + (i.itemTotal !== undefined && i.itemTotal !== 0 ? i.itemTotal : ((i.quantity || 0) * (i.sellingPrice || 0))), 0);
+                const totalDiscount = items.reduce((sum, i) => sum + (i.discountAmount || 0), 0);
+                const grandTotal = items.reduce((sum, i) => sum + (i.netTotal !== undefined && i.netTotal !== 0 ? i.netTotal : ((i.quantity || 0) * (i.sellingPrice || 0) - (i.discountAmount || 0))), 0);
                 const uniqueProducts = new Set(items.map(i => String(i.productId)));
                 return {
                     _id: h._id,
@@ -205,6 +240,9 @@ const stockOutController = {
                     createdBy: h.createdBy ? { _id: h.createdBy._id, userName: h.createdBy.userName } : null,
                     totalProducts: Array.from(uniqueProducts).length,
                     totalQuantity,
+                    subTotal: Math.round(subTotal * 100) / 100,
+                    totalDiscount: Math.round(totalDiscount * 100) / 100,
+                    grandTotal: Math.round(grandTotal * 100) / 100,
                     items
                 };
             }));
@@ -235,27 +273,44 @@ const stockOutController = {
             const doctorName = locationObj?.doctorName || "";
             const trainerName = locationObj?.trainerName || "";
 
+            const subTotal = items.reduce((sum, item) => sum + (item.itemTotal !== undefined && item.itemTotal !== 0 ? item.itemTotal : ((item.quantity || 0) * (item.sellingPrice || 0))), 0);
+            const totalDiscount = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+            const grandTotal = items.reduce((sum, item) => sum + (item.netTotal !== undefined && item.netTotal !== 0 ? item.netTotal : ((item.quantity || 0) * (item.sellingPrice || 0) - (item.discountAmount || 0))), 0);
+
             const formatted = [{
                 _id: { docNo: header.docNo },
-                doc: items.map(item => ({
-                    _id: item._id,
-                    docNo: header.docNo,
-                    name: item.productId?.name || "",
-                    location: locationObj,
-                    locationId: locationId,
-                    locationName: locationName,
-                    doctorName: doctorName,
-                    trainerName: trainerName,
-                    productId: item.productId,
-                    quantity: item.quantity,
-                    unit: item.productId?.unit || "",
-                    sellingPrice: item.sellingPrice,
-                    purchasingPrice: item.purchasingPrice,
-                    prevQuantity: 0,
-                    expiry: item.expiry,
-                    createdAt: item.createdAt,
-                    remarks: item.remarks
-                }))
+                docNo: header.docNo,
+                subTotal: Math.round(subTotal * 100) / 100,
+                totalDiscount: Math.round(totalDiscount * 100) / 100,
+                grandTotal: Math.round(grandTotal * 100) / 100,
+                doc: items.map(item => {
+                    const iTotal = item.itemTotal !== undefined && item.itemTotal !== 0 ? item.itemTotal : ((item.quantity || 0) * (item.sellingPrice || 0));
+                    const dAmt = item.discountAmount || 0;
+                    const nTotal = item.netTotal !== undefined && item.netTotal !== 0 ? item.netTotal : (iTotal - dAmt);
+                    return {
+                        _id: item._id,
+                        docNo: header.docNo,
+                        name: item.productId?.name || "",
+                        location: locationObj,
+                        locationId: locationId,
+                        locationName: locationName,
+                        doctorName: doctorName,
+                        trainerName: trainerName,
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        unit: item.productId?.unit || "",
+                        sellingPrice: item.sellingPrice,
+                        purchasingPrice: item.purchasingPrice,
+                        discountPercentage: item.discountPercentage || 0,
+                        discountAmount: dAmt,
+                        itemTotal: iTotal,
+                        netTotal: nTotal,
+                        prevQuantity: 0,
+                        expiry: item.expiry,
+                        createdAt: item.createdAt,
+                        remarks: item.remarks
+                    };
+                })
             }];
 
             return res.status(200).json({ msg: "success", result: formatted });
@@ -279,10 +334,18 @@ const stockOutController = {
     async stockOutUpdateQuantity(req, res) {
         try {
             const { id } = req.params;
-            const { quantity, sellingPrice, locationId, location, doctorName, trainerName } = req.body || {};
+            const { quantity, sellingPrice, discountPercentage, locationId, location, doctorName, trainerName } = req.body || {};
 
             const item = await StockOutItem.findById(id);
             if (!item) return res.status(404).json({ msg: "error", result: "Stock Out item not found" });
+
+            if (discountPercentage !== undefined && discountPercentage !== null) {
+                let discPct = Number(discountPercentage);
+                if (isNaN(discPct) || discPct < 0 || discPct > 100) {
+                    return res.status(400).json({ msg: "error", result: "Discount percentage must be between 0 and 100" });
+                }
+                item.discountPercentage = discPct;
+            }
 
             const oldQty = Number(item.quantity || 0);
             const newQty = quantity !== undefined ? Number(quantity) : oldQty;
@@ -350,6 +413,14 @@ const stockOutController = {
             if (sellingPrice !== undefined && sellingPrice !== null) {
                 item.sellingPrice = Number(sellingPrice);
             }
+            const itemPrice = Number(item.sellingPrice || 0);
+            const itemTotal = Math.round((newQty * itemPrice) * 100) / 100;
+            const discountAmount = Math.round((itemTotal * (item.discountPercentage || 0) / 100) * 100) / 100;
+            const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
+
+            item.itemTotal = itemTotal;
+            item.discountAmount = discountAmount;
+            item.netTotal = netTotal;
             await item.save();
 
             // Update InventoryTransaction
@@ -366,6 +437,7 @@ const stockOutController = {
 
             // Reconcile product balances
             await recalculateRunningBalances(productId);
+            await updateHeaderTotals(item.stockOutHeaderId);
 
             return res.status(200).json({ msg: "success", result: item });
         } catch (err) {
@@ -384,11 +456,11 @@ const stockOutController = {
             const parsedDocNo = Number(docNo || updates[0]?.docNo || 1);
             let header = await StockOutHeader.findOne({ docNo: parsedDocNo }).session(session);
 
-            const docLocation = location || 
-                                locationId || 
-                                header?.location || 
-                                updates.find(u => u.locationId || u.location)?.locationId || 
-                                updates.find(u => u.locationId || u.location)?.location;
+            const docLocation = location ||
+                locationId ||
+                header?.location ||
+                updates.find(u => u.locationId || u.location)?.locationId ||
+                updates.find(u => u.locationId || u.location)?.location;
 
             if (!header) {
                 const headerArr = await StockOutHeader.create(
@@ -451,16 +523,29 @@ const stockOutController = {
                         bal.quantity -= takeQty;
                         await bal.save(session ? { session } : {});
 
+                        const itemDiscPct = Number(update.discountPercentage || 0);
+                        if (isNaN(itemDiscPct) || itemDiscPct < 0 || itemDiscPct > 100) {
+                            throw new Error(`Invalid discount percentage (${update.discountPercentage})`);
+                        }
+                        const itemPrice = Number(sellingPrice ?? bal.sellingPrice ?? 0);
+                        const itemTotal = Math.round((takeQty * itemPrice) * 100) / 100;
+                        const discountAmount = Math.round((itemTotal * itemDiscPct / 100) * 100) / 100;
+                        const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
+
                         const outItemArr = await StockOutItem.create(
                             [{
                                 stockOutHeaderId: header._id,
                                 productId: pId,
                                 quantity: takeQty,
-                                sellingPrice: Number(sellingPrice ?? bal.sellingPrice ?? 0),
+                                sellingPrice: itemPrice,
                                 purchasingPrice: bal.purchasingPrice || 0,
                                 expiry: bal.expiry,
                                 batchNumber: bal.batchNumber || "",
-                                remarks: remarks || "Stock Out added via bulk update"
+                                remarks: remarks || "Stock Out added via bulk update",
+                                discountPercentage: itemDiscPct,
+                                discountAmount,
+                                itemTotal,
+                                netTotal
                             }],
                             session ? { session } : {}
                         );
@@ -489,7 +574,7 @@ const stockOutController = {
                         remaining -= takeQty;
                     }
                     touchedProductIds.add(pId);
-                } 
+                }
                 // 2. Existing item
                 else {
                     const item = await StockOutItem.findById(_id).session(session);
@@ -533,7 +618,7 @@ const stockOutController = {
 
                         await StockOutItem.findByIdAndDelete(_id, session ? { session } : {});
                         touchedProductIds.add(pId);
-                    } 
+                    }
                     // 2b. Update item
                     else {
                         const oldQty = Number(item.quantity || 0);
@@ -593,6 +678,22 @@ const stockOutController = {
                         if (sellingPrice !== undefined && sellingPrice !== null) {
                             item.sellingPrice = Number(sellingPrice);
                         }
+                        if (update.discountPercentage !== undefined && update.discountPercentage !== null) {
+                            let discPct = Number(update.discountPercentage);
+                            if (isNaN(discPct) || discPct < 0 || discPct > 100) {
+                                throw new Error("Discount percentage must be between 0 and 100");
+                            }
+                            item.discountPercentage = discPct;
+                        }
+                        const itemPrice = Number(item.sellingPrice || 0);
+                        const itemTotal = Math.round((newQty * itemPrice) * 100) / 100;
+                        const discountAmount = Math.round((itemTotal * (item.discountPercentage || 0) / 100) * 100) / 100;
+                        const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
+
+                        item.itemTotal = itemTotal;
+                        item.discountAmount = discountAmount;
+                        item.netTotal = netTotal;
+
                         if (remarks !== undefined) {
                             item.remarks = remarks;
                         }
@@ -618,6 +719,8 @@ const stockOutController = {
             for (const pId of touchedProductIds) {
                 await recalculateRunningBalances(pId, session);
             }
+
+            await updateHeaderTotals(header._id, session);
 
             return "Bulk update completed";
         };

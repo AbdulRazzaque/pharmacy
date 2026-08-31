@@ -70,9 +70,27 @@ const Stockoutpdf = () => {
 
   const items = pdfData.items || [];
 
-  // Calculate the Grand Total of the entire document
+  const getSubTotal = () => {
+    if (pdfData.subTotal !== undefined && pdfData.subTotal !== null) return pdfData.subTotal;
+    return items.reduce((sum, item) => {
+      const itemTotal = item.itemTotal !== undefined ? item.itemTotal : (item.quantity * (item.sellingPrice ?? 0));
+      return sum + itemTotal;
+    }, 0);
+  };
+
+  const getTotalDiscount = () => {
+    if (pdfData.totalDiscount !== undefined && pdfData.totalDiscount !== null) return pdfData.totalDiscount;
+    return items.reduce((sum, item) => {
+      if (item.discountAmount !== undefined) return sum + item.discountAmount;
+      const iTotal = item.quantity * (item.sellingPrice ?? 0);
+      const discPct = item.discountPercentage || 0;
+      return sum + ((iTotal * discPct) / 100);
+    }, 0);
+  };
+
   const getGrandTotal = () => {
-    return items.reduce((sum, item) => sum + (item.quantity * (item.sellingPrice ?? 0)), 0);
+    if (pdfData.grandTotal !== undefined && pdfData.grandTotal !== null) return pdfData.grandTotal;
+    return getSubTotal() - getTotalDiscount();
   };
 
   // Convert number to Arabic words (Tafqeet in Qatari Riyals and Dirhams)
@@ -268,7 +286,10 @@ const Stockoutpdf = () => {
                       <th>Unit Price
                         <p className='qr'>QR</p>
                       </th>
-                      <th>Total Price
+                      <th>FOC
+                        <p className='qr'>QR</p>
+                      </th>
+                      <th>Total
                         <p className='qr'>QR</p>
                       </th>
                     </>
@@ -280,7 +301,11 @@ const Stockoutpdf = () => {
                   const itemIndex = pageIndex * 15 + index;
                   const item = chunk[index];
                   const unitPrice = item ? (item.sellingPrice ?? 0) : 0;
-                  const totalPrice = item ? (item.quantity * unitPrice) : 0;
+                  const itemTotal = item ? (item.itemTotal !== undefined ? item.itemTotal : (item.quantity * unitPrice)) : 0;
+                  const discPct = item ? (item.discountPercentage || 0) : 0;
+                  const discAmt = item ? (item.discountAmount !== undefined ? item.discountAmount : ((itemTotal * discPct) / 100)) : 0;
+                  const netTotal = item ? (item.netTotal !== undefined ? item.netTotal : (itemTotal - discAmt)) : 0;
+
                   return (
                     <tr key={index}>
                       <td>{itemIndex + 1}</td>
@@ -290,7 +315,8 @@ const Stockoutpdf = () => {
                       {!hidePrice && (
                         <>
                           <td className="pdf-cell-num">{item ? ` ${unitPrice.toFixed(2)}` : ''}</td>
-                          <td className="pdf-cell-num">{item ? ` ${totalPrice.toFixed(2)}` : ''}</td>
+                          <td className="pdf-cell-num">{item ? ` ${discAmt.toFixed(2)}` : ''}</td>
+                          <td className="pdf-cell-num font-bold">{item ? ` ${netTotal.toFixed(2)}` : ''}</td>
                         </>
                       )}
                     </tr>
@@ -302,8 +328,8 @@ const Stockoutpdf = () => {
                     <td colSpan="4" className="pdf-total-words" dir="rtl">
                       {numberToArabicWords(getGrandTotal())}
                     </td>
-                    <td className="pdf-total-label">Grand Total:</td>
-                    <td className="pdf-total-value">QR{getGrandTotal().toFixed(2)}</td>
+                    <td colSpan="2" className="pdf-total-label">Grand Total:</td>
+                    <td colSpan="1" className="pdf-total-value">QR {getGrandTotal().toFixed(2)}</td>
                   </tr>
                 )}
               </tbody>

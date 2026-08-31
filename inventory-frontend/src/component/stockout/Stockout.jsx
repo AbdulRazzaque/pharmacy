@@ -29,7 +29,8 @@ const Stockout = () => {
   const [formData, setFormData] = useState({
     stockId: '',
     quantity: '',
-    sellingPrice: ''
+    sellingPrice: '',
+    discountPercentage: ''
   });
 
   const isAdmin = useMemo(
@@ -259,18 +260,30 @@ const Stockout = () => {
       return;
     }
 
+    const qty = parseInt(formData.quantity);
+    const price = parseFloat(formData.sellingPrice) || selectedStock.sellingPrice || 0;
+    const discPct = parseFloat(formData.discountPercentage) || 0;
+    const itemTotal = Math.round((qty * price) * 100) / 100;
+    const discountAmount = Math.round((itemTotal * discPct / 100) * 100) / 100;
+    const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
+
     const newItem = {
       id: Date.now(),
       stockId: selectedStock.originalStockId || selectedStock._id, // Use originalStockId for grouped items
+      productId: selectedStock.productId || selectedStock.originalStockId || selectedStock._id,
       productName: selectedStock.productName, // frontend display only
       companyName: selectedStock.companyName, // frontend display only
       type: selectedStock.type,               // frontend display only
       unit: selectedStock.unit,               // frontend display only
       locationId: docLocationId,
       location: selectedLocation ? selectedLocation.name : '', // frontend display only
-      quantity: parseInt(formData.quantity),
-      sellingPrice: parseFloat(formData.sellingPrice) || selectedStock.sellingPrice || 0,
-      total: parseInt(formData.quantity) * (parseFloat(formData.sellingPrice) || selectedStock.sellingPrice || 0),
+      quantity: qty,
+      sellingPrice: price,
+      discountPercentage: discPct,
+      discountAmount: discountAmount,
+      itemTotal: itemTotal,
+      netTotal: netTotal,
+      total: netTotal,
       expiry: selectedStock.expiry,           // Auto-selected expiry from FIFO
       doctorName: docDoctorName,
       trainerName: docTrainerName
@@ -281,7 +294,8 @@ const Stockout = () => {
     setFormData({
       stockId: '',
       quantity: '',
-      sellingPrice: ''
+      sellingPrice: '',
+      discountPercentage: ''
     });
     setFormErrors({});
     setStockQuery('');
@@ -315,9 +329,14 @@ const Stockout = () => {
             docNo: docNo,
             date: date,
             stockId: item.stockId,
+            productId: item.productId || item.stockId,
             locationId: item.locationId,
             quantity: item.quantity,
             sellingPrice: item.sellingPrice ?? 0,
+            discountPercentage: item.discountPercentage !== undefined ? item.discountPercentage : 0,
+            discountAmount: item.discountAmount ?? 0,
+            itemTotal: item.itemTotal ?? 0,
+            netTotal: item.netTotal ?? 0,
             doctorName: item.doctorName || '',
             trainerName: item.trainerName || ''
           },
@@ -345,7 +364,11 @@ const Stockout = () => {
             productName: item.companyName ? `${item.productName} (${item.companyName})` : item.productName,
             unit: item.unit || '',
             quantity: item.quantity,
-            sellingPrice: item.sellingPrice
+            sellingPrice: item.sellingPrice,
+            discountPercentage: item.discountPercentage || 0,
+            discountAmount: item.discountAmount || 0,
+            itemTotal: item.itemTotal || (item.quantity * item.sellingPrice),
+            netTotal: item.netTotal || (item.quantity * item.sellingPrice - (item.discountAmount || 0))
           }))
         };
 
@@ -367,7 +390,8 @@ const Stockout = () => {
         setFormData({
           stockId: '',
           quantity: '',
-          sellingPrice: ''
+          sellingPrice: '',
+          discountPercentage: ''
         });
         setStockQuery('');
         setSelectedStock(null);
@@ -392,8 +416,16 @@ const Stockout = () => {
     return stockOutItems.reduce((sum, item) => sum + item.quantity, 0);
   };
 
+  const getSubTotal = () => {
+    return stockOutItems.reduce((sum, item) => sum + (item.itemTotal !== undefined ? item.itemTotal : (item.quantity * item.sellingPrice)), 0);
+  };
+
+  const getTotalDiscount = () => {
+    return stockOutItems.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+  };
+
   const getGrandTotal = () => {
-    return stockOutItems.reduce((sum, item) => sum + item.total, 0);
+    return stockOutItems.reduce((sum, item) => sum + (item.netTotal !== undefined ? item.netTotal : (item.quantity * item.sellingPrice - (item.discountAmount || 0))), 0);
   };
 
   return (
@@ -409,6 +441,28 @@ const Stockout = () => {
                 <p className="text-sm text-gray-500">Quick data entry like Excel</p>
               </div>
             </div>
+            {isAdmin && (
+                <div className="ml-auto flex items-center gap-6 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 shadow-inner">
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500 font-semibold">Total</div>
+                    <div className="text-base font-bold text-gray-800">QR{getSubTotal().toFixed(2)}</div>
+                  </div>
+                  <div className="text-right border-l border-gray-300 pl-4">
+                    <div className="text-xs text-gray-500 font-semibold">
+                      Total Discount
+                    </div>
+                    <div className="text-base font-bold text-orange-600">
+                      QR{getTotalDiscount().toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="text-right border-l border-gray-300 pl-4">
+                    <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">Grand Total</div>
+                    <div className="text-2xl font-black text-red-600">
+                      QR{getGrandTotal().toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              )}
             <div className="flex items-center gap-4">
               <div className="text-right">
                 <div className="text-xs text-gray-500">Document No</div>
@@ -502,7 +556,7 @@ const Stockout = () => {
           <form onSubmit={addItem} className="p-4">
             <div className="grid grid-cols-12 gap-3">
               {/* Product – type-ahead autocomplete */}
-              <div className="col-span-6 relative" ref={stockAutocompleteRef}>
+              <div className="col-span-4 relative" ref={stockAutocompleteRef}>
                 <label className="block text-xs font-semibold text-gray-800 mb-1.5">
                   Product *
                 </label>
@@ -578,8 +632,7 @@ const Stockout = () => {
               </div>
 
               {/* Selling Price (from Stock In) */}
-
-              <div className="col-span-2">
+              <div className="col-span-1">
                 <label className="block text-xs font-semibold text-gray-800 mb-1.5">
                   Sell. Price
                 </label>
@@ -590,18 +643,17 @@ const Stockout = () => {
                   readOnly
                   tabIndex={-1}
                   placeholder="0.00"
-                  className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg shadow-sm bg-gray-100 text-gray-700 cursor-default"
+                  className="w-full h-10 px-2 text-sm border-2 border-gray-300 rounded-lg shadow-sm bg-gray-100 text-gray-700 cursor-default text-right font-medium"
                   title="Selling price from Stock In (read-only)"
                 />
               </div>
 
-
               {/* Available Quantity */}
-              <div className={"col-span-2"}>
+              <div className="col-span-1">
                 <label className="block text-xs font-semibold text-gray-800 mb-1.5">
                   Available
                 </label>
-                <div className="h-10 px-3 flex items-center bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-lg shadow-sm">
+                <div className="h-10 px-2 flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-lg shadow-sm">
                   <span className="text-sm font-bold text-blue-700">
                     {selectedStock?.quantity || 0}
                   </span>
@@ -621,34 +673,63 @@ const Stockout = () => {
                   placeholder="0"
                   min="1"
                   max={selectedStock?.quantity || 999999}
-                  className={
-                    `w-full h-10 px-3 text-sm border-2 rounded-lg shadow-sm transition-all duration-200 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder:text-gray-400 ${formErrors.quantity ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white'
-                    }`
-                  }
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addItem(e);
-                    }
-                  }}
+                  className={`w-full h-10 px-3 text-sm border-2 rounded-lg shadow-sm transition-all duration-200 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-semibold ${formErrors.quantity ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white'}`}
                 />
               </div>
 
-              {/* Total */}
-              {isAdmin && (
-                <div className="col-span-1">
-                  <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-                    Total
-                  </label>
-                  <div className="h-10 px-3 flex items-center bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-300 rounded-lg shadow-sm">
-                    <span className="text-sm font-bold text-red-700">
-                      QR{selectedStock && formData.quantity
-                        ? (formData.quantity * (parseFloat(formData.sellingPrice) || selectedStock.sellingPrice || 0)).toFixed(2)
-                        : '0.00'}
-                    </span>
-                  </div>
+              {/* Product Discount (%) */}
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-800 mb-1.5">
+                  Discount (%) <span className="text-gray-400 font-normal">(Opt)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    id="discountPercentage"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    value={formData.discountPercentage}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 100)) {
+                        handleInputChange('discountPercentage', val);
+                      }
+                    }}
+                    placeholder="0%"
+                    className="w-full h-10 pl-3 pr-7 text-sm border-2 border-orange-300 rounded-lg shadow-sm bg-orange-50/50 focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold text-orange-900"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addItem(e);
+                      }
+                    }}
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-orange-500 pointer-events-none">%</span>
                 </div>
-              )}
+              </div>
+
+              {/* Net Total */}
+              <div className="col-span-2">
+                <label className="block text-xs font-semibold text-gray-800 mb-1.5">
+                  Net Total
+                </label>
+                <div className="h-10 px-3 flex items-center justify-between bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-300 rounded-lg shadow-sm">
+                  <span className="text-xs text-red-600 font-semibold">QR</span>
+                  <span className="text-sm font-bold text-red-700">
+                    {selectedStock && formData.quantity
+                      ? (() => {
+                          const qty = parseFloat(formData.quantity) || 0;
+                          const price = parseFloat(formData.sellingPrice) || selectedStock.sellingPrice || 0;
+                          const discPct = parseFloat(formData.discountPercentage) || 0;
+                          const itemTotal = qty * price;
+                          const discAmt = (itemTotal * discPct) / 100;
+                          return (itemTotal - discAmt).toFixed(2);
+                        })()
+                      : '0.00'}
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Stock Info Bar */}
@@ -656,7 +737,7 @@ const Stockout = () => {
               <div className="mt-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-lg shadow-md text-xs flex items-center gap-4">
                 <span><strong>Type:</strong> {selectedStock.type || 'N/A'}</span>
                 <span><strong>Unit:</strong> {selectedStock.unit || 'N/A'}</span>
-                {isAdmin && <span><strong>Selling Price:</strong> QR{formData.sellingPrice || selectedStock.sellingPrice || 0}</span>}
+                <span><strong>Selling Price:</strong> QR{formData.sellingPrice || selectedStock.sellingPrice || 0}</span>
                 <span><strong>Available:</strong> <span className="font-semibold text-blue-600">{selectedStock.quantity}</span></span>
                 {selectedStock.expiry && (
                   <span><strong>Expiry (FIFO):</strong> <span className="font-semibold text-orange-600">{moment(selectedStock.expiry).format('DD/MM/YYYY')}</span></span>
@@ -687,95 +768,127 @@ const Stockout = () => {
                     type="button"
                     onClick={() => handleSaveAndPrint(false)}
                     disabled={loading}
-                    className="px-6 py-2.5 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 font-semibold text-sm flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-sm flex items-center gap-2 shadow-md transition-all duration-200 disabled:opacity-50"
                   >
                     <Save className="w-4 h-4" />
-                    {loading ? 'Saving...' : `Save All (${stockOutItems.length} items)`}
+                    Save Only
                   </button>
+
                   <button
                     type="button"
                     onClick={() => handleSaveAndPrint(true)}
                     disabled={loading}
-                    className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 font-semibold text-sm flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold text-sm flex items-center gap-2 shadow-md transition-all duration-200 disabled:opacity-50"
                   >
                     <Printer className="w-4 h-4" />
-                    {loading ? 'Processing...' : `Print PDF (${stockOutItems.length} items)`}
+                    Save & Print PDF
                   </button>
                 </>
-              )}
-
-              {isAdmin && (
-                <div className="ml-auto text-right">
-                  <div className="text-xs text-gray-500">Grand Total</div>
-                  <div className="text-2xl font-bold text-red-600">QR{getGrandTotal().toFixed(2)}</div>
-                </div>
               )}
             </div>
           </form>
         </div>
 
-        {/* Items Table */}
+        {/* Added Items List */}
         {stockOutItems.length > 0 && (
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="bg-gray-700 text-white px-4 py-3 flex items-center justify-between">
-              <h3 className="font-semibold">Items List</h3>
-              <Badge variant="secondary" className="bg-white text-gray-700">
-                {stockOutItems.length} Items • {getTotalQuantity()} Total Qty
-              </Badge>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-gray-900">Document Out Items List</h2>
+                <p className="text-xs text-gray-500">{stockOutItems.length} items added ({getTotalQuantity()} total quantity)</p>
+              </div>
+              <button
+                onClick={() => {
+                  if (window.confirm('Clear all items from list?')) {
+                    setStockOutItems([]);
+                  }
+                }}
+                className="text-xs font-semibold text-red-600 hover:text-red-800"
+              >
+                Clear All
+              </button>
             </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b">
                   <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">#</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Product Name</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Company Name</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Unit</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Location</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Doctor</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Trainer</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Qty</th>
-                    {isAdmin && <th className="px-4 py-3 text-right font-semibold text-gray-700">Sell. Price</th>}
-                    {isAdmin && <th className="px-4 py-3 text-right font-semibold text-gray-700">Total</th>}
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Expiry (Auto)</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Action</th>
+                    <th className="px-3 py-3 text-left font-semibold text-gray-700">#</th>
+                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Product Name</th>
+                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Company</th>
+                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Unit</th>
+                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Location</th>
+                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Doctor</th>
+                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Trainer</th>
+                    <th className="px-3 py-3 text-right font-semibold text-gray-700">Qty</th>
+                    <th className="px-3 py-3 text-right font-semibold text-gray-700">Sell. Price</th>
+                    <th className="px-3 py-3 text-right font-semibold text-gray-700">Total</th>
+                    <th className="px-3 py-3 text-right font-semibold text-orange-700">Disc %</th>
+                    <th className="px-3 py-3 text-right font-semibold text-orange-700">Disc Amt</th>
+                    <th className="px-3 py-3 text-right font-semibold text-red-700">Net Total</th>
+                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Expiry (Auto)</th>
+                    <th className="px-3 py-3 text-center font-semibold text-gray-700">Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {stockOutItems.map((item, index) => (
-                    <tr key={item.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-600">{index + 1}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{item.productName}</td>
-                      <td className="px-4 py-3 text-gray-700">{item.companyName || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700">{item.unit || '-'}</td>
-                      <td className="px-4 py-3">{item.location}</td>
-                      <td className="px-4 py-3">{item.doctorName || '-'}</td>
-                      <td className="px-4 py-3">{item.trainerName || '-'}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-red-600">{item.quantity}</td>
-                      {isAdmin && <td className="px-4 py-3 text-right">QR{(item.sellingPrice ?? 0).toFixed(2)}</td>}
-                      {isAdmin && (
-                        <td className="px-4 py-3 text-right font-semibold text-red-600">
-                          QR{item.total.toFixed(2)}
+                  {stockOutItems.map((item, index) => {
+                    const itemTotal = item.itemTotal !== undefined ? item.itemTotal : (item.quantity * (item.sellingPrice || 0));
+                    const discPct = item.discountPercentage || 0;
+                    const discAmt = item.discountAmount !== undefined ? item.discountAmount : ((itemTotal * discPct) / 100);
+                    const netTotal = item.netTotal !== undefined ? item.netTotal : (itemTotal - discAmt);
+
+                    return (
+                      <tr key={item.id} className="border-b hover:bg-gray-50">
+                        <td className="px-3 py-3 font-medium text-gray-600">{index + 1}</td>
+                        <td className="px-3 py-3 font-medium text-gray-900">{item.productName}</td>
+                        <td className="px-3 py-3 text-gray-700">{item.companyName || '-'}</td>
+                        <td className="px-3 py-3 text-gray-700">{item.unit || '-'}</td>
+                        <td className="px-3 py-3">{item.location}</td>
+                        <td className="px-3 py-3">{item.doctorName || '-'}</td>
+                        <td className="px-3 py-3">{item.trainerName || '-'}</td>
+                        <td className="px-3 py-3 text-right font-semibold text-gray-900">{item.quantity}</td>
+                        <td className="px-3 py-3 text-right">QR{(item.sellingPrice ?? 0).toFixed(2)}</td>
+                        <td className="px-3 py-3 text-right text-gray-700 font-medium">QR{itemTotal.toFixed(2)}</td>
+                        <td className="px-3 py-3 text-right text-orange-700 font-medium">{discPct > 0 ? `${discPct}%` : '0%'}</td>
+                        <td className="px-3 py-3 text-right text-orange-700 font-medium">QR{discAmt.toFixed(2)}</td>
+                        <td className="px-3 py-3 text-right font-bold text-red-600">
+                          QR{netTotal.toFixed(2)}
                         </td>
-                      )}
-                      <td className="px-4 py-3">
-                        {item.expiry ? moment(item.expiry).format('DD/MM/YYYY') : '-'}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => {
-                            setStockOutItems(stockOutItems.filter(i => i.id !== item.id));
-                            showAlert('Item removed', 'success');
-                          }}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Remove item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-3 py-3">
+                          {item.expiry ? moment(item.expiry).format('DD/MM/YYYY') : '-'}
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <button
+                            onClick={() => {
+                              setStockOutItems(stockOutItems.filter(i => i.id !== item.id));
+                              showAlert('Item removed', 'success');
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
+                <tfoot className="bg-gray-50 font-semibold border-t-2 border-gray-300">
+                  <tr>
+                    <td colSpan="9" className="px-4 py-2.5 text-right text-gray-700">Total:</td>
+                    <td colSpan="6" className="px-4 py-2.5 text-right text-gray-900 font-bold">QR{getSubTotal().toFixed(2)}</td>
+                  </tr>
+                  {getTotalDiscount() > 0 && (
+                    <tr>
+                      <td colSpan="9" className="px-4 py-2 text-right text-orange-700">Total Discount:</td>
+                      <td colSpan="6" className="px-4 py-2 text-right text-orange-700 font-bold">-QR{getTotalDiscount().toFixed(2)}</td>
+                    </tr>
+                  )}
+                  <tr className="bg-red-50 text-red-800 text-base">
+                    <td colSpan="9" className="px-4 py-3 text-right font-bold">Grand Total:</td>
+                    <td colSpan="6" className="px-4 py-3 text-right font-black text-red-700">QR{getGrandTotal().toFixed(2)}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>

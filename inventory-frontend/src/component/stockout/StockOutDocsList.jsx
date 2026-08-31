@@ -150,46 +150,62 @@ const StockOutDocsList = () => {
                     <TableHead className="font-semibold">Created By</TableHead>
                     <TableHead className="font-semibold text-right">Distinct Products</TableHead>
                     <TableHead className="font-semibold text-right">Total Quantity</TableHead>
+                    <TableHead className="font-semibold text-right">Subtotal</TableHead>
+                    <TableHead className="font-semibold text-right text-orange-700">Total Discount</TableHead>
+                    <TableHead className="font-semibold text-right text-red-700">Grand Total</TableHead>
                     <TableHead className="text-center font-semibold">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredDocs.map((doc) => (
-                    <TableRow key={doc.docNo} className="hover:bg-slate-50/50">
-                      <TableCell className="font-medium text-blue-600">
-                        Doc #{doc.docNo}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-gray-600">
-                          <Calendar className="h-4 w-4 text-gray-400" />
-                          {moment(doc.createdAt).format('DD/MM/YYYY hh:mm A')}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-gray-600">
-                          <User className="h-4 w-4 text-gray-400" />
-                          {doc.createdBy?.userName || 'System'}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {doc.totalProducts}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-red-600">
-                        -{doc.totalQuantity}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/dashboard/stockout-docs/${doc.docNo}`)}
-                          className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                        >
-                          <Eye className="mr-1 h-3.5 w-3.5" />
-                          Excel Edit
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredDocs.map((doc) => {
+                    const subTotal = doc.subTotal !== undefined ? doc.subTotal : (doc.items || []).reduce((s, i) => s + (i.quantity * i.sellingPrice), 0);
+                    const totalDisc = doc.totalDiscount !== undefined ? doc.totalDiscount : (doc.items || []).reduce((s, i) => s + (i.discountAmount || 0), 0);
+                    const grandTotal = doc.grandTotal !== undefined ? doc.grandTotal : (subTotal - totalDisc);
+
+                    return (
+                      <TableRow key={doc.docNo} className="hover:bg-slate-50/50">
+                        <TableCell className="font-medium text-blue-600">
+                          Doc #{doc.docNo}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-gray-600">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            {moment(doc.createdAt).format('DD/MM/YYYY hh:mm A')}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-gray-600">
+                            <User className="h-4 w-4 text-gray-400" />
+                            {doc.createdBy?.userName || 'System'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {doc.totalProducts}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-gray-900">
+                          {doc.totalQuantity}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-gray-700">QR{subTotal.toFixed(2)}</TableCell>
+                        <TableCell className="text-right font-medium text-orange-600">
+                          {totalDisc > 0 ? `QR${totalDisc.toFixed(2)}` : 'QR0.00'}
+                        </TableCell>
+                        <TableCell className="text-right font-black text-red-600">
+                          QR{grandTotal.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/dashboard/stockout-docs/${doc.docNo}`)}
+                            className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                          >
+                            <Eye className="mr-1 h-3.5 w-3.5" />
+                            Excel Edit
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

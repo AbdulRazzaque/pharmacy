@@ -22,7 +22,7 @@ const StockOutDocExcelEdit = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: '', type: '' });
-  
+
   // Document-level meta for PDF print
   const [docDate, setDocDate] = useState(new Date());
   const [docLocationId, setDocLocationId] = useState('');
@@ -42,14 +42,14 @@ const StockOutDocExcelEdit = () => {
   // Grid/Sheet states
   const [dirtyRows, setDirtyRows] = useState({});
   const [validationErrors, setValidationErrors] = useState({});
-  
+
   // Navigation guard state
   const [nextPath, setNextPath] = useState(null);
   const [showBlockerModal, setShowBlockerModal] = useState(false);
 
   // Search/Filters states
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   // Pagination
   const [page, setPage] = useState(1);
   const pageSize = 50;
@@ -59,13 +59,8 @@ const StockOutDocExcelEdit = () => {
 
   // Columns definition based on permissions
   const columns = useMemo(() => {
-    const cols = ['productId', 'quantity'];
-    if (isAdmin) {
-      cols.push('sellingPrice');
-    }
-    cols.push('locationId');
-    return cols;
-  }, [isAdmin]);
+    return ['productId', 'quantity', 'sellingPrice', 'discountPercentage', 'locationId'];
+  }, []);
 
   const hasUnsavedChanges = useMemo(() => Object.keys(dirtyRows).length > 0, [dirtyRows]);
 
@@ -117,7 +112,7 @@ const StockOutDocExcelEdit = () => {
         { docNo },
         { headers: { token } }
       );
-      
+
       // Fetch locations list
       const locationRes = await axios.get(
         `${process.env.REACT_APP_DEVELOPMENT}/api/location/getAllLocations`,
@@ -201,10 +196,10 @@ const StockOutDocExcelEdit = () => {
         }
         // Map to format editable state and look up current available quantity
         const mapped = rawItems.map(item => {
-          const matchingStock = (stockMap ? Array.from(stockMap.values()) : []).find(s => 
+          const matchingStock = (stockMap ? Array.from(stockMap.values()) : []).find(s =>
             String(s.productId) === String(item.productId) &&
             ((!s.expiry && !item.expiry) ||
-             (s.expiry && item.expiry && moment(s.expiry).format('YYYY-MM-DD') === moment(item.expiry).format('YYYY-MM-DD')))
+              (s.expiry && item.expiry && moment(s.expiry).format('YYYY-MM-DD') === moment(item.expiry).format('YYYY-MM-DD')))
           );
           // Include current item quantity since it is already deducted in stock count
           const availableQty = (matchingStock ? matchingStock.quantity : 0) + Math.abs(item.quantity || 0);
@@ -217,6 +212,7 @@ const StockOutDocExcelEdit = () => {
             expiry: item.expiry ? moment(item.expiry).format('YYYY-MM-DD') : '',
             quantity: Math.abs(item.quantity || 0),
             sellingPrice: item.sellingPrice || 0,
+            discountPercentage: item.discountPercentage || 0,
             locationId: item.locationId || '',
             availableQty: availableQty,
             createdAt: item.createdAt,
@@ -303,12 +299,17 @@ const StockOutDocExcelEdit = () => {
       if (Number.isNaN(price) || price < 0) {
         errorMsg = 'Price cannot be negative';
       }
+    } else if (colKey === 'discountPercentage') {
+      const disc = parseFloat(value);
+      if (Number.isNaN(disc) || disc < 0 || disc > 100) {
+        errorMsg = 'Discount % must be 0 to 100';
+      }
     }
 
     setValidationErrors(prev => {
       const rowErrors = { ...prev[rowId], [colKey]: errorMsg };
       if (!errorMsg) delete rowErrors[colKey];
-      
+
       const newErrors = { ...prev, [rowId]: rowErrors };
       if (Object.keys(rowErrors).length === 0) delete newErrors[rowId];
       return newErrors;
@@ -424,8 +425,8 @@ const StockOutDocExcelEdit = () => {
       const locToUse = docLocationId || modifiedList.find(i => i.locationId)?.locationId || items.find(i => i.locationId)?.locationId || locations[0]?._id || '';
       const res = await axios.post(
         `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOutBulkUpdate`,
-        { 
-          docNo: parseInt(docNo, 10), 
+        {
+          docNo: parseInt(docNo, 10),
           updates: modifiedList,
           location: locToUse,
           locationId: locToUse
@@ -451,7 +452,7 @@ const StockOutDocExcelEdit = () => {
   const handleAddProduct = () => {
     // Clear search filter to ensure the new row is visible
     setSearchQuery('');
-    
+
     const locToUse = docLocationId || items.find(i => i.locationId)?.locationId || locations[0]?._id || '';
     const newItem = {
       _id: `new_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
@@ -462,6 +463,7 @@ const StockOutDocExcelEdit = () => {
       expiry: '',
       quantity: 0,
       sellingPrice: 0,
+      discountPercentage: 0,
       locationId: locToUse,
       availableQty: 0,
       isDeleted: false,
@@ -490,13 +492,25 @@ const StockOutDocExcelEdit = () => {
 
     try {
       setSaving(true);
-      const pdfItems = activeItems.map(item => ({
-        productId: item.productId,
-        productName: item.companyName && item.companyName !== '-' ? `${item.name} (${item.companyName})` : item.name,
-        unit: item.unit || '',
-        quantity: item.quantity,
-        sellingPrice: item.sellingPrice
-      }));
+      const pdfItems = activeItems.map(item => {
+        const qty = Number(item.quantity || 0);
+        const price = Number(item.sellingPrice || 0);
+        const itemTotal = qty * price;
+        const discPct = Number(item.discountPercentage || 0);
+        const discAmt = (itemTotal * discPct) / 100;
+        const netTotal = itemTotal - discAmt;
+        return {
+          productId: item.productId,
+          productName: item.companyName && item.companyName !== '-' ? `${item.name} (${item.companyName})` : item.name,
+          unit: item.unit || '',
+          quantity: qty,
+          sellingPrice: price,
+          discountPercentage: discPct,
+          discountAmount: discAmt,
+          itemTotal: itemTotal,
+          netTotal: netTotal
+        };
+      });
 
       const payload = {
         docNo: parseInt(docNo, 10),
@@ -568,8 +582,8 @@ const StockOutDocExcelEdit = () => {
   const filteredItems = useMemo(() => {
     if (!searchQuery) return activeItems;
     const q = searchQuery.toLowerCase();
-    return activeItems.filter(item => 
-      item.name.toLowerCase().includes(q) || 
+    return activeItems.filter(item =>
+      item.name.toLowerCase().includes(q) ||
       item.companyName.toLowerCase().includes(q)
     );
   }, [searchQuery, activeItems]);
@@ -584,7 +598,13 @@ const StockOutDocExcelEdit = () => {
 
   // Dynamic aggregates
   const totalQuantity = activeItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-  const totalValue = activeItems.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.sellingPrice || 0)), 0);
+  const totalSubTotal = activeItems.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.sellingPrice || 0)), 0);
+  const totalDiscount = activeItems.reduce((sum, item) => {
+    const itemTotal = Number(item.quantity || 0) * Number(item.sellingPrice || 0);
+    const discPct = Number(item.discountPercentage || 0);
+    return sum + ((itemTotal * discPct) / 100);
+  }, 0);
+  const grandTotal = totalSubTotal - totalDiscount;
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -605,12 +625,20 @@ const StockOutDocExcelEdit = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          {isAdmin && (
+          <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg border">
             <div className="text-right">
-              <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Document Value</div>
-              <div className="text-xl font-black text-red-600">QR {totalValue.toFixed(2)}</div>
+              <div className="text-xs text-gray-500 uppercase font-semibold">Subtotal</div>
+              <div className="text-sm font-bold text-gray-800 dark:text-gray-200">QR {totalSubTotal.toFixed(2)}</div>
             </div>
-          )}
+            <div className="text-right border-l pl-3">
+              <div className="text-xs text-orange-600 uppercase font-semibold">Discount</div>
+              <div className="text-sm font-bold text-orange-600">QR {totalDiscount.toFixed(2)}</div>
+            </div>
+            <div className="text-right border-l pl-3">
+              <div className="text-xs text-red-600 uppercase font-bold">Grand Total</div>
+              <div className="text-lg font-black text-red-600">QR {grandTotal.toFixed(2)}</div>
+            </div>
+          </div>
           <div className="text-right border-l pl-4">
             <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Total Quantity</div>
             <div className="text-xl font-black text-gray-800">{totalQuantity}</div>
@@ -700,15 +728,18 @@ const StockOutDocExcelEdit = () => {
                   <tr className="divide-x divide-gray-200 text-xs font-bold text-gray-700 uppercase tracking-wider">
                     <th className="w-12 text-center p-3">Row</th>
                     <th className="w-80 p-3">Product Name *</th>
-                    <th className="w-40 p-3">Company</th>
-                    <th className="w-24 p-3 text-center">Unit</th>
-                    <th className="w-40 p-3">Expiry Date</th>
-                    <th className="w-28 p-3 text-right">Quantity *</th>
-                    {isAdmin && <th className="w-32 p-3 text-right">Unit Price *</th>}
-                    {isAdmin && <th className="w-32 p-3 text-right">Total Price</th>}
-                    <th className="w-48 p-3">Location *</th>
-                    <th className="w-28 text-center p-3">Status</th>
-                    <th className="w-24 text-center p-3">Actions</th>
+                    <th className="w-36 p-3">Company</th>
+                    <th className="w-20 p-3 text-center">Unit</th>
+                    <th className="w-36 p-3">Expiry Date</th>
+                    <th className="w-24 p-3 text-right">Quantity *</th>
+                    <th className="w-28 p-3 text-right">Unit Price *</th>
+                    <th className="w-28 p-3 text-right">Total</th>
+                    <th className="w-24 p-3 text-right text-orange-700">Disc %</th>
+                    <th className="w-28 p-3 text-right text-orange-700">Disc Amt</th>
+                    <th className="w-28 p-3 text-right text-red-700">Net Total</th>
+                    <th className="w-44 p-3">Location *</th>
+                    <th className="w-24 text-center p-3">Status</th>
+                    <th className="w-20 text-center p-3">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 text-sm">
@@ -717,23 +748,25 @@ const StockOutDocExcelEdit = () => {
                     const originalIdx = items.indexOf(item);
                     const isRowDirty = dirtyRows[item._id];
                     const isRowInvalid = validationErrors[item._id] && Object.keys(validationErrors[item._id]).length > 0;
-                    const rowTotalPrice = (Number(item.quantity) * Number(item.sellingPrice)).toFixed(2);
-                    
+                    const rowItemTotal = Number(item.quantity || 0) * Number(item.sellingPrice || 0);
+                    const rowDiscPct = Number(item.discountPercentage || 0);
+                    const rowDiscAmt = (rowItemTotal * rowDiscPct) / 100;
+                    const rowNetTotal = rowItemTotal - rowDiscAmt;
+
                     return (
                       <tr
                         key={item._id}
-                        className={`divide-x divide-gray-200 transition-colors ${
-                          isRowDirty
+                        className={`divide-x divide-gray-200 transition-colors ${isRowDirty
                             ? 'bg-blue-50 hover:bg-blue-100/60'
                             : isRowInvalid
-                            ? 'bg-red-50/50 hover:bg-red-50'
-                            : 'hover:bg-slate-50/70'
-                        }`}
+                              ? 'bg-red-50/50 hover:bg-red-50'
+                              : 'hover:bg-slate-50/70'
+                          }`}
                       >
                         <td className="text-center text-xs font-semibold text-gray-400 p-2">
                           {globalIdx + 1}
                         </td>
-                        
+
                         {/* Product Selector — mirrors Stock Out page: shows inventory qty, expiry, price */}
                         <td className="p-1">
                           <StockOutProductDropdownCell
@@ -764,31 +797,46 @@ const StockOutDocExcelEdit = () => {
                             value={item.quantity}
                             onKeyDown={(e) => handleKeyDown(e, globalIdx, 'quantity')}
                             onChange={(e) => handleCellChange(globalIdx, 'quantity', e.target.value)}
-                            className={`w-full h-8 px-2 text-right border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all font-semibold ${
-                              validationErrors[item._id]?.quantity ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent text-gray-800'
-                            }`}
+                            className={`w-full h-8 px-2 text-right border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all font-semibold ${validationErrors[item._id]?.quantity ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent text-gray-800'
+                              }`}
                           />
                         </td>
-                        {isAdmin && (
-                          <td className="p-1">
-                            <input
-                              id={`cell-${globalIdx}-sellingPrice`}
-                              type="number"
-                              step="0.01"
-                              value={item.sellingPrice}
-                              onKeyDown={(e) => handleKeyDown(e, globalIdx, 'sellingPrice')}
-                              onChange={(e) => handleCellChange(globalIdx, 'sellingPrice', e.target.value)}
-                              className={`w-full h-8 px-2 text-right border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all ${
-                                validationErrors[item._id]?.sellingPrice ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent text-gray-800'
+                        <td className="p-1">
+                          <input
+                            id={`cell-${globalIdx}-sellingPrice`}
+                            type="number"
+                            step="0.01"
+                            value={item.sellingPrice}
+                            onKeyDown={(e) => handleKeyDown(e, globalIdx, 'sellingPrice')}
+                            onChange={(e) => handleCellChange(globalIdx, 'sellingPrice', e.target.value)}
+                            className={`w-full h-8 px-2 text-right border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all ${validationErrors[item._id]?.sellingPrice ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent text-gray-800'
                               }`}
-                            />
-                          </td>
-                        )}
-                        {isAdmin && (
-                          <td className="p-2 text-right text-gray-600 font-semibold bg-gray-50/50">
-                            QR {rowTotalPrice}
-                          </td>
-                        )}
+                          />
+                        </td>
+                        <td className="p-2 text-right text-gray-700 font-medium bg-gray-50/50">
+                          QR {rowItemTotal.toFixed(2)}
+                        </td>
+                        <td className="p-1">
+                          <input
+                            id={`cell-${globalIdx}-discountPercentage`}
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="any"
+                            value={item.discountPercentage}
+                            onKeyDown={(e) => handleKeyDown(e, globalIdx, 'discountPercentage')}
+                            onChange={(e) => handleCellChange(globalIdx, 'discountPercentage', e.target.value)}
+                            className={`w-full h-8 px-2 text-right border bg-orange-50/40 focus:bg-white focus:ring-2 focus:ring-orange-500 rounded focus:outline-none transition-all font-semibold text-orange-900 ${validationErrors[item._id]?.discountPercentage ? 'border-red-500 bg-red-50 text-red-700' : 'border-orange-200'
+                              }`}
+                            placeholder="0%"
+                          />
+                        </td>
+                        <td className="p-2 text-right text-orange-700 font-medium bg-orange-50/20">
+                          QR {rowDiscAmt.toFixed(2)}
+                        </td>
+                        <td className="p-2 text-right text-red-600 font-bold bg-red-50/30">
+                          QR {rowNetTotal.toFixed(2)}
+                        </td>
                         <td className="p-1">
                           <select
                             id={`cell-${globalIdx}-locationId`}
@@ -843,7 +891,7 @@ const StockOutDocExcelEdit = () => {
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-between bg-white p-4 border border-gray-200 rounded-lg">
           <div className="text-sm text-gray-500">
-            Showing items { (page - 1) * pageSize + 1 } to { Math.min(page * pageSize, filteredItems.length) } of { filteredItems.length }
+            Showing items {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, filteredItems.length)} of {filteredItems.length}
           </div>
           <div className="flex items-center gap-2">
             <Button

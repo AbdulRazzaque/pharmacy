@@ -23,6 +23,29 @@ class stockOutPdfController {
         });
       }
 
+      const processedItems = items.map(item => {
+        const qty = Number(item.quantity || 0);
+        const price = Number(item.sellingPrice || 0);
+        const itemTotal = Math.round((qty * price) * 100) / 100;
+        let discPct = Number(item.discountPercentage || 0);
+        if (isNaN(discPct) || discPct < 0 || discPct > 100) discPct = 0;
+        const discountAmount = Math.round((itemTotal * discPct / 100) * 100) / 100;
+        const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
+        return {
+          ...item,
+          quantity: qty,
+          sellingPrice: price,
+          discountPercentage: discPct,
+          discountAmount,
+          itemTotal,
+          netTotal
+        };
+      });
+
+      const subTotal = processedItems.reduce((sum, i) => sum + i.itemTotal, 0);
+      const totalDiscount = processedItems.reduce((sum, i) => sum + i.discountAmount, 0);
+      const grandTotal = Math.round((subTotal - totalDiscount) * 100) / 100;
+
       const newPdfRecord = await StockOutPdf.create({
         docNo,
         date: new Date(date),
@@ -33,7 +56,10 @@ class stockOutPdfController {
         takenBy: takenBy || "",
         veterinarian: veterinarian || "",
         comments: comments || "",
-        items
+        subTotal,
+        totalDiscount,
+        grandTotal,
+        items: processedItems
       });
 
       return res.status(200).json({

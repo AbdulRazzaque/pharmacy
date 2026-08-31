@@ -182,12 +182,12 @@
 
 .pdf-table th:nth-child(2),
 .pdf-table td:nth-child(2) {
-  /* width: 43%; */
+  width: 40%;
 }
 
 .pdf-table th:nth-child(3),
 .pdf-table td:nth-child(3) {
-  width: 13%;
+  width: 4%;
   text-align: center;
 }
 
@@ -199,14 +199,20 @@
 
 .pdf-table th:nth-child(5),
 .pdf-table td:nth-child(5) {
-  width: 4%;
-  text-align: right;
+  width: 14%;
+  text-align: center;
 }
 
 .pdf-table th:nth-child(6),
 .pdf-table td:nth-child(6) {
-  width: 15%;
-  text-align: right;
+  width: 6%;
+  text-align: center;
+}
+
+.pdf-table th:nth-child(7),
+.pdf-table td:nth-child(7) {
+  width: 14%;
+  text-align: center;
 }
 
 /* 4-column layout when prices are hidden */
@@ -254,6 +260,7 @@
   font-size: 13px;
   padding: 0 10px !important;
   font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+  vertical-align: middle;
 }
 
 .pdf-total-label {
@@ -494,6 +501,7 @@
     font-size: 12px !important;
     padding: 0 8px !important;
     font-family: 'Segoe UI', Tahoma, Arial, sans-serif !important;
+    vertical-align: middle !important;
   }
 
   .pdf-total-label {

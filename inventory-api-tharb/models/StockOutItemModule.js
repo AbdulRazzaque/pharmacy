@@ -9,7 +9,11 @@ const stockOutItemSchema = new mongoose.Schema(
     purchasingPrice: { type: Number, default: 0 },
     expiry: { type: Date, default: null },
     batchNumber: { type: String, default: "" },
-    remarks: { type: String, default: "" }
+    remarks: { type: String, default: "" },
+    discountPercentage: { type: Number, default: 0, min: 0, max: 100 },
+    discountAmount: { type: Number, default: 0 },
+    itemTotal: { type: Number, default: 0 },
+    netTotal: { type: Number, default: 0 }
   },
   { timestamps: true }
 );
