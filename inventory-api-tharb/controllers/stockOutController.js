@@ -310,6 +310,7 @@ const stockOutController = {
                         _id: item._id,
                         docNo: header.docNo,
                         name: item.productId?.name || "",
+                        companyName: item.productId?.companyName || item.companyName || "",
                         location: locationObj,
                         locationId: locationId,
                         locationName: locationName,

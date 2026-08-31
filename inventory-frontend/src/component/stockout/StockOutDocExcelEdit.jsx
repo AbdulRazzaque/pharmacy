@@ -196,21 +196,32 @@ const StockOutDocExcelEdit = () => {
         }
         // Map to format editable state and look up current available quantity
         const mapped = rawItems.map(item => {
-          const matchingStock = (stockMap ? Array.from(stockMap.values()) : []).find(s =>
-            String(s.productId) === String(item.productId) &&
-            ((!s.expiry && !item.expiry) ||
-              (s.expiry && item.expiry && moment(s.expiry).format('YYYY-MM-DD') === moment(item.expiry).format('YYYY-MM-DD')))
-          );
+          const itemPId = String(item.productId?._id || item.productId || '');
+          const itemExpiry = item.expiry ? moment(item.expiry).format('YYYY-MM-DD') : '';
+
+          const matchingStock = (stockMap ? Array.from(stockMap.values()) : []).find(s => {
+            const stockPId = String(s.productId?._id || s.productId || '');
+            const stockExpiry = s.expiry ? moment(s.expiry).format('YYYY-MM-DD') : '';
+            return stockPId === itemPId && ((!stockExpiry && !itemExpiry) || (stockExpiry === itemExpiry));
+          });
+
           // Include current item quantity since it is already deducted in stock count
-          const availableQty = (matchingStock ? matchingStock.quantity : 0) + Math.abs(item.quantity || 0);
+          const currentItemQty = Math.abs(item.quantity || 0);
+          const remainingStockQty = matchingStock ? Number(matchingStock.quantity || 0) : 0;
+          const availableQty = remainingStockQty + currentItemQty;
+
+          const resolvedCompanyName = (item.companyName && item.companyName !== '-')
+            ? item.companyName
+            : (item.productId?.companyName || matchingStock?.companyName || '-');
+
           return {
             _id: item._id,
-            name: item.name || '',
-            companyName: item.companyName || '-',
-            unit: item.unit || '-',
-            productId: item.productId,
-            expiry: item.expiry ? moment(item.expiry).format('YYYY-MM-DD') : '',
-            quantity: Math.abs(item.quantity || 0),
+            name: item.name || item.productId?.name || '',
+            companyName: resolvedCompanyName,
+            unit: item.unit || item.productId?.unit || '-',
+            productId: itemPId,
+            expiry: itemExpiry,
+            quantity: currentItemQty,
             sellingPrice: item.sellingPrice || 0,
             discountPercentage: item.discountPercentage || 0,
             locationId: item.locationId || '',
@@ -437,7 +448,7 @@ const StockOutDocExcelEdit = () => {
       if (res.data?.msg === 'success') {
         showAlert(`✔ ${res.data.count || modifiedList.length} rows updated successfully.`, 'success');
         setDirtyRows({});
-        setOriginalItems(JSON.parse(JSON.stringify(items)));
+        await fetchData();
       } else {
         showAlert(res.data?.result || 'Failed to update records.', 'error');
       }
