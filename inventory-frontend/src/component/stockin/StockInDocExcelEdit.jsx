@@ -129,10 +129,10 @@ const StockInDocExcelEdit = () => {
         // Map to format editable state
         const mapped = rawItems.map(item => ({
           _id: item._id,
-          name: item.name || '',
-          companyName: item.product?.companyName || item.companyName || '-',
-          unit: item.unit || '-',
-          productId: item.product?._id || item.productId,
+          name: item.name || item.productId?.name || '',
+          companyName: (item.companyName && item.companyName !== '-') ? item.companyName : (item.product?.companyName || item.productId?.companyName || '-'),
+          unit: item.unit || item.product?.unit || item.productId?.unit || '-',
+          productId: item.product?._id || item.productId?._id || item.productId,
           expiry: item.expiry ? moment(item.expiry).format('YYYY-MM-DD') : '',
           quantity: item.quantity || 0,
           purchasingPrice: item.purchasingPrice || 0,
@@ -354,7 +354,7 @@ const StockInDocExcelEdit = () => {
       if (res.data?.msg === 'success') {
         showAlert(`✔ ${res.data.count || modifiedList.length} rows updated successfully.`, 'success');
         setDirtyRows({});
-        setOriginalItems(JSON.parse(JSON.stringify(items)));
+        await fetchData();
       } else {
         showAlert(res.data?.result || 'Failed to update records.', 'error');
       }

@@ -9,13 +9,32 @@ const moment = require('moment');
 
 const normalizeExpiry = (expiry) => (expiry ? new Date(expiry) : null);
 
-const getNextAdjustmentDocNo = async () => {
-    const next = await Sequence.findOneAndUpdate(
-        { _id: "stockAdjustmentDocument" },
-        { $inc: { seq: 1 } },
-        { new: true, upsert: true, setDefaultsOnInsert: true }
-    );
-    return Number(next.seq);
+const getNextAdjustmentDocNo = async (session = null) => {
+    let query = StockAdjustmentHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 });
+    if (session) query = query.session(session);
+    const maxHeader = await query.lean();
+
+    let maxDocNo = 0;
+    if (maxHeader && maxHeader.docNo !== undefined && maxHeader.docNo !== null) {
+        const num = Number(maxHeader.docNo);
+        if (!isNaN(num)) {
+            maxDocNo = num;
+        }
+    }
+
+    const nextDocNo = maxDocNo + 1;
+
+    try {
+        await Sequence.findOneAndUpdate(
+            { _id: "stockAdjustmentDocument" },
+            { $set: { seq: nextDocNo } },
+            { upsert: true, session }
+        );
+    } catch (e) {
+        console.error("Error updating Sequence for stockAdjustmentDocument:", e);
+    }
+
+    return nextDocNo;
 };
 
 const validateAdjustmentItems = async (items, session = null) => {
@@ -130,8 +149,7 @@ class stockAdjustmentController {
 
     async getStockAdjustmentDocNo(req, res) {
         try {
-            const seqDoc = await Sequence.findById("stockAdjustmentDocument");
-            const nextDocNo = (seqDoc?.seq || 0) + 1;
+            const nextDocNo = await getNextAdjustmentDocNo();
             return res.status(200).json({ msg: "success", result: [{ docNo: nextDocNo }] });
         } catch (err) {
             return res.status(500).json({ msg: "error", error: err.message });

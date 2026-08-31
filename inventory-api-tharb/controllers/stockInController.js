@@ -323,6 +323,7 @@ const stockInController = {
                 doc: items.map(item => ({
                     _id: item._id,
                     name: item.productId?.name || "",
+                    companyName: item.productId?.companyName || item.companyName || "",
                     supplier: header.supplier,
                     product: item.productId,
                     quantity: item.quantity,

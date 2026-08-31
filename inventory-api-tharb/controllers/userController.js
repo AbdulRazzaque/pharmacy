@@ -75,7 +75,7 @@ class UserController{
             array = array.map(item=>mongoose.Types.ObjectId(item))
             User.deleteMany({_id: { $in: array}})
             .then(response=>{
-                if(response.deletedCount===1){
+                if(response.deletedCount > 0){
                     res.status(200).send({msg:"success",result:"Deleted"})
                 }else{
                     res.status(400).send("Not deleted")
