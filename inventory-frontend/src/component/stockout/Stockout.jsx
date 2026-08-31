@@ -194,7 +194,7 @@ const Stockout = () => {
     })
       .then((res) => {
         if (res.data.result && res.data.result.length > 0) {
-          setDocNo(res.data.result[0].docNo + 1);
+          setDocNo(res.data.result[0].docNo);
         }
       })
       .catch((err) => console.error('Error fetching doc number:', err));
@@ -397,7 +397,7 @@ const Stockout = () => {
         setSelectedStock(null);
         localStorage.removeItem('stockout_draft');
 
-        setDocNo(docNo + 1);
+        fetchDocNo();
         fetchStocks(); // Refresh stocks
         setLoading(false);
 

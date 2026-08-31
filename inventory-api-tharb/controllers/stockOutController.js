@@ -8,12 +8,31 @@ const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
 
 const getNextStockOutDocNo = async (session = null) => {
-    const seqDoc = await Sequence.findOneAndUpdate(
-        { _id: "stockOutDocument" },
-        { $inc: { seq: 1 } },
-        { new: true, upsert: true, setDefaultsOnInsert: true, session }
-    );
-    return Number(seqDoc.seq);
+    let query = StockOutHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 });
+    if (session) query = query.session(session);
+    const maxHeader = await query.lean();
+
+    let maxDocNo = 0;
+    if (maxHeader && maxHeader.docNo !== undefined && maxHeader.docNo !== null) {
+        const num = Number(maxHeader.docNo);
+        if (!isNaN(num)) {
+            maxDocNo = num;
+        }
+    }
+
+    const nextDocNo = maxDocNo + 1;
+
+    try {
+        await Sequence.findOneAndUpdate(
+            { _id: "stockOutDocument" },
+            { $set: { seq: nextDocNo } },
+            { upsert: true, session }
+        );
+    } catch (e) {
+        console.error("Error updating Sequence for stockOutDocument:", e);
+    }
+
+    return nextDocNo;
 };
 
 const updateHeaderTotals = async (headerId, session = null) => {
