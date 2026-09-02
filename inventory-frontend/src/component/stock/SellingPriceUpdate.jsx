@@ -38,6 +38,7 @@ const SellingPriceUpdate = () => {
   const [historySearchProduct, setHistorySearchProduct] = useState('');
   const [historySearchCompany, setHistorySearchCompany] = useState('');
   const [historySearchUser, setHistorySearchUser] = useState('');
+  const [historySearchSource, setHistorySearchSource] = useState('all');
   const [activeQuickFilter, setActiveQuickFilter] = useState('all');
 
   // Single Product History Modal State
@@ -86,7 +87,7 @@ const SellingPriceUpdate = () => {
             }
           }
 
-          let sellingPrice = product.sellingPrice || stock.sellingPrice || 0;
+          let sellingPrice = stock.sellingPrice !== undefined && stock.sellingPrice !== null ? stock.sellingPrice : (product.sellingPrice || 0);
           if (!sellingPrice && stock.expiryArray && stock.expiryArray.length > 0) {
             const foundSp = stock.expiryArray.find(e => e.sellingPrice > 0);
             if (foundSp) sellingPrice = foundSp.sellingPrice;
@@ -278,6 +279,7 @@ const SellingPriceUpdate = () => {
     setHistorySearchProduct('');
     setHistorySearchCompany('');
     setHistorySearchUser('');
+    setHistorySearchSource('all');
     setActiveQuickFilter('all');
   };
 
@@ -313,9 +315,14 @@ const SellingPriceUpdate = () => {
         if (!uName.includes(q)) return false;
       }
 
+      if (historySearchSource && historySearchSource !== 'all') {
+        const itemSource = item.source || 'Selling Price Update';
+        if (itemSource !== historySearchSource) return false;
+      }
+
       return true;
     });
-  }, [allHistory, fromDate, toDate, historySearchProduct, historySearchCompany, historySearchUser]);
+  }, [allHistory, fromDate, toDate, historySearchProduct, historySearchCompany, historySearchUser, historySearchSource]);
 
   // EXCEL EXPORT (EXCLUSIVELY FOR HISTORY LOG DATA)
   const handleExportExcel = () => {
@@ -341,6 +348,7 @@ const SellingPriceUpdate = () => {
         'Old Selling Price': oldVal.toFixed(2),
         'New Selling Price': newVal.toFixed(2),
         'Difference': diffFormatted,
+        'Source': item.source || 'Selling Price Update',
         'Updated By': item.updatedByName || item.updatedBy?.userName || 'Admin'
       };
     });
@@ -356,6 +364,7 @@ const SellingPriceUpdate = () => {
       { wch: 18 }, // Old Selling Price
       { wch: 18 }, // New Selling Price
       { wch: 15 }, // Difference
+      { wch: 22 }, // Source
       { wch: 18 }  // Updated By
     ];
 
@@ -419,7 +428,10 @@ const SellingPriceUpdate = () => {
         {/* Tab Selection Navigation */}
         <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-xl backdrop-blur-md border border-white/10">
           <button
-            onClick={() => setActiveTab('update')}
+            onClick={() => {
+              setActiveTab('update');
+              fetchProductsAndPrices();
+            }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-sm transition-all ${
               activeTab === 'update'
                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
@@ -436,7 +448,10 @@ const SellingPriceUpdate = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab('history')}
+            onClick={() => {
+              setActiveTab('history');
+              fetchAllPriceHistory();
+            }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-sm transition-all ${
               activeTab === 'history'
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
@@ -878,7 +893,7 @@ const SellingPriceUpdate = () => {
               </div>
 
               {/* Text Search Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 pt-2">
                 <div>
                   <label className="block text-xs font-bold text-slate-600 mb-1 flex items-center gap-1">
                     <Search className="h-3.5 w-3.5 text-slate-400" /> Product Name Search
@@ -905,6 +920,21 @@ const SellingPriceUpdate = () => {
                     onClear={() => setHistorySearchCompany('')}
                     className="h-10 text-sm"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 mb-1 flex items-center gap-1">
+                    <Filter className="h-3.5 w-3.5 text-purple-600" /> Source Filter
+                  </label>
+                  <select
+                    value={historySearchSource}
+                    onChange={(e) => setHistorySearchSource(e.target.value)}
+                    className="w-full h-10 px-3 py-2 text-sm border-2 border-slate-200 rounded-lg focus:outline-none focus:border-purple-600 font-semibold text-slate-800 bg-white"
+                  >
+                    <option value="all">All Sources</option>
+                    <option value="Selling Price Update">Selling Price Update</option>
+                    <option value="Stock In">Stock In</option>
+                  </select>
                 </div>
 
                 <div>
@@ -955,12 +985,13 @@ const SellingPriceUpdate = () => {
                     <TableHeader className="bg-slate-100/90 border-b border-slate-200">
                       <TableRow>
                         <TableHead className="font-bold text-slate-800 py-3.5 pl-6 min-w-[120px]">Date</TableHead>
-                        <TableHead className="font-bold text-slate-800 py-3.5 min-w-[130px]">Expiry Date</TableHead>
-                        <TableHead className="font-bold text-slate-800 py-3.5 min-w-[220px]">Product Name</TableHead>
-                        <TableHead className="font-bold text-slate-800 py-3.5 min-w-[180px]">Company Name</TableHead>
-                        <TableHead className="font-bold text-slate-800 py-3.5 text-right min-w-[140px]">Old Price</TableHead>
-                        <TableHead className="font-bold text-slate-800 py-3.5 text-right min-w-[140px]">New Price</TableHead>
-                        <TableHead className="font-bold text-slate-800 py-3.5 text-center min-w-[130px]">Difference</TableHead>
+                        <TableHead className="font-bold text-slate-800 py-3.5 min-w-[120px]">Expiry Date</TableHead>
+                        <TableHead className="font-bold text-slate-800 py-3.5 min-w-[200px]">Product Name</TableHead>
+                        <TableHead className="font-bold text-slate-800 py-3.5 min-w-[160px]">Company Name</TableHead>
+                        <TableHead className="font-bold text-slate-800 py-3.5 text-right min-w-[120px]">Old Price</TableHead>
+                        <TableHead className="font-bold text-slate-800 py-3.5 text-right min-w-[120px]">New Price</TableHead>
+                        <TableHead className="font-bold text-slate-800 py-3.5 text-center min-w-[120px]">Difference</TableHead>
+                        <TableHead className="font-bold text-slate-800 py-3.5 text-center min-w-[160px]">Source</TableHead>
                         <TableHead className="font-bold text-slate-800 py-3.5 min-w-[150px] pr-6">Updated By</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -1024,6 +1055,17 @@ const SellingPriceUpdate = () => {
                                   QR 0.00
                                 </span>
                               )}
+                            </TableCell>
+
+                            {/* Source */}
+                            <TableCell className="text-center">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                                item.source === 'Stock In'
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                  : 'bg-purple-50 text-purple-700 border-purple-200'
+                              }`}>
+                                {item.source || 'Selling Price Update'}
+                              </span>
                             </TableCell>
 
                             {/* Updated By */}
@@ -1104,6 +1146,7 @@ const SellingPriceUpdate = () => {
                       <TableHead className="font-bold text-slate-700 text-right">Old Price</TableHead>
                       <TableHead className="font-bold text-slate-700 text-right">New Price</TableHead>
                       <TableHead className="font-bold text-slate-700 text-center">Difference</TableHead>
+                      <TableHead className="font-bold text-slate-700 text-center">Source</TableHead>
                       <TableHead className="font-bold text-slate-700 text-right pr-4">Updated By</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1147,6 +1190,16 @@ const SellingPriceUpdate = () => {
                             ) : (
                               <span className="text-xs text-slate-500">QR 0.00</span>
                             )}
+                          </TableCell>
+
+                          <TableCell className="text-center">
+                            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                              item.source === 'Stock In'
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : 'bg-purple-50 text-purple-700 border-purple-200'
+                            }`}>
+                              {item.source || 'Selling Price Update'}
+                            </span>
                           </TableCell>
 
                           <TableCell className="text-right pr-4 text-xs font-bold text-purple-900">

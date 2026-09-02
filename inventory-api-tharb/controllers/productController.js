@@ -2,6 +2,7 @@ const mongoose = require('mongoose')
 const Product = require("../models/ProductModule")
 const StockBalance = require("../models/StockBalanceModule")
 const SellingPriceHistory = require("../models/SellingPriceHistoryModule")
+const { recordSellingPriceChangeIfModified } = require("../utils/sellingPriceHistoryHelper")
 const bcrypt = require('bcrypt');
 const jwt = require("jsonwebtoken")
 const _ = require("lodash")
@@ -674,60 +675,21 @@ class ProductController {
             }
 
             // Determine current/old selling price
-            let oldPrice = product.sellingPrice ?? 0;
-            if (oldPrice === 0) {
-                const firstStock = await StockBalance.findOne({ productId: product._id, sellingPrice: { $gt: 0 } });
-                if (firstStock) {
-                    oldPrice = firstStock.sellingPrice || 0;
-                }
-            }
+            const userObj = req.user || req.userDetails || {};
+            const historyRecord = await recordSellingPriceChangeIfModified({
+                productId: product._id,
+                newSellingPrice: priceNum,
+                source: "Selling Price Update",
+                userObj
+            });
 
-            const roundedOld = Math.round(oldPrice * 100) / 100;
-            const roundedNew = Math.round(priceNum * 100) / 100;
-
-            if (roundedOld === roundedNew && product.sellingPrice === roundedNew) {
+            if (!historyRecord) {
                 return res.status(200).send({
                     msg: "unchanged",
                     message: "Price is unchanged. No history entry created.",
                     result: product
                 });
             }
-
-            // Update Product model
-            product.sellingPrice = roundedNew;
-            product.updatedBy = req.user?._id || req.userDetails?._id;
-            product.updatedByRole = req.user?.role || req.userDetails?.role || 'admin';
-            await product.save();
-
-            // Update all StockBalance documents for this product
-            await StockBalance.updateMany(
-                { productId: product._id },
-                { $set: { sellingPrice: roundedNew } }
-            );
-
-            // Create SellingPriceHistory record
-            const userObj = req.user || req.userDetails || {};
-            const userName = userObj.userName || "Admin";
-
-            // Find earliest expiry date for history tracking
-            let expDate = null;
-            const stockWithExp = await StockBalance.findOne({ productId: product._id });
-            if (stockWithExp && stockWithExp.expiryArray && stockWithExp.expiryArray.length > 0) {
-                const validExps = stockWithExp.expiryArray.filter(e => e.expiry).map(e => new Date(e.expiry)).sort((a, b) => a - b);
-                if (validExps.length > 0) expDate = validExps[0];
-            }
-
-            const historyRecord = await SellingPriceHistory.create({
-                productId: product._id,
-                productName: product.name,
-                companyName: product.companyName || "",
-                expiryDate: expDate,
-                oldSellingPrice: roundedOld,
-                newSellingPrice: roundedNew,
-                updatedBy: userObj._id || null,
-                updatedByName: userName,
-                updatedByRole: userObj.role || "admin"
-            });
 
             return res.status(200).send({
                 msg: "success",
@@ -803,7 +765,8 @@ class ProductController {
                 history = history.filter(item =>
                     (item.productName || '').toLowerCase().includes(s) ||
                     (item.companyName || '').toLowerCase().includes(s) ||
-                    (item.updatedByName || '').toLowerCase().includes(s)
+                    (item.updatedByName || '').toLowerCase().includes(s) ||
+                    (item.source || '').toLowerCase().includes(s)
                 );
             }
 
@@ -838,59 +801,19 @@ class ProductController {
                 const { productId, newSellingPrice } = item;
                 if (!productId) continue;
 
-                const priceNum = parseFloat(newSellingPrice);
-                if (isNaN(priceNum) || priceNum < 0) continue;
-
-                const product = await Product.findById(productId);
-                if (!product) continue;
-
-                let oldPrice = product.sellingPrice ?? 0;
-                if (oldPrice === 0) {
-                    const firstStock = await StockBalance.findOne({ productId: product._id, sellingPrice: { $gt: 0 } });
-                    if (firstStock) {
-                        oldPrice = firstStock.sellingPrice || 0;
-                    }
-                }
-
-                const roundedOld = Math.round(oldPrice * 100) / 100;
-                const roundedNew = Math.round(priceNum * 100) / 100;
-
-                if (roundedOld === roundedNew && product.sellingPrice === roundedNew) {
-                    skippedCount++;
-                    continue;
-                }
-
-                product.sellingPrice = roundedNew;
-                product.updatedBy = userId;
-                product.updatedByRole = userRole;
-                await product.save();
-
-                await StockBalance.updateMany(
-                    { productId: product._id },
-                    { $set: { sellingPrice: roundedNew } }
-                );
-
-                let expDate = null;
-                const stockWithExp = await StockBalance.findOne({ productId: product._id });
-                if (stockWithExp && stockWithExp.expiryArray && stockWithExp.expiryArray.length > 0) {
-                    const validExps = stockWithExp.expiryArray.filter(e => e.expiry).map(e => new Date(e.expiry)).sort((a, b) => a - b);
-                    if (validExps.length > 0) expDate = validExps[0];
-                }
-
-                const historyRecord = await SellingPriceHistory.create({
-                    productId: product._id,
-                    productName: product.name,
-                    companyName: product.companyName || "",
-                    expiryDate: expDate,
-                    oldSellingPrice: roundedOld,
-                    newSellingPrice: roundedNew,
-                    updatedBy: userId,
-                    updatedByName: userName,
-                    updatedByRole: userRole
+                const historyRecord = await recordSellingPriceChangeIfModified({
+                    productId,
+                    newSellingPrice,
+                    source: "Selling Price Update",
+                    userObj
                 });
 
-                results.push({ productId: product._id, name: product.name, oldPrice: roundedOld, newPrice: roundedNew });
-                historyRecords.push(historyRecord);
+                if (historyRecord) {
+                    results.push({ productId, oldPrice: historyRecord.oldSellingPrice, newPrice: historyRecord.newSellingPrice });
+                    historyRecords.push(historyRecord);
+                } else {
+                    skippedCount++;
+                }
             }
 
             return res.status(200).send({

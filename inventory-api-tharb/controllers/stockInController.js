@@ -7,6 +7,7 @@ const StockOutItem = require("../models/StockOutItemModule");
 const Product = require("../models/ProductModule");
 const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
+const { recordSellingPriceChangeIfModified } = require("../utils/sellingPriceHistoryHelper");
 
 const isAdminRole = (role) => (role || '').toLowerCase() === 'admin';
 
@@ -23,6 +24,8 @@ async function resolveSellingPriceForStockIn(productId, adminSellingPrice) {
     if (adminSellingPrice != null && !Number.isNaN(adminSellingPrice)) {
         return adminSellingPrice;
     }
+    const productDoc = await Product.findById(productId).select('sellingPrice');
+    if (productDoc?.sellingPrice && productDoc.sellingPrice > 0) return productDoc.sellingPrice;
     const latestItem = await StockInItem.findOne({ productId })
         .sort({ createdAt: -1 })
         .select('sellingPrice purchasingPrice');
@@ -169,8 +172,14 @@ const updateStockInItemHelper = async ({
             session ? { session } : {}
         );
 
-        // 4. Synchronize selling price across all StockOutItem & InventoryTransaction records for this batch
+        // 4. Synchronize selling price across Product, StockBalance, StockOutItem & InventoryTransaction records for this batch
         if (priceChanged && newSellingPrice > 0) {
+            await Product.findByIdAndUpdate(productId, { sellingPrice: newSellingPrice }, session ? { session } : {});
+            await StockBalance.updateMany(
+                { productId },
+                { $set: { sellingPrice: newSellingPrice } },
+                session ? { session } : {}
+            );
             await StockOutItem.updateMany(
                 { productId, expiry: newExpiry },
                 { $set: { sellingPrice: newSellingPrice } },
@@ -283,6 +292,17 @@ const stockInController = {
                 createdBy: req.user?._id,
                 remarks: remarks || "Stock In"
             });
+
+            // Synchronize selling price with central product & record history if price changed
+            if (parsedSelling != null && parsedSelling > 0) {
+                await recordSellingPriceChangeIfModified({
+                    productId,
+                    newSellingPrice: parsedSelling,
+                    source: "Stock In",
+                    expiryDate: parsedExpiry,
+                    userObj: req.user
+                });
+            }
 
             return res.status(200).json({ msg: "success", result: item });
         } catch (err) {
@@ -432,6 +452,17 @@ const stockInController = {
                         remarks: remarks || "Stock In added via bulk update",
                         session
                     });
+
+                    if (sellingPrice != null && Number(sellingPrice) > 0) {
+                        await recordSellingPriceChangeIfModified({
+                            productId,
+                            newSellingPrice: Number(sellingPrice),
+                            source: "Stock In",
+                            expiryDate: expiry ? new Date(expiry) : null,
+                            userObj: req.user,
+                            session
+                        });
+                    }
                 } else {
                     const item = await StockInItem.findById(_id).session(session);
                     if (!item) continue;
@@ -541,6 +572,16 @@ const stockInController = {
                 reqUser: req.user,
                 session: null
             });
+
+            if (sellingPrice !== undefined && Number(sellingPrice) > 0) {
+                await recordSellingPriceChangeIfModified({
+                    productId: item.productId,
+                    newSellingPrice: Number(sellingPrice),
+                    source: "Stock In",
+                    expiryDate: expiry ? new Date(expiry) : item.expiry,
+                    userObj: req.user
+                });
+            }
 
             return res.status(200).json({ msg: "success", result: item });
         } catch (err) {

@@ -8,6 +8,7 @@ const sellingPriceHistorySchema = new mongoose.Schema(
     expiryDate: { type: Date, default: null },
     oldSellingPrice: { type: Number, required: true },
     newSellingPrice: { type: Number, required: true },
+    source: { type: String, default: "Selling Price Update" },
     updatedBy: { type: mongoose.Types.ObjectId, ref: "User" },
     updatedByName: { type: String, default: "Admin" },
     updatedByRole: { type: String, default: "admin" }
