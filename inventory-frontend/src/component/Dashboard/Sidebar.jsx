@@ -102,6 +102,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
       )
     },
     {
+      title: 'Selling Price Update',
+      path: '/dashboard/selling-price-update',
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h10M7 12h10M7 17h10M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
+        </svg>
+      )
+    },
+    {
       title: 'Stock Details',
       path: '/dashboard/stock-details',
       icon: (

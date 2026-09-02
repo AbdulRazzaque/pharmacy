@@ -12,6 +12,7 @@ import Stockout from "./component/stockout/Stockout";
 
 import Stockin from "./component/stockin/Stockin";
 import StockList from "./component/stock/StockList";
+import SellingPriceUpdate from "./component/stock/SellingPriceUpdate";
 import Stockinprint from "./component/stockin/Stockinprint";
 import Stockoutprint from "./component/stockout/Stockoutprint";
 import Transactionlist from "./component/stock/Transactionlist";
@@ -52,6 +53,7 @@ function App() {
           <Route path="stockin" element={<Stockin />} />
           <Route path="stockout" element={<Stockout />} />
           <Route path="StockList" element={<StockList />} />
+          <Route path="selling-price-update" element={<SellingPriceUpdate />} />
           <Route path="stock-details" element={<StockDetails />} />
           <Route path="stock-adjustment" element={<StockAdjustment />} />
           <Route path="reports" element={<Reports />} />
@@ -73,6 +75,7 @@ function App() {
         <Route path="/Addsuppliers" element={<Addsuppliers />} />
         <Route path="/Addloactaion" element={<Locations />} />
         <Route path="/StockList" element={<StockList />} />
+        <Route path="/selling-price-update" element={<SellingPriceUpdate />} />
         <Route path="/stockin" element={<Stockin />} />
         <Route path="/stockout" element={<Stockout />} />
         <Route path="/stockinprint" element={<Stockinprint />} />

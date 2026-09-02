@@ -7,6 +7,7 @@ const productScheme = new mongoose.Schema({
     companyName: { type: String, default: "", required: true },
     type: { type: String, default: "", required: true },
     unit: { type: String, default: "", required: true },
+    sellingPrice: { type: Number, default: 0 },
     requiresExpiry: { type: Boolean, default: true },
     createdBy: { type: mongoose.Types.ObjectId, ref: "User" },
     createdByRole: { type: String, enum: ['admin', 'user'], default: 'user' },

@@ -163,7 +163,7 @@ const Stockout = () => {
                     unit: stock.product?.unit || '',
                     quantity: expiryItem.quantity || 0,
                     purchasingPrice: expiryItem.purchasingPrice ?? 0,
-                    sellingPrice: expiryItem.sellingPrice ?? 0,
+                    sellingPrice: expiryItem.sellingPrice || stock.sellingPrice || stock.product?.sellingPrice || 0,
                     productId: stock.product?._id || stock.product,
                     expiry: expiryItem.expiry,
                     expiryArray: stock.expiryArray || []

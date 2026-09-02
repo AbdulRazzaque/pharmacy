@@ -12,7 +12,7 @@ class stockController {
     async getAllStocks(req, res) {
         try {
             const products = await Product.find({ isDeleted: { $ne: true } })
-                .select("name companyName type unit slug requiresExpiry barcode sku")
+                .select("name companyName type unit slug requiresExpiry barcode sku sellingPrice")
                 .sort({ name: 1 })
                 .lean();
 
@@ -25,14 +25,20 @@ class stockController {
                     expiry: b.expiry,
                     quantity: b.quantity || 0,
                     purchasingPrice: b.purchasingPrice || 0,
-                    sellingPrice: b.sellingPrice || 0,
+                    sellingPrice: b.sellingPrice || p.sellingPrice || 0,
                     batchNumber: b.batchNumber || ""
                 }));
 
+                const effectiveSellingPrice = p.sellingPrice || (balances.find(b => b.sellingPrice > 0)?.sellingPrice) || 0;
+
                 return {
                     _id: p._id,
-                    product: p,
+                    product: {
+                        ...p,
+                        sellingPrice: effectiveSellingPrice
+                    },
                     name: p.name,
+                    sellingPrice: effectiveSellingPrice,
                     totalQuantity,
                     expiryArray
                 };

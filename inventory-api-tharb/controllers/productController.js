@@ -1,5 +1,7 @@
 const mongoose = require('mongoose')
 const Product = require("../models/ProductModule")
+const StockBalance = require("../models/StockBalanceModule")
+const SellingPriceHistory = require("../models/SellingPriceHistoryModule")
 const bcrypt = require('bcrypt');
 const jwt = require("jsonwebtoken")
 const _ = require("lodash")
@@ -647,7 +649,246 @@ class ProductController {
         }
     }
 
+    // Update Selling Price for a product
+    async updateSellingPrice(req, res) {
+        try {
+            const { productId, newSellingPrice } = req.body;
+            const id = req.body.id || productId;
 
+            if (!id) {
+                return res.status(400).send({ msg: "error", error: "Product ID is required" });
+            }
+
+            const priceNum = parseFloat(newSellingPrice);
+            if (newSellingPrice === undefined || newSellingPrice === null || newSellingPrice === "" || isNaN(priceNum)) {
+                return res.status(400).send({ msg: "error", error: "Invalid selling price" });
+            }
+
+            if (priceNum < 0) {
+                return res.status(400).send({ msg: "error", error: "Selling price cannot be negative" });
+            }
+
+            const product = await Product.findById(id);
+            if (!product) {
+                return res.status(404).send({ msg: "error", error: "Product not found" });
+            }
+
+            // Determine current/old selling price
+            let oldPrice = product.sellingPrice ?? 0;
+            if (oldPrice === 0) {
+                const firstStock = await StockBalance.findOne({ productId: product._id, sellingPrice: { $gt: 0 } });
+                if (firstStock) {
+                    oldPrice = firstStock.sellingPrice || 0;
+                }
+            }
+
+            const roundedOld = Math.round(oldPrice * 100) / 100;
+            const roundedNew = Math.round(priceNum * 100) / 100;
+
+            if (roundedOld === roundedNew && product.sellingPrice === roundedNew) {
+                return res.status(200).send({
+                    msg: "unchanged",
+                    message: "Price is unchanged. No history entry created.",
+                    result: product
+                });
+            }
+
+            // Update Product model
+            product.sellingPrice = roundedNew;
+            product.updatedBy = req.user?._id || req.userDetails?._id;
+            product.updatedByRole = req.user?.role || req.userDetails?.role || 'admin';
+            await product.save();
+
+            // Update all StockBalance documents for this product
+            await StockBalance.updateMany(
+                { productId: product._id },
+                { $set: { sellingPrice: roundedNew } }
+            );
+
+            // Create SellingPriceHistory record
+            const userObj = req.user || req.userDetails || {};
+            const userName = userObj.userName || "Admin";
+
+            const historyRecord = await SellingPriceHistory.create({
+                productId: product._id,
+                productName: product.name,
+                companyName: product.companyName || "",
+                oldSellingPrice: roundedOld,
+                newSellingPrice: roundedNew,
+                updatedBy: userObj._id || null,
+                updatedByName: userName,
+                updatedByRole: userObj.role || "admin"
+            });
+
+            return res.status(200).send({
+                msg: "success",
+                message: "Selling price updated successfully",
+                result: product,
+                history: historyRecord
+            });
+
+        } catch (error) {
+            console.error("updateSellingPrice error:", error);
+            return res.status(500).send({ msg: "error", error: error.message });
+        }
+    }
+
+    // Get selling price history audit trail for a product
+    async getSellingPriceHistory(req, res) {
+        try {
+            const productId = req.params.productId || req.params.id || req.query.productId;
+            if (!productId) {
+                return res.status(400).send({ msg: "error", error: "Product ID required" });
+            }
+
+            const history = await SellingPriceHistory.find({ productId })
+                .populate('updatedBy', 'userName role department')
+                .sort({ createdAt: -1 })
+                .lean();
+
+            return res.status(200).send({
+                msg: "success",
+                result: history
+            });
+        } catch (error) {
+            console.error("getSellingPriceHistory error:", error);
+            return res.status(500).send({ msg: "error", error: error.message });
+        }
+    }
+
+    // Get ALL selling price history audit records with optional filters
+    async getAllSellingPriceHistory(req, res) {
+        try {
+            const { fromDate, toDate, search, companyName, updatedBy } = req.query;
+            const query = {};
+
+            if (fromDate || toDate) {
+                query.createdAt = {};
+                if (fromDate) {
+                    const start = new Date(fromDate);
+                    start.setHours(0, 0, 0, 0);
+                    query.createdAt.$gte = start;
+                }
+                if (toDate) {
+                    const end = new Date(toDate);
+                    end.setHours(23, 59, 59, 999);
+                    query.createdAt.$lte = end;
+                }
+            }
+
+            if (companyName) {
+                query.companyName = { $regex: companyName, $options: 'i' };
+            }
+
+            if (updatedBy) {
+                query.updatedByName = { $regex: updatedBy, $options: 'i' };
+            }
+
+            let history = await SellingPriceHistory.find(query)
+                .populate('updatedBy', 'userName role department')
+                .sort({ createdAt: -1 })
+                .lean();
+
+            if (search && search.trim()) {
+                const s = search.trim().toLowerCase();
+                history = history.filter(item =>
+                    (item.productName || '').toLowerCase().includes(s) ||
+                    (item.companyName || '').toLowerCase().includes(s) ||
+                    (item.updatedByName || '').toLowerCase().includes(s)
+                );
+            }
+
+            return res.status(200).send({
+                msg: "success",
+                result: history
+            });
+        } catch (error) {
+            console.error("getAllSellingPriceHistory error:", error);
+            return res.status(500).send({ msg: "error", error: error.message });
+        }
+    }
+
+    // Bulk Update Selling Prices
+    async bulkUpdateSellingPrices(req, res) {
+        try {
+            const { updates } = req.body; // Array of { productId, newSellingPrice }
+            if (!Array.isArray(updates) || updates.length === 0) {
+                return res.status(400).send({ msg: "error", error: "Updates array is required" });
+            }
+
+            const userObj = req.user || req.userDetails || {};
+            const userName = userObj.userName || "Admin";
+            const userId = userObj._id || null;
+            const userRole = userObj.role || "admin";
+
+            const results = [];
+            const historyRecords = [];
+            let skippedCount = 0;
+
+            for (const item of updates) {
+                const { productId, newSellingPrice } = item;
+                if (!productId) continue;
+
+                const priceNum = parseFloat(newSellingPrice);
+                if (isNaN(priceNum) || priceNum < 0) continue;
+
+                const product = await Product.findById(productId);
+                if (!product) continue;
+
+                let oldPrice = product.sellingPrice ?? 0;
+                if (oldPrice === 0) {
+                    const firstStock = await StockBalance.findOne({ productId: product._id, sellingPrice: { $gt: 0 } });
+                    if (firstStock) {
+                        oldPrice = firstStock.sellingPrice || 0;
+                    }
+                }
+
+                const roundedOld = Math.round(oldPrice * 100) / 100;
+                const roundedNew = Math.round(priceNum * 100) / 100;
+
+                if (roundedOld === roundedNew && product.sellingPrice === roundedNew) {
+                    skippedCount++;
+                    continue;
+                }
+
+                product.sellingPrice = roundedNew;
+                product.updatedBy = userId;
+                product.updatedByRole = userRole;
+                await product.save();
+
+                await StockBalance.updateMany(
+                    { productId: product._id },
+                    { $set: { sellingPrice: roundedNew } }
+                );
+
+                const historyRecord = await SellingPriceHistory.create({
+                    productId: product._id,
+                    productName: product.name,
+                    companyName: product.companyName || "",
+                    oldSellingPrice: roundedOld,
+                    newSellingPrice: roundedNew,
+                    updatedBy: userId,
+                    updatedByName: userName,
+                    updatedByRole: userRole
+                });
+
+                results.push({ productId: product._id, name: product.name, oldPrice: roundedOld, newPrice: roundedNew });
+                historyRecords.push(historyRecord);
+            }
+
+            return res.status(200).send({
+                msg: "success",
+                message: `Updated ${results.length} product price(s). ${skippedCount} unchanged.`,
+                updatedCount: results.length,
+                skippedCount,
+                results,
+                historyRecords
+            });
+        } catch (error) {
+            console.error("bulkUpdateSellingPrices error:", error);
+            return res.status(500).send({ msg: "error", error: error.message });
+        }
+    }
 
 }
 
