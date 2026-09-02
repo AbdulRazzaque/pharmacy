@@ -131,6 +131,26 @@ const SellingPriceUpdate = () => {
       });
   };
 
+  const productMap = useMemo(() => {
+    const map = {};
+    data.forEach(p => {
+      if (p.productId) {
+        map[p.productId] = p;
+      }
+    });
+    return map;
+  }, [data]);
+
+  const getHistoryExpiry = (item) => {
+    if (item.expiryDate) return item.expiryDate;
+    if (item.expiry) return item.expiry;
+    const prodId = typeof item.productId === 'object' ? item.productId?._id : item.productId;
+    if (prodId && productMap[prodId]?.expiry) {
+      return productMap[prodId].expiry;
+    }
+    return null;
+  };
+
   // ─────────────────────────────────────────────────────────────────────────────
   // BULK EDIT COMPUTATIONS & HANDLERS
   // ─────────────────────────────────────────────────────────────────────────────
@@ -306,6 +326,8 @@ const SellingPriceUpdate = () => {
 
     const exportRows = filteredHistory.map(item => {
       const created = moment(item.createdAt);
+      const expiryRaw = getHistoryExpiry(item);
+      const expiryFormatted = expiryRaw ? moment(expiryRaw).format('DD/MM/YYYY') : '-';
       const oldVal = Number(item.oldSellingPrice || 0);
       const newVal = Number(item.newSellingPrice || 0);
       const diffVal = newVal - oldVal;
@@ -313,7 +335,7 @@ const SellingPriceUpdate = () => {
 
       return {
         'Date': created.format('DD-MM-YYYY'),
-        'Time': created.format('hh:mm A'),
+        'Expiry Date': expiryFormatted,
         'Product Name': item.productName || item.productId?.name || '-',
         'Company Name': item.companyName || item.productId?.companyName || '-',
         'Old Selling Price': oldVal.toFixed(2),
@@ -328,7 +350,7 @@ const SellingPriceUpdate = () => {
     // Custom column widths
     worksheet['!cols'] = [
       { wch: 14 }, // Date
-      { wch: 12 }, // Time
+      { wch: 14 }, // Expiry Date
       { wch: 32 }, // Product Name
       { wch: 25 }, // Company Name
       { wch: 18 }, // Old Selling Price
@@ -933,7 +955,7 @@ const SellingPriceUpdate = () => {
                     <TableHeader className="bg-slate-100/90 border-b border-slate-200">
                       <TableRow>
                         <TableHead className="font-bold text-slate-800 py-3.5 pl-6 min-w-[120px]">Date</TableHead>
-                        <TableHead className="font-bold text-slate-800 py-3.5 min-w-[100px]">Time</TableHead>
+                        <TableHead className="font-bold text-slate-800 py-3.5 min-w-[130px]">Expiry Date</TableHead>
                         <TableHead className="font-bold text-slate-800 py-3.5 min-w-[220px]">Product Name</TableHead>
                         <TableHead className="font-bold text-slate-800 py-3.5 min-w-[180px]">Company Name</TableHead>
                         <TableHead className="font-bold text-slate-800 py-3.5 text-right min-w-[140px]">Old Price</TableHead>
@@ -946,7 +968,8 @@ const SellingPriceUpdate = () => {
                       {filteredHistory.map((item, idx) => {
                         const created = moment(item.createdAt);
                         const dateFormatted = created.format('DD-MM-YYYY');
-                        const timeFormatted = created.format('hh:mm A');
+                        const expiryRaw = getHistoryExpiry(item);
+                        const expiryFormatted = expiryRaw ? moment(expiryRaw).format('DD/MM/YYYY') : '-';
 
                         const oldVal = Number(item.oldSellingPrice || 0);
                         const newVal = Number(item.newSellingPrice || 0);
@@ -961,9 +984,9 @@ const SellingPriceUpdate = () => {
                               {dateFormatted}
                             </TableCell>
 
-                            {/* Time */}
-                            <TableCell className="text-slate-600 font-medium text-xs">
-                              {timeFormatted}
+                            {/* Expiry Date */}
+                            <TableCell className="text-slate-700 font-semibold text-xs">
+                              {expiryFormatted}
                             </TableCell>
 
                             {/* Product Name */}
@@ -1076,7 +1099,8 @@ const SellingPriceUpdate = () => {
                 <Table>
                   <TableHeader className="bg-slate-50 sticky top-0 border-b">
                     <TableRow>
-                      <TableHead className="font-bold text-slate-700">Date &amp; Time</TableHead>
+                      <TableHead className="font-bold text-slate-700">Date</TableHead>
+                      <TableHead className="font-bold text-slate-700">Expiry Date</TableHead>
                       <TableHead className="font-bold text-slate-700 text-right">Old Price</TableHead>
                       <TableHead className="font-bold text-slate-700 text-right">New Price</TableHead>
                       <TableHead className="font-bold text-slate-700 text-center">Difference</TableHead>
@@ -1086,6 +1110,8 @@ const SellingPriceUpdate = () => {
                   <TableBody>
                     {singleProductHistory.map((item, idx) => {
                       const created = moment(item.createdAt);
+                      const expiryRaw = getHistoryExpiry(item);
+                      const expiryFormatted = expiryRaw ? moment(expiryRaw).format('DD/MM/YYYY') : '-';
                       const oldVal = Number(item.oldSellingPrice || 0);
                       const newVal = Number(item.newSellingPrice || 0);
                       const diffVal = Math.round((newVal - oldVal) * 100) / 100;
@@ -1093,9 +1119,12 @@ const SellingPriceUpdate = () => {
 
                       return (
                         <TableRow key={item._id || idx} className="hover:bg-purple-50/30">
-                          <TableCell className="text-xs">
-                            <div className="font-bold text-slate-900">{created.format('DD-MM-YYYY')}</div>
-                            <div className="text-slate-500">{created.format('hh:mm A')}</div>
+                          <TableCell className="text-xs font-bold text-slate-900">
+                            {created.format('DD-MM-YYYY')}
+                          </TableCell>
+
+                          <TableCell className="text-xs font-semibold text-slate-700">
+                            {expiryFormatted}
                           </TableCell>
 
                           <TableCell className="text-right font-medium text-slate-500 text-sm">

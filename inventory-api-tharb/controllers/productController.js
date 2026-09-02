@@ -709,10 +709,19 @@ class ProductController {
             const userObj = req.user || req.userDetails || {};
             const userName = userObj.userName || "Admin";
 
+            // Find earliest expiry date for history tracking
+            let expDate = null;
+            const stockWithExp = await StockBalance.findOne({ productId: product._id });
+            if (stockWithExp && stockWithExp.expiryArray && stockWithExp.expiryArray.length > 0) {
+                const validExps = stockWithExp.expiryArray.filter(e => e.expiry).map(e => new Date(e.expiry)).sort((a, b) => a - b);
+                if (validExps.length > 0) expDate = validExps[0];
+            }
+
             const historyRecord = await SellingPriceHistory.create({
                 productId: product._id,
                 productName: product.name,
                 companyName: product.companyName || "",
+                expiryDate: expDate,
                 oldSellingPrice: roundedOld,
                 newSellingPrice: roundedNew,
                 updatedBy: userObj._id || null,
@@ -861,10 +870,18 @@ class ProductController {
                     { $set: { sellingPrice: roundedNew } }
                 );
 
+                let expDate = null;
+                const stockWithExp = await StockBalance.findOne({ productId: product._id });
+                if (stockWithExp && stockWithExp.expiryArray && stockWithExp.expiryArray.length > 0) {
+                    const validExps = stockWithExp.expiryArray.filter(e => e.expiry).map(e => new Date(e.expiry)).sort((a, b) => a - b);
+                    if (validExps.length > 0) expDate = validExps[0];
+                }
+
                 const historyRecord = await SellingPriceHistory.create({
                     productId: product._id,
                     productName: product.name,
                     companyName: product.companyName || "",
+                    expiryDate: expDate,
                     oldSellingPrice: roundedOld,
                     newSellingPrice: roundedNew,
                     updatedBy: userId,
