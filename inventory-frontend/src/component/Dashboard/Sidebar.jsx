@@ -139,7 +139,12 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     }
     ];
     if (isUserRole()) {
-      return items.filter((item) => item.path !== '/dashboard/stock-adjustment' && item.path !== '/dashboard/users');
+      return items.filter(
+        (item) =>
+          item.path !== '/dashboard/stock-adjustment' &&
+          item.path !== '/dashboard/users' &&
+          item.path !== '/dashboard/selling-price-update'
+      );
     }
     return items;
   }, []);
