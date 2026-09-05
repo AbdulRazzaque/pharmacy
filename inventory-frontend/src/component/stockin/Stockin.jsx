@@ -105,7 +105,7 @@ const Stockin = () => {
     })
       .then((res) => {
         if (res.data.result && res.data.result.length > 0) {
-          setDocNo(res.data.result[0].docNo + 1);
+          setDocNo(res.data.result[0].docNo);
         }
       })
       .catch((err) => console.error('Error fetching doc number:', err));

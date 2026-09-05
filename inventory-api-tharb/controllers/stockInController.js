@@ -11,13 +11,42 @@ const { recordSellingPriceChangeIfModified } = require("../utils/sellingPriceHis
 
 const isAdminRole = (role) => (role || '').toLowerCase() === 'admin';
 
-const getNextStockInDocNo = async (session = null) => {
+const getPreviewStockInDocNo = async (session = null) => {
+    let query = StockInHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 }).select('docNo');
+    if (session) query = query.session(session);
+    const maxHeader = await query.lean();
+    const maxHeaderDocNo = (maxHeader && !isNaN(Number(maxHeader.docNo))) ? Number(maxHeader.docNo) : 0;
+
+    let seqQuery = Sequence.findById("stockInDocument");
+    if (session) seqQuery = seqQuery.session(session);
+    const seqDoc = await seqQuery.lean();
+    const currentSeq = (seqDoc && !isNaN(Number(seqDoc.seq))) ? Number(seqDoc.seq) : 0;
+
+    return Math.max(maxHeaderDocNo, currentSeq) + 1;
+};
+
+const reserveNextStockInDocNo = async (session = null) => {
+    let maxHeaderQuery = StockInHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 }).select('docNo');
+    if (session) maxHeaderQuery = maxHeaderQuery.session(session);
+    const maxHeader = await maxHeaderQuery.lean();
+    const maxHeaderDocNo = (maxHeader && !isNaN(Number(maxHeader.docNo))) ? Number(maxHeader.docNo) : 0;
+
     const seqDoc = await Sequence.findOneAndUpdate(
         { _id: "stockInDocument" },
         { $inc: { seq: 1 } },
         { new: true, upsert: true, setDefaultsOnInsert: true, session }
     );
-    return Number(seqDoc.seq);
+    let nextDocNo = Number(seqDoc.seq);
+
+    if (maxHeaderDocNo >= nextDocNo) {
+        nextDocNo = maxHeaderDocNo + 1;
+        await Sequence.findOneAndUpdate(
+            { _id: "stockInDocument" },
+            { $set: { seq: nextDocNo } },
+            { upsert: true, session }
+        );
+    }
+    return nextDocNo;
 };
 
 async function resolveSellingPriceForStockIn(productId, adminSellingPrice) {
@@ -245,22 +274,50 @@ const stockInController = {
             purchasingPrice = parsedPurchasing;
             let parsedDocNo = Number(docNo);
             if (!parsedDocNo) {
-                parsedDocNo = await getNextStockInDocNo();
+                parsedDocNo = await reserveNextStockInDocNo();
             }
 
             const parsedExpiry = new Date(expiry);
 
             let header = await StockInHeader.findOne({ docNo: parsedDocNo });
             if (!header) {
-                header = await StockInHeader.create({
-                    docNo: parsedDocNo,
-                    supplierDocNo,
-                    supplier: supplierId,
-                    date: date ? new Date(date) : new Date(),
-                    remarks: remarks || "",
-                    createdBy: req.user?._id || null,
-                    createdByRole: req.user?.role || "user"
-                });
+                try {
+                    header = await StockInHeader.create({
+                        docNo: parsedDocNo,
+                        supplierDocNo,
+                        supplier: supplierId,
+                        date: date ? new Date(date) : new Date(),
+                        remarks: remarks || "",
+                        createdBy: req.user?._id || null,
+                        createdByRole: req.user?.role || "user"
+                    });
+                    await Sequence.findOneAndUpdate(
+                        { _id: "stockInDocument" },
+                        { $max: { seq: parsedDocNo } },
+                        { upsert: true }
+                    );
+                } catch (createErr) {
+                    if (createErr.code === 11000 || (createErr.message && createErr.message.includes('E11000'))) {
+                        parsedDocNo = await reserveNextStockInDocNo();
+                        header = await StockInHeader.create({
+                            docNo: parsedDocNo,
+                            supplierDocNo,
+                            supplier: supplierId,
+                            date: date ? new Date(date) : new Date(),
+                            remarks: remarks || "",
+                            createdBy: req.user?._id || null,
+                            createdByRole: req.user?.role || "user"
+                        });
+                        await Sequence.findOneAndUpdate(
+                            { _id: "stockInDocument" },
+                            { $max: { seq: parsedDocNo } },
+                            { upsert: true }
+                        );
+                    } else {
+                        throw createErr;
+                    }
+                }
+            } else {
                 await Sequence.findOneAndUpdate(
                     { _id: "stockInDocument" },
                     { $max: { seq: parsedDocNo } },
@@ -317,7 +374,7 @@ const stockInController = {
 
     async getStockInDocNo(req, res) {
         try {
-            const nextDocNo = await getNextStockInDocNo();
+            const nextDocNo = await getPreviewStockInDocNo();
             return res.status(200).json({ msg: "success", result: [{ docNo: nextDocNo }] });
         } catch (err) {
             return res.status(500).json({ msg: "error", error: err.message });
