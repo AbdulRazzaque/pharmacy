@@ -159,8 +159,13 @@ const reportController = {
             const sIds = normalizeObjectIds(supplierId);
             if (sIds) {
                 const matchingHeaders = await StockInHeader.find({ supplier: { $in: sIds } }).lean();
-                const matchingDocNos = matchingHeaders.map(h => Number(h.docNo)).filter(Boolean);
-                filter.docNo = { $in: matchingDocNos };
+                const matchingItems = await StockInItem.find({ supplier: { $in: sIds } }).lean();
+                const headerDocNos = matchingHeaders.map(h => Number(h.docNo)).filter(Boolean);
+                const itemHeaderIds = matchingItems.map(i => i.stockInHeaderId).filter(Boolean);
+                const headersFromItems = await StockInHeader.find({ _id: { $in: itemHeaderIds } }).lean();
+                const itemDocNos = headersFromItems.map(h => Number(h.docNo)).filter(Boolean);
+                const allDocNos = Array.from(new Set([...headerDocNos, ...itemDocNos]));
+                filter.docNo = { $in: allDocNos };
             }
 
             const pIds = normalizeObjectIds(productIds || productId);
@@ -188,11 +193,15 @@ const reportController = {
                 }
             });
 
-            // Fetch StockInItems for fallback via referenceId
+            // Fetch StockInItems with populated supplier for item-level details
             const itemIds = txns.map(t => t.referenceId).filter(Boolean);
-            const stockInItems = await StockInItem.find({ _id: { $in: itemIds } }).lean();
+            const stockInItems = await StockInItem.find({ _id: { $in: itemIds } })
+                .populate("supplier", "name supplierName companyName")
+                .lean();
+            const itemMap = new Map();
             const itemHeaderMap = new Map();
             stockInItems.forEach(item => {
+                itemMap.set(String(item._id), item);
                 if (item.stockInHeaderId) {
                     itemHeaderMap.set(String(item._id), String(item.stockInHeaderId));
                 }
@@ -203,7 +212,17 @@ const reportController = {
                 const price = Number(t.unitCost || t.sellingPrice || 0);
 
                 let suppObj = null;
-                if (t.docNo) {
+                let supplierDocNo = '';
+
+                if (t.referenceId) {
+                    const item = itemMap.get(String(t.referenceId));
+                    if (item) {
+                        if (item.supplier) suppObj = item.supplier;
+                        if (item.supplierDocNo) supplierDocNo = item.supplierDocNo;
+                    }
+                }
+
+                if (!suppObj && t.docNo) {
                     suppObj = supplierMapByDocNo.get(Number(t.docNo));
                 }
                 if (!suppObj && t.referenceId) {
@@ -219,6 +238,7 @@ const reportController = {
                 return {
                     _id: t._id,
                     docNo: t.docNo,
+                    supplierDocNo: supplierDocNo,
                     date: t.date || t.createdAt,
                     createdAt: t.createdAt,
                     productId: t.productId,

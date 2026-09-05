@@ -237,133 +237,227 @@ const updateStockInItemHelper = async ({
 const stockInController = {
 
     async stockIn(req, res) {
-        try {
-            let { productName, productId, supplierId, supplierDocNo, quantity, purchasingPrice, sellingPrice, expiry, docNo, unit, date, remarks, isNewDocument } = req.body;
+        const executeStockInTx = async (session) => {
+            const { items, entries, docNo, date, remarks } = req.body || {};
+
+            let rawEntries = [];
+            if (Array.isArray(items) && items.length > 0) {
+                rawEntries = items;
+            } else if (Array.isArray(entries) && entries.length > 0) {
+                rawEntries = entries;
+            } else {
+                rawEntries = [req.body];
+            }
+
+            if (rawEntries.length === 0) {
+                throw new Error("No stock in entries provided");
+            }
 
             const userIsAdmin = isAdminRole(req.user?.role);
-            let parsedPurchasing = 0;
-            if (purchasingPrice != null && purchasingPrice !== '') {
-                parsedPurchasing = parseFloat(purchasingPrice);
-                if (Number.isNaN(parsedPurchasing)) {
-                    return res.status(400).send({ msg: "invalid purchasing price" });
+
+            const processedEntries = [];
+            for (let i = 0; i < rawEntries.length; i++) {
+                const entry = rawEntries[i];
+                let { productName, productId, supplierId, supplier, supplierDocNo, quantity, purchasingPrice, sellingPrice, expiry, unit, remarks: entryRemarks } = entry;
+
+                const actualSupplierId = supplierId || supplier;
+                if (!productName || !productId || !actualSupplierId || !supplierDocNo || !quantity || !expiry || !unit) {
+                    throw new Error(`Fill all required fields for entry #${i + 1}`);
                 }
-            } else if (userIsAdmin) {
-                return res.status(400).send({ msg: "purchasing price is required for admin" });
-            }
 
-            if (!productName || !productId || !supplierId || !supplierDocNo || !quantity || !expiry || !unit) {
-                return res.status(400).send({ msg: "fill all required fields" });
-            }
-
-            let parsedSelling = null;
-            if (userIsAdmin && sellingPrice != null && sellingPrice !== '') {
-                parsedSelling = parseFloat(sellingPrice);
-                if (Number.isNaN(parsedSelling)) {
-                    return res.status(400).send({ msg: "invalid selling price" });
-                }
-            } else if (!userIsAdmin && sellingPrice != null && sellingPrice !== '') {
-                return res.status(403).send({ msg: "only admin can set selling price" });
-            }
-
-            parsedSelling = await resolveSellingPriceForStockIn(
-                productId,
-                userIsAdmin ? parsedSelling : null
-            );
-
-            quantity = parseInt(quantity, 10);
-            purchasingPrice = parsedPurchasing;
-            let parsedDocNo = Number(docNo);
-            if (!parsedDocNo) {
-                parsedDocNo = await reserveNextStockInDocNo();
-            }
-
-            const parsedExpiry = new Date(expiry);
-
-            let header = await StockInHeader.findOne({ docNo: parsedDocNo });
-            if (!header) {
-                try {
-                    header = await StockInHeader.create({
-                        docNo: parsedDocNo,
-                        supplierDocNo,
-                        supplier: supplierId,
-                        date: date ? new Date(date) : new Date(),
-                        remarks: remarks || "",
-                        createdBy: req.user?._id || null,
-                        createdByRole: req.user?.role || "user"
-                    });
-                    await Sequence.findOneAndUpdate(
-                        { _id: "stockInDocument" },
-                        { $max: { seq: parsedDocNo } },
-                        { upsert: true }
-                    );
-                } catch (createErr) {
-                    if (createErr.code === 11000 || (createErr.message && createErr.message.includes('E11000'))) {
-                        parsedDocNo = await reserveNextStockInDocNo();
-                        header = await StockInHeader.create({
-                            docNo: parsedDocNo,
-                            supplierDocNo,
-                            supplier: supplierId,
-                            date: date ? new Date(date) : new Date(),
-                            remarks: remarks || "",
-                            createdBy: req.user?._id || null,
-                            createdByRole: req.user?.role || "user"
-                        });
-                        await Sequence.findOneAndUpdate(
-                            { _id: "stockInDocument" },
-                            { $max: { seq: parsedDocNo } },
-                            { upsert: true }
-                        );
-                    } else {
-                        throw createErr;
+                let parsedPurchasing = 0;
+                if (purchasingPrice != null && purchasingPrice !== '') {
+                    parsedPurchasing = parseFloat(purchasingPrice);
+                    if (Number.isNaN(parsedPurchasing)) {
+                        throw new Error(`Invalid purchasing price for entry #${i + 1}`);
                     }
+                } else if (userIsAdmin) {
+                    throw new Error(`Purchasing price is required for admin in entry #${i + 1}`);
                 }
-            } else {
-                await Sequence.findOneAndUpdate(
-                    { _id: "stockInDocument" },
-                    { $max: { seq: parsedDocNo } },
-                    { upsert: true }
-                );
-            }
 
-            const item = await StockInItem.create({
-                stockInHeaderId: header._id,
-                productId,
-                quantity,
-                purchasingPrice,
-                sellingPrice: parsedSelling,
-                expiry: parsedExpiry,
-                unit,
-                remarks: remarks || ""
-            });
+                let parsedSelling = null;
+                if (userIsAdmin && sellingPrice != null && sellingPrice !== '') {
+                    parsedSelling = parseFloat(sellingPrice);
+                    if (Number.isNaN(parsedSelling)) {
+                        throw new Error(`Invalid selling price for entry #${i + 1}`);
+                    }
+                } else if (!userIsAdmin && sellingPrice != null && sellingPrice !== '') {
+                    throw new Error(`Only admin can set selling price in entry #${i + 1}`);
+                }
 
-            await updateStockBalanceAndTransaction({
-                productId,
-                quantityDelta: quantity,
-                unitCost: purchasingPrice,
-                sellingPrice: parsedSelling,
-                expiry: parsedExpiry,
-                transactionType: "STOCK_IN",
-                referenceType: "StockIn",
-                referenceId: item._id,
-                docNo: parsedDocNo,
-                createdBy: req.user?._id,
-                remarks: remarks || "Stock In"
-            });
-
-            // Synchronize selling price with central product & record history if price changed
-            if (parsedSelling != null && parsedSelling > 0) {
-                await recordSellingPriceChangeIfModified({
+                parsedSelling = await resolveSellingPriceForStockIn(
                     productId,
-                    newSellingPrice: parsedSelling,
-                    source: "Stock In",
-                    expiryDate: parsedExpiry,
-                    userObj: req.user
+                    userIsAdmin ? parsedSelling : null
+                );
+
+                const parsedQty = parseInt(quantity, 10);
+                if (Number.isNaN(parsedQty) || parsedQty <= 0) {
+                    throw new Error(`Invalid quantity for entry #${i + 1}`);
+                }
+
+                processedEntries.push({
+                    productName,
+                    productId,
+                    supplierId: actualSupplierId,
+                    supplierDocNo: String(supplierDocNo).trim(),
+                    quantity: parsedQty,
+                    purchasingPrice: parsedPurchasing,
+                    sellingPrice: parsedSelling,
+                    expiry: new Date(expiry),
+                    unit,
+                    remarks: entryRemarks || remarks || ""
                 });
             }
 
-            return res.status(200).json({ msg: "success", result: item });
+            let requestedDocNo = Number(docNo || rawEntries[0]?.docNo);
+            let header = null;
+            let parsedDocNo = null;
+
+            if (requestedDocNo && !Number.isNaN(requestedDocNo)) {
+                let findHeaderQuery = StockInHeader.findOne({ docNo: requestedDocNo });
+                if (session) findHeaderQuery = findHeaderQuery.session(session);
+                header = await findHeaderQuery;
+            }
+
+            if (!header) {
+                parsedDocNo = (requestedDocNo && !Number.isNaN(requestedDocNo)) ? requestedDocNo : await reserveNextStockInDocNo(session);
+
+                let checkQuery = StockInHeader.findOne({ docNo: parsedDocNo });
+                if (session) checkQuery = checkQuery.session(session);
+                const existing = await checkQuery;
+
+                if (existing) {
+                    parsedDocNo = await reserveNextStockInDocNo(session);
+                }
+
+                const firstEntry = processedEntries[0];
+                const headerData = {
+                    docNo: parsedDocNo,
+                    supplierDocNo: firstEntry.supplierDocNo || "",
+                    supplier: firstEntry.supplierId || null,
+                    date: date ? new Date(date) : new Date(),
+                    remarks: remarks || firstEntry.remarks || "",
+                    createdBy: req.user?._id || null,
+                    createdByRole: req.user?.role || "user"
+                };
+
+                if (session) {
+                    const createdArr = await StockInHeader.create([headerData], { session });
+                    header = createdArr[0];
+                } else {
+                    header = await StockInHeader.create(headerData);
+                }
+
+                await Sequence.findOneAndUpdate(
+                    { _id: "stockInDocument" },
+                    { $max: { seq: parsedDocNo } },
+                    { upsert: true, session: session || undefined }
+                );
+            } else {
+                parsedDocNo = header.docNo;
+                await Sequence.findOneAndUpdate(
+                    { _id: "stockInDocument" },
+                    { $max: { seq: parsedDocNo } },
+                    { upsert: true, session: session || undefined }
+                );
+            }
+
+            const createdItems = [];
+            for (const entry of processedEntries) {
+                const itemData = {
+                    stockInHeaderId: header._id,
+                    productId: entry.productId,
+                    supplier: entry.supplierId,
+                    supplierDocNo: entry.supplierDocNo,
+                    quantity: entry.quantity,
+                    purchasingPrice: entry.purchasingPrice,
+                    sellingPrice: entry.sellingPrice,
+                    expiry: entry.expiry,
+                    unit: entry.unit,
+                    remarks: entry.remarks
+                };
+
+                let item;
+                if (session) {
+                    const itemArr = await StockInItem.create([itemData], { session });
+                    item = itemArr[0];
+                } else {
+                    item = await StockInItem.create(itemData);
+                }
+
+                await updateStockBalanceAndTransaction({
+                    productId: entry.productId,
+                    quantityDelta: entry.quantity,
+                    unitCost: entry.purchasingPrice,
+                    sellingPrice: entry.sellingPrice,
+                    expiry: entry.expiry,
+                    transactionType: "STOCK_IN",
+                    referenceType: "StockIn",
+                    referenceId: item._id,
+                    docNo: parsedDocNo,
+                    createdBy: req.user?._id,
+                    remarks: entry.remarks || "Stock In",
+                    session
+                });
+
+                if (entry.sellingPrice != null && entry.sellingPrice > 0) {
+                    await recordSellingPriceChangeIfModified({
+                        productId: entry.productId,
+                        newSellingPrice: entry.sellingPrice,
+                        source: "Stock In",
+                        expiryDate: entry.expiry,
+                        userObj: req.user,
+                        session
+                    });
+                }
+
+                createdItems.push(item);
+            }
+
+            return { header, items: createdItems, docNo: parsedDocNo };
+        };
+
+        try {
+            const session = await mongoose.startSession();
+            let useTransaction = true;
+            try {
+                session.startTransaction();
+            } catch (e) {
+                useTransaction = false;
+                session.endSession();
+            }
+
+            if (useTransaction) {
+                try {
+                    const result = await executeStockInTx(session);
+                    await session.commitTransaction();
+                    session.endSession();
+                    return res.status(200).json({ msg: "success", result: result.items[0], docNo: result.docNo, header: result.header, items: result.items });
+                } catch (txError) {
+                    await session.abortTransaction();
+                    session.endSession();
+
+                    const errorMsg = txError.message || '';
+                    const isTxUnsupported = errorMsg.includes('replica set') ||
+                        errorMsg.includes('Transaction numbers') ||
+                        errorMsg.includes('does not support') ||
+                        txError.code === 20 ||
+                        txError.codeName === 'IllegalOperation';
+
+                    if (isTxUnsupported) {
+                        console.warn('⚠️ MongoDB transaction unsupported. Retrying without transaction.');
+                        const result = await executeStockInTx(null);
+                        return res.status(200).json({ msg: "success", result: result.items[0], docNo: result.docNo, header: result.header, items: result.items });
+                    } else {
+                        throw txError;
+                    }
+                }
+            } else {
+                const result = await executeStockInTx(null);
+                return res.status(200).json({ msg: "success", result: result.items[0], docNo: result.docNo, header: result.header, items: result.items });
+            }
         } catch (err) {
-            console.error(err);
+            console.error("Stock in transaction error:", err);
             return res.status(500).json({ msg: "error", error: err.message });
         }
     },
@@ -393,7 +487,8 @@ const stockInController = {
             if (!header) return res.status(404).send("Document not found");
 
             const items = await StockInItem.find({ stockInHeaderId: header._id })
-                .populate("productId", "name companyName type unit");
+                .populate("productId", "name companyName type unit")
+                .populate("supplier");
 
             const formatted = [{
                 _id: { docNo: header.docNo },
@@ -401,7 +496,8 @@ const stockInController = {
                     _id: item._id,
                     name: item.productId?.name || "",
                     companyName: item.productId?.companyName || item.companyName || "",
-                    supplier: header.supplier,
+                    supplier: item.supplier || header.supplier,
+                    supplierDocNo: item.supplierDocNo || header.supplierDocNo || "",
                     product: item.productId,
                     quantity: item.quantity,
                     unit: item.unit || item.productId?.unit || "",
@@ -428,14 +524,16 @@ const stockInController = {
                 .lean();
 
             const docs = await Promise.all(headers.map(async (h) => {
-                const items = await StockInItem.find({ stockInHeaderId: h._id }).lean();
+                const items = await StockInItem.find({ stockInHeaderId: h._id })
+                    .populate("supplier")
+                    .lean();
                 const totalQuantity = items.reduce((sum, i) => sum + (i.quantity || 0), 0);
                 const uniqueProducts = new Set(items.map(i => String(i.productId)));
                 return {
                     _id: h._id,
                     docNo: h.docNo,
-                    supplierDocNo: h.supplierDocNo || "",
-                    supplier: h.supplier,
+                    supplierDocNo: h.supplierDocNo || (items[0]?.supplierDocNo || ""),
+                    supplier: h.supplier || (items[0]?.supplier || null),
                     date: h.date || h.createdAt,
                     createdAt: h.createdAt,
                     createdBy: h.createdBy ? { _id: h.createdBy._id, userName: h.createdBy.userName } : null,
@@ -478,13 +576,15 @@ const stockInController = {
             }
 
             for (const update of updates) {
-                const { _id, productId, quantity, purchasingPrice, sellingPrice, expiry, remarks, isDeleted } = update;
+                const { _id, productId, quantity, purchasingPrice, sellingPrice, expiry, remarks, supplier, supplierDocNo, isDeleted } = update;
                 if (!_id || String(_id).startsWith("new_")) {
                     if (isDeleted) continue;
                     const itemArr = await StockInItem.create(
                         [{
                             stockInHeaderId: header._id,
                             productId,
+                            supplier: supplier || header.supplier,
+                            supplierDocNo: supplierDocNo || header.supplierDocNo || "",
                             quantity: Number(quantity || 0),
                             purchasingPrice: Number(purchasingPrice || 0),
                             sellingPrice: Number(sellingPrice || 0),
@@ -523,6 +623,9 @@ const stockInController = {
                 } else {
                     const item = await StockInItem.findById(_id).session(session);
                     if (!item) continue;
+
+                    if (supplier) item.supplier = supplier;
+                    if (supplierDocNo) item.supplierDocNo = supplierDocNo;
 
                     if (isDeleted) {
                         if (item.expiry) {
@@ -610,13 +713,18 @@ const stockInController = {
     async stockInUpdateQuantity(req, res) {
         try {
             const { id } = req.params;
-            const { quantity, purchasingPrice, sellingPrice, expiry, remarks, supplier } = req.body || {};
+            const { quantity, purchasingPrice, sellingPrice, expiry, remarks, supplier, supplierDocNo } = req.body || {};
             const item = await StockInItem.findById(id);
             if (!item) return res.status(404).json({ msg: "not found" });
 
             if (supplier) {
+                item.supplier = supplier;
                 await StockInHeader.findByIdAndUpdate(item.stockInHeaderId, { supplier });
             }
+            if (supplierDocNo) {
+                item.supplierDocNo = supplierDocNo;
+            }
+            await item.save();
 
             await updateStockInItemHelper({
                 item,

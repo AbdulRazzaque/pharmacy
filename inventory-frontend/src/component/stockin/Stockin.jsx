@@ -223,10 +223,12 @@ const Stockin = () => {
 
     setLoading(true);
 
-    const promises = stockItems.map(item =>
-      axios.post(
-        `${process.env.REACT_APP_DEVELOPMENT}/api/stockIn/stockIn`,
-        {
+    axios.post(
+      `${process.env.REACT_APP_DEVELOPMENT}/api/stockIn/stockIn`,
+      {
+        docNo: docNo,
+        date: date,
+        items: stockItems.map(item => ({
           productName: item.productName,
           productId: item.productId,
           supplierId: item.supplierId,
@@ -235,16 +237,12 @@ const Stockin = () => {
           purchasingPrice: item.purchasingPrice,
           sellingPrice: item.sellingPrice,
           expiry: item.expiry,
-          docNo: docNo,
-          date: date,
           unit: item.unit
-        },
-        { headers: { token: accessToken } }
-      )
-    );
-
-    Promise.all(promises)
-      .then(() => {
+        }))
+      },
+      { headers: { token: accessToken } }
+    )
+      .then((res) => {
         showAlert('Stock In saved successfully! 🎉', 'success');
         setStockItems([]);
         setProductQuery('');
@@ -258,7 +256,7 @@ const Stockin = () => {
           expiry: null,
           supplierDocNo: ''
         });
-        setDocNo(docNo + 1);
+        fetchDocNo();
         setLoading(false);
       })
       .catch((err) => {

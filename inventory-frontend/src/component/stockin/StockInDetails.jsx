@@ -343,10 +343,13 @@ const StockInDetails = () => {
     }
 
     setCreating(true);
-    const promises = pendingInItems.map((item) =>
-      axios.post(
-        `${process.env.REACT_APP_DEVELOPMENT}/api/stockIn/stockIn`,
-        {
+
+    axios.post(
+      `${process.env.REACT_APP_DEVELOPMENT}/api/stockIn/stockIn`,
+      {
+        docNo: Number(docNo),
+        date: inDate,
+        items: pendingInItems.map(item => ({
           productName: item.productName,
           productId: item.productId,
           supplierId: item.supplierId,
@@ -355,15 +358,11 @@ const StockInDetails = () => {
           purchasingPrice: item.purchasingPrice,
           sellingPrice: item.sellingPrice,
           expiry: item.expiry,
-          docNo: Number(docNo),
-          date: inDate,
           unit: item.unit
-        },
-        { headers: { token: accessToken } }
-      )
-    );
-
-    Promise.all(promises)
+        }))
+      },
+      { headers: { token: accessToken } }
+    )
       .then(() => {
         showAlert('All Stock In lines saved under this document', 'success');
         setShowCreateModal(false);

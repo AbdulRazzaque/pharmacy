@@ -4,6 +4,8 @@ const stockInItemSchema = new mongoose.Schema(
   {
     stockInHeaderId: { type: mongoose.Types.ObjectId, ref: "StockInHeader", required: true },
     productId: { type: mongoose.Types.ObjectId, ref: "Product", required: true },
+    supplier: { type: mongoose.Types.ObjectId, ref: "Supplier" },
+    supplierDocNo: { type: String, default: "" },
     quantity: { type: Number, required: true },
     purchasingPrice: { type: Number, default: 0 },
     sellingPrice: { type: Number, default: 0 },
@@ -17,6 +19,7 @@ const stockInItemSchema = new mongoose.Schema(
 
 stockInItemSchema.index({ stockInHeaderId: 1 });
 stockInItemSchema.index({ productId: 1 });
+stockInItemSchema.index({ supplier: 1 });
 stockInItemSchema.index({ expiry: 1 });
 
 const StockInItem = mongoose.model("StockInItem", stockInItemSchema);
