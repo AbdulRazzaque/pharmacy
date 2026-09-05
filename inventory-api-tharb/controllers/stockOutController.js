@@ -299,6 +299,9 @@ const stockOutController = {
             const formatted = [{
                 _id: { docNo: header.docNo },
                 docNo: header.docNo,
+                date: header.date || header.createdAt,
+                createdAt: header.createdAt,
+                headerId: header._id,
                 subTotal: Math.round(subTotal * 100) / 100,
                 totalDiscount: Math.round(totalDiscount * 100) / 100,
                 grandTotal: Math.round(grandTotal * 100) / 100,
@@ -327,6 +330,7 @@ const stockOutController = {
                         netTotal: nTotal,
                         prevQuantity: 0,
                         expiry: item.expiry,
+                        date: header.date || item.createdAt,
                         createdAt: item.createdAt,
                         remarks: item.remarks
                     };
@@ -485,12 +489,22 @@ const stockOutController = {
                 updates.find(u => u.locationId || u.location)?.locationId ||
                 updates.find(u => u.locationId || u.location)?.location;
 
+            const inputDate = req.body?.documentDate || req.body?.date;
+            let headerDateChanged = false;
+            if (inputDate) {
+                const parsedDate = new Date(inputDate);
+                if (!isNaN(parsedDate.getTime())) {
+                    header.date = parsedDate;
+                    headerDateChanged = true;
+                }
+            }
+
             if (!header) {
                 const headerArr = await StockOutHeader.create(
                     [{
                         docNo: parsedDocNo,
                         location: docLocation || null,
-                        date: new Date(),
+                        date: inputDate && !isNaN(new Date(inputDate).getTime()) ? new Date(inputDate) : new Date(),
                         createdBy: req.user?._id || null,
                         createdByRole: req.user?.role || "user"
                     }],
@@ -502,9 +516,35 @@ const stockOutController = {
                     { $max: { seq: parsedDocNo } },
                     { upsert: true, session }
                 );
-            } else if (docLocation && String(header.location) !== String(docLocation)) {
-                header.location = docLocation;
-                await header.save(session ? { session } : {});
+            } else {
+                let headerModified = false;
+                if (docLocation && String(header.location) !== String(docLocation)) {
+                    header.location = docLocation;
+                    headerModified = true;
+                }
+                if (headerDateChanged) {
+                    headerModified = true;
+                }
+                if (headerModified) {
+                    await header.save(session ? { session } : {});
+                }
+            }
+
+            if (headerDateChanged && header?.date) {
+                await InventoryTransaction.updateMany(
+                    { docNo: header.docNo },
+                    { $set: { date: header.date } },
+                    session ? { session } : {}
+                );
+                try {
+                    const StockOutPdf = require("../models/StockOutPdfModule");
+                    await StockOutPdf.updateMany(
+                        { docNo: header.docNo },
+                        { $set: { date: header.date } }
+                    );
+                } catch (e) {
+                    console.error("Error updating StockOutPdf date in bulkUpdate:", e);
+                }
             }
 
             const touchedProductIds = new Set();
@@ -860,6 +900,76 @@ const stockOutController = {
 
             return res.status(200).json({ msg: "success", result: "Deleted" });
         } catch (err) {
+            return res.status(500).json({ msg: "error", error: err.message });
+        }
+    },
+
+    async updateDocument(req, res) {
+        try {
+            const { docNo, id, documentId } = { ...req.params, ...req.body };
+            const inputDate = req.body?.documentDate || req.body?.date || req.body?.document_date;
+
+            const targetDocNo = docNo || documentId || id;
+            if (!targetDocNo) {
+                return res.status(400).json({ msg: "error", result: "Document identifier required" });
+            }
+
+            let header = null;
+            if (targetDocNo && !isNaN(Number(targetDocNo))) {
+                header = await StockOutHeader.findOne({ docNo: Number(targetDocNo) });
+            }
+            if (!header && mongoose.Types.ObjectId.isValid(targetDocNo)) {
+                header = await StockOutHeader.findById(targetDocNo);
+            }
+
+            if (!header) {
+                return res.status(404).json({ msg: "error", result: "Stock Out document not found" });
+            }
+
+            if (inputDate !== undefined && inputDate !== null) {
+                const parsedDate = new Date(inputDate);
+                if (isNaN(parsedDate.getTime())) {
+                    return res.status(400).json({ msg: "error", result: "Invalid date value" });
+                }
+                header.date = parsedDate;
+
+                await InventoryTransaction.updateMany(
+                    { docNo: header.docNo },
+                    { $set: { date: parsedDate } }
+                );
+
+                try {
+                    const StockOutPdf = require("../models/StockOutPdfModule");
+                    await StockOutPdf.updateMany(
+                        { docNo: header.docNo },
+                        { $set: { date: parsedDate } }
+                    );
+                } catch (e) {
+                    console.error("Error updating StockOutPdf date:", e);
+                }
+            }
+
+            if (req.body?.locationId || req.body?.location) {
+                header.location = req.body.locationId || req.body.location;
+            }
+
+            if (req.body?.remarks !== undefined) {
+                header.remarks = req.body.remarks;
+            }
+
+            await header.save();
+
+            return res.status(200).json({
+                msg: "success",
+                result: {
+                    _id: header._id,
+                    docNo: header.docNo,
+                    date: header.date,
+                    createdAt: header.createdAt
+                }
+            });
+        } catch (err) {
+            console.error("updateDocument error:", err);
             return res.status(500).json({ msg: "error", error: err.message });
         }
     }

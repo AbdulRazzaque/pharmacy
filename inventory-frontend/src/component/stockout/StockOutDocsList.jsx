@@ -5,7 +5,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { Search, FileText, Calendar, User, Package, Hash, Eye } from 'lucide-react';
+import { Search, FileText, Calendar, User, Package, Hash, Eye, Edit, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import moment from 'moment';
 import { getToken } from '../../utils/auth';
 
@@ -16,6 +16,13 @@ const StockOutDocsList = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [toast, setToast] = useState({ show: false, message: '', type: '' });
+
+  // Edit Date modal state
+  const [editingDoc, setEditingDoc] = useState(null);
+  const [editDateValue, setEditDateValue] = useState('');
+  const [editDateError, setEditDateError] = useState('');
+  const [savingDate, setSavingDate] = useState(false);
 
   useEffect(() => {
     fetchDocs();
@@ -57,6 +64,62 @@ const StockOutDocsList = () => {
       setFilteredDocs(filtered);
     }
   }, [searchQuery, docs]);
+
+  const showNotification = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast({ show: false, message: '', type: '' }), 4000);
+  };
+
+  const handleOpenEditDateModal = (doc) => {
+    setEditingDoc(doc);
+    const currentDate = doc.date || doc.createdAt;
+    setEditDateValue(currentDate ? moment(currentDate).format('YYYY-MM-DDTHH:mm') : '');
+    setEditDateError('');
+  };
+
+  const handleCloseEditDateModal = () => {
+    setEditingDoc(null);
+    setEditDateValue('');
+    setEditDateError('');
+  };
+
+  const handleSaveDocDate = async (e) => {
+    if (e) e.preventDefault();
+    if (!editDateValue) {
+      setEditDateError('Document date is required');
+      return;
+    }
+    const parsed = new Date(editDateValue);
+    if (isNaN(parsed.getTime())) {
+      setEditDateError('Please enter a valid date and time');
+      return;
+    }
+
+    try {
+      setSavingDate(true);
+      const token = getToken();
+      const res = await axios.patch(
+        `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/documents/${editingDoc.docNo}`,
+        { documentDate: editDateValue },
+        { headers: { token } }
+      );
+
+      if (res.data?.msg === 'success') {
+        const updatedDate = res.data.result?.date || editDateValue;
+        setDocs(prevDocs => prevDocs.map(d => d.docNo === editingDoc.docNo ? { ...d, date: updatedDate } : d));
+        setFilteredDocs(prevDocs => prevDocs.map(d => d.docNo === editingDoc.docNo ? { ...d, date: updatedDate } : d));
+        showNotification(`Doc #${editingDoc.docNo} Date Created updated successfully!`, 'success');
+        handleCloseEditDateModal();
+      } else {
+        setEditDateError(res.data?.result || 'Failed to update document date');
+      }
+    } catch (err) {
+      console.error(err);
+      setEditDateError(err.response?.data?.result || err.response?.data?.error || 'Error updating document date');
+    } finally {
+      setSavingDate(false);
+    }
+  };
 
   // Aggregate stats
   const totalDocs = docs.length;
@@ -168,9 +231,9 @@ const StockOutDocsList = () => {
                           Doc #{doc.docNo}
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5 text-gray-600">
-                            <Calendar className="h-4 w-4 text-gray-400" />
-                            {moment(doc.createdAt).format('DD/MM/YYYY hh:mm A')}
+                          <div className="flex items-center gap-1.5 text-gray-700 font-medium">
+                            <Calendar className="h-4 w-4 text-blue-500" />
+                            {moment(doc.date || doc.createdAt).format('DD/MM/YYYY hh:mm A')}
                           </div>
                         </TableCell>
                         <TableCell>
@@ -193,15 +256,27 @@ const StockOutDocsList = () => {
                           QR{grandTotal.toFixed(2)}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => navigate(`/dashboard/stockout-docs/${doc.docNo}`)}
-                            className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                          >
-                            <Eye className="mr-1 h-3.5 w-3.5" />
-                            Excel Edit
-                          </Button>
+                          <div className="flex items-center justify-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleOpenEditDateModal(doc)}
+                              className="hover:bg-amber-50 hover:text-amber-700 border-amber-200 transition-colors"
+                              title="Edit Date Created"
+                            >
+                              <Edit className="mr-1 h-3.5 w-3.5" />
+                              Edit Date
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => navigate(`/dashboard/stockout-docs/${doc.docNo}`)}
+                              className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                            >
+                              <Eye className="mr-1 h-3.5 w-3.5" />
+                              Excel Edit
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -212,6 +287,86 @@ const StockOutDocsList = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit Date Modal */}
+      {editingDoc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-md w-full overflow-hidden animate-in fade-in duration-200">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2 font-semibold text-lg">
+                <Calendar className="w-5 h-5" />
+                Edit Date Created (Doc #{editingDoc.docNo})
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseEditDateModal}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveDocDate} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Date Created / Document Date *
+                </label>
+                <input
+                  type="datetime-local"
+                  value={editDateValue}
+                  onChange={(e) => {
+                    setEditDateValue(e.target.value);
+                    if (editDateError) setEditDateError('');
+                  }}
+                  className={`w-full h-10 px-3 text-sm border rounded-lg shadow-sm bg-white dark:bg-gray-900 focus:ring-2 focus:ring-blue-500 focus:outline-none ${editDateError ? 'border-red-500 bg-red-50' : 'border-gray-300 dark:border-gray-600'}`}
+                />
+                {editDateError && (
+                  <div className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {editDateError}
+                  </div>
+                )}
+              </div>
+
+              {/* Current Date Preview */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border text-xs space-y-1">
+                <div className="text-gray-500">Document Date Preview:</div>
+                <div className="font-bold text-blue-600 dark:text-blue-400">
+                  {editDateValue && !isNaN(new Date(editDateValue).getTime())
+                    ? moment(editDateValue).format('DD/MM/YYYY hh:mm A')
+                    : 'Invalid Date'}
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-end gap-3 border-t border-gray-200 dark:border-gray-700">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCloseEditDateModal}
+                  disabled={savingDate}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={savingDate}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                >
+                  {savingDate ? 'Updating...' : 'Update Date'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-xl animate-in slide-in-from-bottom duration-200">
+          <CheckCircle2 className="w-5 h-5" />
+          <span className="text-sm font-semibold">{toast.message}</span>
+        </div>
+      )}
     </div>
   );
 };

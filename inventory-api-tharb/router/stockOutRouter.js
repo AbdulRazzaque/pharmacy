@@ -20,4 +20,11 @@ router.post('/getDocumentStockOut',isUserAuth,stockOutController.getDocumentStoc
 router.post('/getSummaryStockOut',isUserAuth,stockOutController.getSummaryStockOut)
 router.post('/getStockAllStockOut',isUserAuth,stockOutController.getStockAllStockOut)
 
+// Document Header & Date Update Routes
+router.patch('/documents/:documentId',isUserAuth,stockOutController.updateDocument)
+router.put('/documents/:documentId',isUserAuth,stockOutController.updateDocument)
+router.patch('/documents/docNo/:docNo',isUserAuth,stockOutController.updateDocument)
+router.put('/documents/docNo/:docNo',isUserAuth,stockOutController.updateDocument)
+router.post('/updateDocumentDate',isUserAuth,stockOutController.updateDocument)
+
 module.exports=router;

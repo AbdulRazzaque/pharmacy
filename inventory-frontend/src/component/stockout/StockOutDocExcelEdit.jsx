@@ -5,7 +5,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { ArrowLeft, Save, Trash2, ShieldAlert, Sparkles, RefreshCw, FileText, Search, Printer, Plus } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, ShieldAlert, Sparkles, RefreshCw, FileText, Search, Printer, Plus, Calendar } from 'lucide-react';
 import StockOutProductDropdownCell from '../../components/ui/StockOutProductDropdownCell';
 import moment from 'moment';
 import { getToken, getUserInfo } from '../../utils/auth';
@@ -23,8 +23,9 @@ const StockOutDocExcelEdit = () => {
   const [saving, setSaving] = useState(false);
   const [alert, setAlert] = useState({ show: false, message: '', type: '' });
 
-  // Document-level meta for PDF print
+  // Document-level meta for PDF print and Date editing
   const [docDate, setDocDate] = useState(new Date());
+  const [docDateChanged, setDocDateChanged] = useState(false);
   const [docLocationId, setDocLocationId] = useState('');
   const [docLocationName, setDocLocationName] = useState('');
   const [trainerName, setTrainerName] = useState('');
@@ -62,7 +63,7 @@ const StockOutDocExcelEdit = () => {
     return ['productId', 'quantity', 'sellingPrice', 'discountPercentage', 'locationId'];
   }, []);
 
-  const hasUnsavedChanges = useMemo(() => Object.keys(dirtyRows).length > 0, [dirtyRows]);
+  const hasUnsavedChanges = useMemo(() => Object.keys(dirtyRows).length > 0 || docDateChanged, [dirtyRows, docDateChanged]);
 
   // Intercept browser reload / tab close
   useEffect(() => {
@@ -183,7 +184,14 @@ const StockOutDocExcelEdit = () => {
       }
 
       if (docRes.data?.msg === 'success' && docRes.data.result?.[0]) {
-        const rawItems = docRes.data.result[0].doc || [];
+        const docHeader = docRes.data.result[0];
+        const fetchedDate = docHeader.date || docHeader.createdAt;
+        if (fetchedDate) {
+          setDocDate(fetchedDate);
+          setDocDateChanged(false);
+        }
+
+        const rawItems = docHeader.doc || [];
         if (rawItems.length > 0) {
           const firstLoc = rawItems[0].locationId || rawItems[0].location?._id || (typeof rawItems[0].location === 'string' ? rawItems[0].location : '');
           if (firstLoc) {
@@ -405,9 +413,20 @@ const StockOutDocExcelEdit = () => {
     }
 
     const modifiedList = items.filter(item => dirtyRows[item._id]);
-    if (modifiedList.length === 0) {
+    if (modifiedList.length === 0 && !docDateChanged) {
       showAlert('No modifications detected.', 'default');
       return;
+    }
+
+    if (docDateChanged) {
+      if (!docDate) {
+        showAlert('Document Date Created is required.', 'error');
+        return;
+      }
+      if (isNaN(new Date(docDate).getTime())) {
+        showAlert('Invalid Date Created value.', 'error');
+        return;
+      }
     }
 
     // Validate entries before saving
@@ -434,23 +453,57 @@ const StockOutDocExcelEdit = () => {
     try {
       setSaving(true);
       const locToUse = docLocationId || modifiedList.find(i => i.locationId)?.locationId || items.find(i => i.locationId)?.locationId || locations[0]?._id || '';
-      const res = await axios.post(
-        `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOutBulkUpdate`,
-        {
-          docNo: parseInt(docNo, 10),
-          updates: modifiedList,
-          location: locToUse,
-          locationId: locToUse
-        },
-        { headers: { token } }
-      );
+      
+      let dateUpdateSuccess = true;
+      if (docDateChanged && docDate) {
+        try {
+          const dateRes = await axios.patch(
+            `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/documents/${docNo}`,
+            { documentDate: docDate, date: docDate },
+            { headers: { token } }
+          );
+          if (dateRes.data?.msg !== 'success') {
+            dateUpdateSuccess = false;
+            showAlert(dateRes.data?.result || 'Failed to update document date.', 'error');
+          }
+        } catch (e) {
+          dateUpdateSuccess = false;
+          console.error("Error updating document date:", e);
+          showAlert(e.response?.data?.result || 'Failed to update document date.', 'error');
+        }
+      }
 
-      if (res.data?.msg === 'success') {
-        showAlert(`✔ ${res.data.count || modifiedList.length} rows updated successfully.`, 'success');
-        setDirtyRows({});
+      if (!dateUpdateSuccess) {
+        setSaving(false);
+        return;
+      }
+
+      if (modifiedList.length > 0) {
+        const res = await axios.post(
+          `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOutBulkUpdate`,
+          {
+            docNo: parseInt(docNo, 10),
+            updates: modifiedList,
+            location: locToUse,
+            locationId: locToUse,
+            date: docDate,
+            documentDate: docDate
+          },
+          { headers: { token } }
+        );
+
+        if (res.data?.msg === 'success') {
+          showAlert(`✔ Document date & ${res.data.count || modifiedList.length} rows updated successfully.`, 'success');
+          setDirtyRows({});
+          setDocDateChanged(false);
+          await fetchData();
+        } else {
+          showAlert(res.data?.result || 'Failed to update records.', 'error');
+        }
+      } else if (docDateChanged) {
+        showAlert('✔ Document Date Created updated successfully.', 'success');
+        setDocDateChanged(false);
         await fetchData();
-      } else {
-        showAlert(res.data?.result || 'Failed to update records.', 'error');
       }
     } catch (err) {
       console.error(err);
@@ -686,6 +739,69 @@ const StockOutDocExcelEdit = () => {
           <AlertDescription className="font-semibold">{alert.message}</AlertDescription>
         </Alert>
       )}
+
+      {/* Document Information & Header Settings */}
+      <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
+        <CardContent className="pt-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Date Created / Document Date */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5 flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-blue-600" />
+                Date Created / Document Date *
+              </label>
+              <input
+                type="datetime-local"
+                value={docDate ? moment(docDate).format('YYYY-MM-DDTHH:mm') : ''}
+                onChange={(e) => {
+                  setDocDate(e.target.value);
+                  setDocDateChanged(true);
+                }}
+                className="w-full h-10 px-3 text-sm border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-900 focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold text-gray-900 dark:text-gray-100"
+              />
+            </div>
+
+            {/* Location */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                Location
+              </label>
+              <select
+                value={docLocationId}
+                onChange={(e) => {
+                  const locId = e.target.value;
+                  const selLoc = locations.find(l => l._id === locId);
+                  setDocLocationId(locId);
+                  if (selLoc) setDocLocationName(selLoc.name);
+                }}
+                className="w-full h-10 px-3 text-sm border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm bg-white dark:bg-gray-900 focus:ring-2 focus:ring-blue-500 focus:outline-none text-gray-900 dark:text-gray-100"
+              >
+                <option value="">Select Location</option>
+                {locations.map(loc => (
+                  <option key={loc._id} value={loc._id}>{loc.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Document Date Preview */}
+            <div className="flex items-center gap-4 bg-blue-50/60 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div>
+                <span className="text-xs text-blue-700 dark:text-blue-300 font-semibold block uppercase tracking-wider">Date Preview</span>
+                <span className="text-sm font-bold text-blue-900 dark:text-blue-200">
+                  {docDate && !isNaN(new Date(docDate).getTime())
+                    ? moment(docDate).format('DD/MM/YYYY hh:mm A')
+                    : 'Invalid Date'}
+                </span>
+              </div>
+              {docDateChanged && (
+                <span className="ml-auto text-xs font-bold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-full border border-amber-300">
+                  Date Modified
+                </span>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Local Filter Bar */}
       <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
