@@ -3,7 +3,7 @@ import axios from 'axios';
 import { getToken, getUserInfo } from '../../utils/auth';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Badge } from '../../components/ui/badge';
-import { Plus, Trash2, TrendingUp, Save, Package, AlertCircle, CheckCircle2, Search, X } from 'lucide-react';
+import { Plus, Trash2, Edit, TrendingUp, Save, Package, AlertCircle, CheckCircle2, Search, X } from 'lucide-react';
 import moment from 'moment';
 
 const Stockin = () => {
@@ -25,6 +25,22 @@ const Stockin = () => {
     expiry: null,
     supplierDocNo: ''
   });
+
+  // Edit Modal State
+  const [editingItem, setEditingItem] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    productId: '',
+    supplierId: '',
+    quantity: '',
+    purchasingPrice: '',
+    sellingPrice: '',
+    expiry: '',
+    supplierDocNo: ''
+  });
+  const [editFormErrors, setEditFormErrors] = useState({});
+  const [editProductQuery, setEditProductQuery] = useState('');
+  const [editProductDropdownOpen, setEditProductDropdownOpen] = useState(false);
+  const editProductAutocompleteRef = useRef(null);
 
   const isAdmin = useMemo(
     () => (getUserInfo()?.role || '').toLowerCase() === 'admin',
@@ -48,6 +64,14 @@ const Stockin = () => {
     ).slice(0, 20);
   }, [products, productQuery]);
 
+  const editProductSuggestions = useMemo(() => {
+    const q = (editProductQuery || '').trim().toLowerCase();
+    if (!q) return products.slice(0, 20);
+    return products.filter(
+      (p) => (p.name || '').toLowerCase().includes(q) || (p.companyName || '').toLowerCase().includes(q)
+    ).slice(0, 20);
+  }, [products, editProductQuery]);
+
   useEffect(() => {
     fetchProducts();
     fetchSuppliers();
@@ -68,6 +92,9 @@ const Stockin = () => {
     const handleClickOutside = (e) => {
       if (productAutocompleteRef.current && !productAutocompleteRef.current.contains(e.target)) {
         setProductDropdownOpen(false);
+      }
+      if (editProductAutocompleteRef.current && !editProductAutocompleteRef.current.contains(e.target)) {
+        setEditProductDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -157,7 +184,7 @@ const Stockin = () => {
       productName: selectedProduct.name,
       unit: selectedProduct.unit || '',
       supplierId: selectedSupplier._id,
-      supplierName: selectedSupplier.name || '',
+      supplierName: selectedSupplier.name || selectedSupplier.supplierName || '',
       supplierDocNo: formData.supplierDocNo,
       quantity: parseInt(formData.quantity),
       purchasingPrice: isAdmin ? parseFloat(formData.purchasingPrice) : 0,
@@ -191,6 +218,80 @@ const Stockin = () => {
     setTimeout(() => {
       document.getElementById('product-input')?.focus();
     }, 100);
+  };
+
+  const handleOpenEditModal = (item) => {
+    setEditingItem(item);
+    setEditFormData({
+      productId: item.productId,
+      supplierId: item.supplierId,
+      quantity: item.quantity ? String(item.quantity) : '',
+      purchasingPrice: item.purchasingPrice != null ? String(item.purchasingPrice) : '',
+      sellingPrice: item.sellingPrice != null ? String(item.sellingPrice) : '',
+      expiry: item.expiry ? moment(item.expiry).format('YYYY-MM-DD') : '',
+      supplierDocNo: item.supplierDocNo || ''
+    });
+    setEditProductQuery(item.productName || '');
+    setEditFormErrors({});
+  };
+
+  const handleCloseEditModal = () => {
+    setEditingItem(null);
+    setEditFormErrors({});
+  };
+
+  const handleUpdateItem = (e) => {
+    if (e) e.preventDefault();
+
+    const errors = {};
+    if (!editFormData.productId) errors.productId = 'Please select a product';
+    if (!editFormData.supplierId) errors.supplierId = 'Please select a supplier';
+    if (!editFormData.quantity || Number(editFormData.quantity) <= 0) errors.quantity = 'Please enter valid quantity';
+    if (isAdmin && (!editFormData.purchasingPrice || Number(editFormData.purchasingPrice) <= 0)) {
+      errors.purchasingPrice = 'Please enter valid purchasing price';
+    }
+    if (isAdmin && editFormData.sellingPrice !== '' && Number(editFormData.sellingPrice) < 0) {
+      errors.sellingPrice = 'Selling price cannot be negative';
+    }
+    if (!editFormData.expiry) errors.expiry = 'Please select expiry date';
+    if (!editFormData.supplierDocNo) errors.supplierDocNo = 'Please enter supplier document number';
+
+    setEditFormErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
+
+    const selectedProd = products.find(p => p._id === editFormData.productId);
+    const selectedSupp = suppliers.find(s => s._id === editFormData.supplierId);
+
+    const qty = parseInt(editFormData.quantity, 10);
+    const purchasing = isAdmin ? parseFloat(editFormData.purchasingPrice) : 0;
+    const selling = isAdmin && editFormData.sellingPrice !== '' ? parseFloat(editFormData.sellingPrice) : null;
+
+    setStockItems(prev => prev.map(item => {
+      if (item.id === editingItem.id) {
+        return {
+          ...item,
+          productId: selectedProd ? selectedProd._id : item.productId,
+          productName: selectedProd ? selectedProd.name : item.productName,
+          unit: selectedProd?.unit || item.unit || '',
+          companyName: selectedProd?.companyName || item.companyName || '',
+          type: selectedProd?.type || item.type || '',
+          supplierId: selectedSupp ? selectedSupp._id : item.supplierId,
+          supplierName: selectedSupp ? (selectedSupp.name || selectedSupp.supplierName || '') : item.supplierName,
+          supplierDocNo: editFormData.supplierDocNo,
+          quantity: qty,
+          purchasingPrice: purchasing,
+          sellingPrice: selling,
+          expiry: editFormData.expiry,
+          total: qty * purchasing
+        };
+      }
+      return item;
+    }));
+
+    setEditingItem(null);
+    showAlert('Item updated successfully', 'success');
   };
 
   const handleSelectProduct = (product) => {
@@ -377,7 +478,7 @@ const Stockin = () => {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      document.getElementById('productId')?.focus();
+                      document.getElementById('product-input')?.focus();
                     }
                   }}
                 />
@@ -396,75 +497,65 @@ const Stockin = () => {
                     value={productQuery}
                     onChange={(e) => {
                       setProductQuery(e.target.value);
-                      if (!e.target.value) {
-                        setFormData(prev => ({ ...prev, productId: '' }));
-                        setSelectedProduct(null);
-                      }
                       setProductDropdownOpen(true);
                     }}
                     onFocus={() => setProductDropdownOpen(true)}
+                    placeholder="Search product..."
+                    className={`w-full h-10 pl-9 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.productId ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setProductDropdownOpen(false);
-                        if (!formData.productId) setProductQuery('');
-                      }
-                      if (e.key === 'Enter' && productSuggestions.length > 0 && !formData.productId) {
+                      if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleSelectProduct(productSuggestions[0]);
+                        if (productSuggestions.length > 0) {
+                          handleSelectProduct(productSuggestions[0]);
+                        }
                       }
                     }}
-                    placeholder="Type product name..."
-                    autoComplete="off"
-                    className={`w-full h-10 pl-9 pr-9 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.productId ? 'border-red-500' : 'border-gray-300'
-                      }`}
                   />
-                  {selectedProduct && (
+                  {productQuery && (
                     <button
                       type="button"
                       onClick={clearProduct}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded"
-                      aria-label="Clear product"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   )}
-                  {productDropdownOpen && (
-                    <div className="absolute z-20 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-56 overflow-y-auto">
-                      {products.length === 0 ? (
-                        <div className="px-3 py-4 text-sm text-gray-500">No products. Add products in Dashboard.</div>
-                      ) : productSuggestions.length === 0 ? (
-                        <div className="px-3 py-4 text-sm text-gray-500">No matching products.</div>
-                      ) : (
-                        productSuggestions.map((product) => (
-                          <button
-                            key={product._id}
-                            type="button"
-                            className="w-full px-3 py-2.5 text-left text-sm hover:bg-blue-50 flex flex-col gap-0.5 border-b border-gray-50 last:border-0"
-                            onClick={() => handleSelectProduct(product)}
-                          >
-                            <span className="font-medium text-gray-900">
-                              {product.name} | {product.companyName || 'N/A'} | {product.unit || 'N/A'}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  )}
                 </div>
+                {productDropdownOpen && productSuggestions.length > 0 && (
+                  <ul className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg py-1 text-sm">
+                    {productSuggestions.map((p) => (
+                      <li
+                        key={p._id}
+                        onClick={() => handleSelectProduct(p)}
+                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between"
+                      >
+                        <div>
+                          <span className="font-medium text-gray-900">{p.name}</span>
+                          {p.companyName && (
+                            <span className="text-xs text-gray-500 ml-2">({p.companyName})</span>
+                          )}
+                        </div>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                          {p.unit || 'unit'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               {/* Quantity */}
-              <div className={isAdmin ? "col-span-1" : "col-span-2"}>
+              <div className="col-span-1">
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Qty *
+                  Quantity *
                 </label>
                 <input
                   id="quantity"
                   type="number"
+                  min="1"
                   value={formData.quantity}
                   onChange={(e) => handleInputChange('quantity', e.target.value)}
-                  placeholder="0"
-                  min="1"
                   className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.quantity ? 'border-red-500' : 'border-gray-300'
                     }`}
                   onKeyDown={(e) => {
@@ -480,7 +571,7 @@ const Stockin = () => {
                 />
               </div>
 
-              {/* Purchasing Price */}
+              {/* Purchasing Price - Admin only */}
               {isAdmin && (
                 <div className="col-span-1">
                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -489,11 +580,10 @@ const Stockin = () => {
                   <input
                     id="purchasingPrice"
                     type="number"
+                    step="0.01"
+                    min="0.01"
                     value={formData.purchasingPrice}
                     onChange={(e) => handleInputChange('purchasingPrice', e.target.value)}
-                    placeholder="0.00"
-                    min="0"
-                    step="0.01"
                     className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.purchasingPrice ? 'border-red-500' : 'border-gray-300'
                       }`}
                     onKeyDown={(e) => {
@@ -506,7 +596,7 @@ const Stockin = () => {
                 </div>
               )}
 
-              {/* Selling Price – admin only */}
+              {/* Selling Price - Admin only */}
               {isAdmin && (
                 <div className="col-span-1">
                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -515,12 +605,12 @@ const Stockin = () => {
                   <input
                     id="sellingPrice"
                     type="number"
+                    step="0.01"
+                    min="0"
                     value={formData.sellingPrice}
                     onChange={(e) => handleInputChange('sellingPrice', e.target.value)}
-                    placeholder="0.00"
-                    min="0"
-                    step="0.01"
-                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.sellingPrice ? 'border-red-500' : 'border-gray-300'}`}
+                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.sellingPrice ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -531,50 +621,27 @@ const Stockin = () => {
                 </div>
               )}
 
-              {/* Expiry */}
-              <div className="col-span-2">
+              {/* Expiry Date */}
+              <div className={isAdmin ? "col-span-2" : "col-span-3"}>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
                   Expiry Date *
                 </label>
                 <input
                   id="expiry"
                   type="date"
-                  value={formData.expiry ? moment(formData.expiry).format('YYYY-MM-DD') : ''}
-                  onChange={(e) => handleInputChange('expiry', e.target.value ? new Date(e.target.value) : null)}
+                  value={formData.expiry || ''}
+                  onChange={(e) => handleInputChange('expiry', e.target.value)}
                   className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.expiry ? 'border-red-500' : 'border-gray-300'
                     }`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
-                      addItem(e);
+                      addItem();
                     }
                   }}
                 />
               </div>
-
-              {/* Total */}
-              {isAdmin && (
-                <div className="col-span-1">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Total
-                  </label>
-                  <div className="h-10 px-3 flex items-center bg-green-50 border border-green-200 rounded-md">
-                    <span className="text-sm font-bold text-green-700">
-                      QR{formData.quantity && formData.purchasingPrice ? (formData.quantity * formData.purchasingPrice).toFixed(2) : '0.00'}
-                    </span>
-                  </div>
-                </div>
-              )}
             </div>
-
-            {/* Product Info Bar */}
-            {selectedProduct && (
-              <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs flex items-center gap-4">
-                <span><strong>Type:</strong> {selectedProduct.type || 'N/A'}</span>
-                <span><strong>Unit:</strong> {selectedProduct.unit || 'N/A'}</span>
-                <span><strong>Stock:</strong> <span className="font-semibold text-blue-600">{selectedProduct.stock || 0}</span></span>
-              </div>
-            )}
 
             {/* Action Buttons */}
             <div className="mt-4 flex items-center gap-3">
@@ -662,13 +729,24 @@ const Stockin = () => {
                       )}
                       <td className="px-4 py-3 text-sm">{moment(item.expiry).format('DD/MM/YYYY')}</td>
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => removeItem(item.id)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Remove item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(item)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Edit item"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -678,6 +756,219 @@ const Stockin = () => {
           </div>
         )}
       </div>
+
+      {/* Edit Item Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-xl overflow-hidden">
+            <div className="bg-blue-600 text-white px-5 py-4 flex items-center justify-between">
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <Edit className="w-5 h-5" />
+                Edit Stock In Item
+              </h3>
+              <button
+                type="button"
+                onClick={handleCloseEditModal}
+                className="text-white/80 hover:text-white p-1 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleUpdateItem} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                {/* Supplier */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Supplier *
+                  </label>
+                  <select
+                    value={editFormData.supplierId}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, supplierId: e.target.value }))}
+                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.supplierId ? 'border-red-500' : 'border-gray-300'}`}
+                  >
+                    <option value="">Select Supplier</option>
+                    {suppliers.map((s) => (
+                      <option key={s._id} value={s._id}>
+                        {s.name || s.supplierName}
+                      </option>
+                    ))}
+                  </select>
+                  {editFormErrors.supplierId && <p className="text-xs text-red-500 mt-1">{editFormErrors.supplierId}</p>}
+                </div>
+
+                {/* Supplier Doc */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Supplier Doc *
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.supplierDocNo}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, supplierDocNo: e.target.value }))}
+                    placeholder="INV-001"
+                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.supplierDocNo ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {editFormErrors.supplierDocNo && <p className="text-xs text-red-500 mt-1">{editFormErrors.supplierDocNo}</p>}
+                </div>
+              </div>
+
+              {/* Product Autocomplete */}
+              <div className="relative" ref={editProductAutocompleteRef}>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Product *
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={editProductQuery}
+                    onChange={(e) => {
+                      setEditProductQuery(e.target.value);
+                      setEditProductDropdownOpen(true);
+                    }}
+                    onFocus={() => setEditProductDropdownOpen(true)}
+                    placeholder="Search product..."
+                    className={`w-full h-10 pl-9 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.productId ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {editProductQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditProductQuery('');
+                        setEditFormData(prev => ({ ...prev, productId: '' }));
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {editFormErrors.productId && <p className="text-xs text-red-500 mt-1">{editFormErrors.productId}</p>}
+
+                {editProductDropdownOpen && editProductSuggestions.length > 0 && (
+                  <ul className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg py-1 text-sm">
+                    {editProductSuggestions.map((p) => (
+                      <li
+                        key={p._id}
+                        onClick={() => {
+                          setEditFormData(prev => ({ ...prev, productId: p._id }));
+                          setEditProductQuery(p.name);
+                          setEditProductDropdownOpen(false);
+                          if (editFormErrors.productId) setEditFormErrors(prev => ({ ...prev, productId: '' }));
+                        }}
+                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between"
+                      >
+                        <div>
+                          <span className="font-medium text-gray-900">{p.name}</span>
+                          {p.companyName && <span className="text-xs text-gray-500 ml-2">({p.companyName})</span>}
+                        </div>
+                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{p.unit || 'unit'}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                {/* Quantity */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Quantity *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editFormData.quantity}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, quantity: e.target.value }))}
+                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.quantity ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {editFormErrors.quantity && <p className="text-xs text-red-500 mt-1">{editFormErrors.quantity}</p>}
+                </div>
+
+                {/* Expiry */}
+                <div className={isAdmin ? "" : "col-span-2"}>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Expiry Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.expiry}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, expiry: e.target.value }))}
+                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.expiry ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {editFormErrors.expiry && <p className="text-xs text-red-500 mt-1">{editFormErrors.expiry}</p>}
+                </div>
+
+                {/* Purchasing Price */}
+                {isAdmin && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Purch. Price *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      value={editFormData.purchasingPrice}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, purchasingPrice: e.target.value }))}
+                      className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.purchasingPrice ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {editFormErrors.purchasingPrice && <p className="text-xs text-red-500 mt-1">{editFormErrors.purchasingPrice}</p>}
+                  </div>
+                )}
+              </div>
+
+              {/* Selling Price & Line Total */}
+              {isAdmin && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Selling Price
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editFormData.sellingPrice}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, sellingPrice: e.target.value }))}
+                      className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.sellingPrice ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {editFormErrors.sellingPrice && <p className="text-xs text-red-500 mt-1">{editFormErrors.sellingPrice}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Line Total
+                    </label>
+                    <div className="h-10 px-3 flex items-center bg-green-50 border border-green-200 rounded-md">
+                      <span className="text-sm font-bold text-green-700">
+                        QR{editFormData.quantity && editFormData.purchasingPrice ? (Number(editFormData.quantity) * Number(editFormData.purchasingPrice)).toFixed(2) : '0.00'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Action Buttons */}
+              <div className="pt-3 flex justify-end gap-3 border-t">
+                <button
+                  type="button"
+                  onClick={handleCloseEditModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm"
+                >
+                  Update
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

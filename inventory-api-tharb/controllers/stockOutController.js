@@ -353,7 +353,7 @@ const stockOutController = {
 
     async stockOutUpdateQuantity(req, res) {
         try {
-            const { id } = req.params;
+            const id = req.params.itemId || req.params.id || req.body._id || req.body.itemId;
             const { quantity, sellingPrice, discountPercentage, locationId, location, doctorName, trainerName } = req.body || {};
 
             const item = await StockOutItem.findById(id);
@@ -432,6 +432,9 @@ const stockOutController = {
             item.quantity = newQty;
             if (sellingPrice !== undefined && sellingPrice !== null) {
                 item.sellingPrice = Number(sellingPrice);
+            }
+            if (remarks !== undefined || doctorName !== undefined || trainerName !== undefined) {
+                item.remarks = remarks || doctorName || trainerName || item.remarks;
             }
             const itemPrice = Number(item.sellingPrice || 0);
             const itemTotal = Math.round((newQty * itemPrice) * 100) / 100;

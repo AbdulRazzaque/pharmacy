@@ -166,7 +166,8 @@ const StockInDetails = () => {
       purchasingPrice: item.purchasingPrice ?? '',
       sellingPrice: item.sellingPrice ?? '',
       expiry: item.expiry ? moment(item.expiry).format('YYYY-MM-DD') : '',
-      supplier: item.supplier?._id || item.supplier || ''
+      supplier: item.supplier?._id || item.supplier || '',
+      supplierDocNo: item.supplierDocNo || ''
     });
   };
 
@@ -179,9 +180,10 @@ const StockInDetails = () => {
     const purchasingPrice = editForm.purchasingPrice?.toString().trim();
     const expiry = editForm.expiry?.trim();
     const supplier = editForm.supplier?.trim();
+    const supplierDocNo = editForm.supplierDocNo?.trim();
 
-    if (!quantity || !purchasingPrice || !expiry || !supplier) {
-      showAlert('Please fill all fields', 'error');
+    if (!quantity || !purchasingPrice || !expiry || !supplier || !supplierDocNo) {
+      showAlert('Please fill all required fields', 'error');
       return;
     }
     if (Number(purchasingPrice) <= 0 || Number.isNaN(Number(purchasingPrice))) {
@@ -204,6 +206,7 @@ const StockInDetails = () => {
         sellingPrice: editForm.sellingPrice !== '' ? parseFloat(editForm.sellingPrice) : undefined,
         expiry: expiry,
         supplier: supplier,
+        supplierDocNo: supplierDocNo,
         productName: editingItem.name
       },
       { headers: { token: accessToken } }
@@ -728,6 +731,16 @@ const StockInDetails = () => {
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Supplier Doc *</label>
+                  <input
+                    type="text"
+                    value={editForm.supplierDocNo || ''}
+                    onChange={(e) => setEditForm({ ...editForm, supplierDocNo: e.target.value })}
+                    placeholder="INV-001"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
                 <div className="flex gap-2 justify-end">
                   <Button

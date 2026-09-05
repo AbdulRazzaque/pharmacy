@@ -3,7 +3,7 @@ import axios from 'axios';
 import { getToken, getUserInfo } from '../../utils/auth';
 import { Badge } from '../../components/ui/badge';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { Plus, Trash2, TrendingDown, Save, Package, AlertCircle, CheckCircle2, Search, X, Printer } from 'lucide-react';
+import { Plus, Trash2, TrendingDown, Save, Package, AlertCircle, CheckCircle2, Search, X, Printer, Edit } from 'lucide-react';
 import moment from 'moment';
 import { useNavigate } from 'react-router-dom';
 
@@ -45,6 +45,24 @@ const Stockout = () => {
   const [stockDropdownOpen, setStockDropdownOpen] = useState(false);
   const stockAutocompleteRef = useRef(null);
 
+  // Edit item state
+  const [editingItem, setEditingItem] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    stockId: '',
+    productId: '',
+    quantity: '',
+    sellingPrice: '',
+    discountPercentage: '',
+    locationId: '',
+    doctorName: '',
+    trainerName: ''
+  });
+  const [editFormErrors, setEditFormErrors] = useState({});
+  const [editSelectedStock, setEditSelectedStock] = useState(null);
+  const [editStockQuery, setEditStockQuery] = useState('');
+  const [editStockDropdownOpen, setEditStockDropdownOpen] = useState(false);
+  const editStockAutocompleteRef = useRef(null);
+
   const accessToken = getToken();
 
   const stockSuggestions = useMemo(() => {
@@ -54,6 +72,14 @@ const Stockout = () => {
       (s) => (s.productName || '').toLowerCase().includes(q) || (s.type || '').toLowerCase().includes(q)
     ).slice(0, 25);
   }, [stocks, stockQuery]);
+
+  const editStockSuggestions = useMemo(() => {
+    const q = (editStockQuery || '').trim().toLowerCase();
+    if (!q) return stocks.slice(0, 25);
+    return stocks.filter(
+      (s) => (s.productName || '').toLowerCase().includes(q) || (s.type || '').toLowerCase().includes(q)
+    ).slice(0, 25);
+  }, [stocks, editStockQuery]);
 
   useEffect(() => {
     fetchStocks();
@@ -110,10 +136,124 @@ const Stockout = () => {
       if (stockAutocompleteRef.current && !stockAutocompleteRef.current.contains(e.target)) {
         setStockDropdownOpen(false);
       }
+      if (editStockAutocompleteRef.current && !editStockAutocompleteRef.current.contains(e.target)) {
+        setEditStockDropdownOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleOpenEditModal = (item) => {
+    const matchedStock = stocks.find(s => s._id === item.stockId || s.originalStockId === item.stockId) || null;
+    setEditingItem(item);
+    setEditFormData({
+      stockId: item.stockId || '',
+      productId: item.productId || item.stockId || '',
+      quantity: String(item.quantity || ''),
+      sellingPrice: String(item.sellingPrice ?? ''),
+      discountPercentage: String(item.discountPercentage ?? '0'),
+      locationId: item.locationId || docLocationId || '',
+      doctorName: item.doctorName || docDoctorName || '',
+      trainerName: item.trainerName || docTrainerName || ''
+    });
+    setEditFormErrors({});
+    setEditSelectedStock(matchedStock);
+    setEditStockQuery(item.productName || '');
+    setEditStockDropdownOpen(false);
+  };
+
+  const handleCloseEditModal = () => {
+    setEditingItem(null);
+    setEditFormData({
+      stockId: '',
+      productId: '',
+      quantity: '',
+      sellingPrice: '',
+      discountPercentage: '',
+      locationId: '',
+      doctorName: '',
+      trainerName: ''
+    });
+    setEditFormErrors({});
+    setEditSelectedStock(null);
+    setEditStockQuery('');
+    setEditStockDropdownOpen(false);
+  };
+
+  const handleSelectEditStock = (stock) => {
+    setEditFormData(prev => ({
+      ...prev,
+      stockId: stock.originalStockId || stock._id,
+      productId: stock.productId || stock.originalStockId || stock._id,
+      sellingPrice: String(stock.sellingPrice ?? prev.sellingPrice)
+    }));
+    setEditSelectedStock(stock);
+    setEditStockQuery(`${stock.productName}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Qty: ${stock.quantity})`);
+    setEditStockDropdownOpen(false);
+    if (editFormErrors.stockId) setEditFormErrors(prev => ({ ...prev, stockId: '' }));
+  };
+
+  const handleUpdateItem = (e) => {
+    if (e) e.preventDefault();
+    const errors = {};
+    if (!editFormData.quantity || Number(editFormData.quantity) <= 0) {
+      errors.quantity = 'Please enter a valid quantity';
+    }
+    if (editFormData.discountPercentage !== '' && (Number(editFormData.discountPercentage) < 0 || Number(editFormData.discountPercentage) > 100)) {
+      errors.discountPercentage = 'Discount percentage must be between 0 and 100';
+    }
+
+    const availableQty = editSelectedStock?.quantity;
+    if (availableQty !== undefined && Number(editFormData.quantity) > availableQty) {
+      errors.quantity = `Only ${availableQty} units available`;
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setEditFormErrors(errors);
+      return;
+    }
+
+    const qty = parseInt(editFormData.quantity, 10);
+    const price = parseFloat(editFormData.sellingPrice) || editSelectedStock?.sellingPrice || editingItem.sellingPrice || 0;
+    const discPct = parseFloat(editFormData.discountPercentage) || 0;
+    const itemTotal = Math.round((qty * price) * 100) / 100;
+    const discountAmount = Math.round((itemTotal * discPct / 100) * 100) / 100;
+    const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
+
+    const selectedLoc = locations.find(l => l._id === editFormData.locationId);
+
+    const updatedItems = stockOutItems.map(i => {
+      if (i.id === editingItem.id) {
+        return {
+          ...i,
+          stockId: editSelectedStock?.originalStockId || editSelectedStock?._id || editFormData.stockId || i.stockId,
+          productId: editSelectedStock?.productId || editSelectedStock?.originalStockId || editSelectedStock?._id || editFormData.productId || i.productId,
+          productName: editSelectedStock?.productName || i.productName,
+          companyName: editSelectedStock?.companyName || i.companyName,
+          type: editSelectedStock?.type || i.type,
+          unit: editSelectedStock?.unit || i.unit,
+          locationId: editFormData.locationId || i.locationId,
+          location: selectedLoc ? selectedLoc.name : i.location,
+          quantity: qty,
+          sellingPrice: price,
+          discountPercentage: discPct,
+          discountAmount: discountAmount,
+          itemTotal: itemTotal,
+          netTotal: netTotal,
+          total: netTotal,
+          expiry: editSelectedStock?.expiry || i.expiry,
+          doctorName: editFormData.doctorName,
+          trainerName: editFormData.trainerName
+        };
+      }
+      return i;
+    });
+
+    setStockOutItems(updatedItems);
+    handleCloseEditModal();
+    showAlert('Item updated successfully', 'success');
+  };
 
   useEffect(() => {
     if (docLocationId) {
@@ -858,16 +998,27 @@ const Stockout = () => {
                           {item.expiry ? moment(item.expiry).format('DD/MM/YYYY') : '-'}
                         </td>
                         <td className="px-3 py-3 text-center">
-                          <button
-                            onClick={() => {
-                              setStockOutItems(stockOutItems.filter(i => i.id !== item.id));
-                              showAlert('Item removed', 'success');
-                            }}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Remove item"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(item)}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              title="Edit item"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStockOutItems(stockOutItems.filter(i => i.id !== item.id));
+                                showAlert('Item removed', 'success');
+                              }}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Remove item"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -890,6 +1041,263 @@ const Stockout = () => {
                   </tr>
                 </tfoot>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Item Modal */}
+        {editingItem && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in duration-200">
+              <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-4 flex items-center justify-between text-white">
+                <div className="flex items-center gap-2 font-semibold text-lg">
+                  <Edit className="w-5 h-5" />
+                  Edit Stock Out Item
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseEditModal}
+                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateItem} className="p-6 space-y-4">
+                {/* Product Autocomplete */}
+                <div className="relative" ref={editStockAutocompleteRef}>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">
+                    Product *
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={editStockQuery}
+                      onChange={(e) => {
+                        setEditStockQuery(e.target.value);
+                        setEditStockDropdownOpen(true);
+                      }}
+                      onFocus={() => setEditStockDropdownOpen(true)}
+                      placeholder="Search product..."
+                      className={`w-full h-10 pl-9 pr-8 text-sm border-2 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ${editFormErrors.stockId ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                    />
+                    {editStockQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditStockQuery('');
+                          setEditFormData(prev => ({ ...prev, stockId: '' }));
+                          setEditSelectedStock(null);
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  {editFormErrors.stockId && <p className="text-xs text-red-500 mt-1">{editFormErrors.stockId}</p>}
+
+                  {editStockDropdownOpen && editStockSuggestions.length > 0 && (
+                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {editStockSuggestions.map((s) => (
+                        <button
+                          key={s._id}
+                          type="button"
+                          onClick={() => handleSelectEditStock(s)}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-red-50 flex flex-col gap-0.5 border-b border-gray-50 last:border-0"
+                        >
+                          <span className="font-medium text-gray-900">{s.productName} | {s.companyName || 'N/A'}</span>
+                          <span className="text-xs text-gray-500">
+                            {s.expiry ? `Exp: ${moment(s.expiry).format('DD/MM/YY')}` : 'No expiry'} • Available: {s.quantity}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Sell Price */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-800 mb-1">
+                      Sell. Price
+                    </label>
+                    <input
+                      type="number"
+                      value={editFormData.sellingPrice}
+                      readOnly
+                      tabIndex={-1}
+                      placeholder="0.00"
+                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-default font-medium text-right"
+                    />
+                  </div>
+
+                  {/* Available Stock */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-800 mb-1">
+                      Available Stock
+                    </label>
+                    <div className="h-10 px-3 flex items-center justify-center bg-blue-50 border-2 border-blue-300 rounded-lg">
+                      <span className="text-sm font-bold text-blue-700">
+                        {editSelectedStock?.quantity ?? 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Issue Qty */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-800 mb-1">
+                      Issue Qty *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editFormData.quantity}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, quantity: e.target.value }))}
+                      className={`w-full h-10 px-3 text-sm border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 font-semibold ${editFormErrors.quantity ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                    />
+                    {editFormErrors.quantity && <p className="text-xs text-red-500 mt-1">{editFormErrors.quantity}</p>}
+                  </div>
+
+                  {/* Discount (%) */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-800 mb-1">
+                      Discount (%)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="any"
+                        value={editFormData.discountPercentage}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 100)) {
+                            setEditFormData(prev => ({ ...prev, discountPercentage: val }));
+                          }
+                        }}
+                        placeholder="0%"
+                        className="w-full h-10 pl-3 pr-7 text-sm border-2 border-orange-300 rounded-lg bg-orange-50/50 focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold text-orange-900"
+                      />
+                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-orange-500 pointer-events-none">%</span>
+                    </div>
+                    {editFormErrors.discountPercentage && <p className="text-xs text-red-500 mt-1">{editFormErrors.discountPercentage}</p>}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Location */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-800 mb-1">
+                      Location
+                    </label>
+                    <select
+                      value={editFormData.locationId}
+                      onChange={(e) => {
+                        const locId = e.target.value;
+                        const selectedLoc = locations.find(l => l._id === locId);
+                        setEditFormData(prev => ({
+                          ...prev,
+                          locationId: locId,
+                          doctorName: selectedLoc?.doctorName || prev.doctorName,
+                          trainerName: selectedLoc?.trainerName || prev.trainerName
+                        }));
+                      }}
+                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                    >
+                      <option value="">Select Location</option>
+                      {locations.map((loc) => (
+                        <option key={loc._id} value={loc._id}>{loc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Expiry Date (Auto) */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-800 mb-1">
+                      Expiry (Auto)
+                    </label>
+                    <input
+                      type="text"
+                      value={editSelectedStock?.expiry ? moment(editSelectedStock.expiry).format('DD/MM/YYYY') : (editingItem.expiry ? moment(editingItem.expiry).format('DD/MM/YYYY') : 'N/A')}
+                      readOnly
+                      tabIndex={-1}
+                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-default"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Doctor Name */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-800 mb-1">
+                      Doctor Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.doctorName}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, doctorName: e.target.value }))}
+                      placeholder="Doctor Name"
+                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Trainer Name */}
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-800 mb-1">
+                      Trainer Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editFormData.trainerName}
+                      onChange={(e) => setEditFormData(prev => ({ ...prev, trainerName: e.target.value }))}
+                      placeholder="Trainer Name"
+                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Recalculated Net Total Preview */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">
+                    Net Total Preview
+                  </label>
+                  <div className="h-10 px-3 flex items-center justify-between bg-red-50 border-2 border-red-300 rounded-lg">
+                    <span className="text-xs text-red-600 font-semibold">QR</span>
+                    <span className="text-sm font-bold text-red-700">
+                      {(() => {
+                        const q = parseFloat(editFormData.quantity) || 0;
+                        const p = parseFloat(editFormData.sellingPrice) || editSelectedStock?.sellingPrice || editingItem.sellingPrice || 0;
+                        const d = parseFloat(editFormData.discountPercentage) || 0;
+                        const tot = q * p;
+                        const disc = (tot * d) / 100;
+                        return (tot - disc).toFixed(2);
+                      })()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Modal Action Buttons */}
+                <div className="pt-4 flex justify-end gap-3 border-t">
+                  <button
+                    type="button"
+                    onClick={handleCloseEditModal}
+                    className="px-5 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-md hover:shadow-lg transition-all"
+                  >
+                    Update
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}

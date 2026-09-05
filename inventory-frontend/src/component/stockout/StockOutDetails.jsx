@@ -219,6 +219,7 @@ const StockOutDetails = () => {
     const formData = {
       quantity: Math.abs(item.quantity) || '',
       sellingPrice: item.sellingPrice ?? '',
+      discountPercentage: item.discountPercentage ?? '0',
       doctorName: item.doctorName || '',
       trainerName: item.trainerName || '',
       productName: item.name || '',
@@ -245,6 +246,7 @@ const StockOutDetails = () => {
     const updateData = {
       quantity: parseInt(editForm.quantity),
       sellingPrice: parseFloat(editForm.sellingPrice),
+      discountPercentage: parseFloat(editForm.discountPercentage || 0),
       originalQuantity: Math.abs(editingItem.quantity),
       productId: editingItem.productId?._id || editingItem.productId,
       productName: editingItem.name,
@@ -777,15 +779,26 @@ const StockOutDetails = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-sm font-medium mb-1">Discount (%)</label>
+                  <input
+                    type="number"
+                    value={editForm.discountPercentage}
+                    onChange={(e) => setEditForm({ ...editForm, discountPercentage: e.target.value })}
+                    min="0"
+                    max="100"
+                    step="any"
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div>
                   <label className="block text-sm font-medium mb-1">Doctor Name</label>
                   <input
                     type="text"
                     value={editForm.doctorName}
                     onChange={(e) => setEditForm({ ...editForm, doctorName: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-md bg-gray-50"
-                    readOnly
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder="Doctor Name"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Auto-filled from location</p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium mb-1">Trainer Name</label>
@@ -793,10 +806,9 @@ const StockOutDetails = () => {
                     type="text"
                     value={editForm.trainerName}
                     onChange={(e) => setEditForm({ ...editForm, trainerName: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-md bg-gray-50"
-                    readOnly
+                    className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-red-500"
+                    placeholder="Trainer Name"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Auto-filled from location</p>
                 </div>
                 <div className="flex gap-2 justify-end">
                   <Button
