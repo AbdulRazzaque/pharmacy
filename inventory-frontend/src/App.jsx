@@ -78,6 +78,8 @@ function App() {
         <Route path="/selling-price-update" element={<SellingPriceUpdate />} />
         <Route path="/stockin" element={<Stockin />} />
         <Route path="/stockout" element={<Stockout />} />
+        <Route path="/stock-adjustment" element={<StockAdjustment />} />
+        <Route path="/stockadjustment" element={<StockAdjustment />} />
         <Route path="/stockinprint" element={<Stockinprint />} />
         <Route path="/transactionlist/:slug" element={<Transactionlist />} />
         <Route path="/stockoutprint" element={<Stockoutprint />} />
