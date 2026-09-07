@@ -52,6 +52,7 @@ const Stockin = () => {
   const [selectedSupplier, setSelectedSupplier] = useState(null);
   const [productQuery, setProductQuery] = useState('');
   const [productDropdownOpen, setProductDropdownOpen] = useState(false);
+  const [activeSugIdx, setActiveSugIdx] = useState(0);
   const productAutocompleteRef = useRef(null);
 
   const accessToken = getToken();
@@ -60,9 +61,20 @@ const Stockin = () => {
     const q = (productQuery || '').trim().toLowerCase();
     if (!q) return products.slice(0, 20);
     return products.filter(
-      (p) => (p.name || '').toLowerCase().includes(q) || (p.companyName || '').toLowerCase().includes(q)
+      (p) => (p.name || '').toLowerCase().includes(q) || (p.companyName || '').toLowerCase().includes(q) || (p.sku || '').toLowerCase().includes(q)
     ).slice(0, 20);
   }, [products, productQuery]);
+
+  useEffect(() => {
+    setActiveSugIdx(0);
+  }, [productQuery, productSuggestions]);
+
+  useEffect(() => {
+    if (productDropdownOpen && activeSugIdx >= 0) {
+      const el = document.querySelector(`[data-stockin-sug-idx="${activeSugIdx}"]`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [activeSugIdx, productDropdownOpen]);
 
   const editProductSuggestions = useMemo(() => {
     const q = (editProductQuery || '').trim().toLowerCase();
@@ -367,6 +379,29 @@ const Stockin = () => {
       });
   };
 
+  const saveStockInRef = useRef(saveStockIn);
+  const loadingRef = useRef(loading);
+  useEffect(() => {
+    saveStockInRef.current = saveStockIn;
+    loadingRef.current = loading;
+  });
+
+  useEffect(() => {
+    const handleF10Key = (e) => {
+      const isF10 = e.key === 'F10' || e.code === 'F10' || e.keyCode === 121;
+      if (isF10) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (!loadingRef.current && typeof saveStockInRef.current === 'function') {
+          saveStockInRef.current();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleF10Key, true);
+    return () => window.removeEventListener('keydown', handleF10Key, true);
+  }, []);
+
   const getTotalQuantity = () => {
     return stockItems.reduce((sum, item) => sum + item.quantity, 0);
   };
@@ -382,27 +417,16 @@ const Stockin = () => {
         <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <TrendingUp className="w-6 h-6 text-blue-600" />
+              <Package className="w-6 h-6 text-blue-600" />
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Stock In Entry</h1>
-                <p className="text-sm text-gray-500">Quick data entry like Excel</p>
+                <p className="text-sm text-gray-500">Quick data entry (F10 to Save)</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <div className="text-right">
-                <div className="text-xs text-gray-500">Document No</div>
-                <div className="text-lg font-bold text-blue-600">#{docNo}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-gray-500">Date</div>
-                <div className="bg-white rounded-lg shadow-sm p-2">
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="text-sm font-semibold text-black w-64 border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                </div>
+                <span className="text-xs text-gray-500 block font-semibold">Document No</span>
+                <span className="text-lg font-black text-blue-800">#{docNo}</span>
               </div>
             </div>
           </div>
@@ -429,7 +453,7 @@ const Stockin = () => {
           <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-3 rounded-t-lg">
             <h2 className="font-semibold flex items-center gap-2">
               <Package className="w-4 h-4" />
-              Quick Entry Form (Press Tab to move between fields, Enter to add)
+              Quick Entry Form (Tab moves fields, Enter selects product / adds item, F10 to Save Document)
             </h2>
           </div>
 
@@ -498,16 +522,32 @@ const Stockin = () => {
                     onChange={(e) => {
                       setProductQuery(e.target.value);
                       setProductDropdownOpen(true);
+                      setActiveSugIdx(0);
                     }}
                     onFocus={() => setProductDropdownOpen(true)}
                     placeholder="Search product..."
+                    autoComplete="off"
                     className={`w-full h-10 pl-9 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.productId ? 'border-red-500' : 'border-gray-300'
                       }`}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === 'ArrowDown') {
                         e.preventDefault();
-                        if (productSuggestions.length > 0) {
-                          handleSelectProduct(productSuggestions[0]);
+                        if (!productDropdownOpen) setProductDropdownOpen(true);
+                        else setActiveSugIdx(p => Math.min(p + 1, productSuggestions.length - 1));
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setActiveSugIdx(p => Math.max(p - 1, 0));
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (productDropdownOpen && productSuggestions[activeSugIdx]) {
+                          handleSelectProduct(productSuggestions[activeSugIdx]);
+                        }
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setProductDropdownOpen(false);
+                      } else if (e.key === 'Tab') {
+                        if (productDropdownOpen && productSuggestions[activeSugIdx]) {
+                          handleSelectProduct(productSuggestions[activeSugIdx]);
                         }
                       }
                     }}
@@ -522,26 +562,36 @@ const Stockin = () => {
                     </button>
                   )}
                 </div>
-                {productDropdownOpen && productSuggestions.length > 0 && (
-                  <ul className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg py-1 text-sm">
-                    {productSuggestions.map((p) => (
-                      <li
-                        key={p._id}
-                        onClick={() => handleSelectProduct(p)}
-                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between"
-                      >
-                        <div>
-                          <span className="font-medium text-gray-900">{p.name}</span>
-                          {p.companyName && (
-                            <span className="text-xs text-gray-500 ml-2">({p.companyName})</span>
-                          )}
-                        </div>
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                          {p.unit || 'unit'}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                {productDropdownOpen && (
+                  <div className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg py-1 text-sm">
+                    {productSuggestions.length === 0 ? (
+                      <div className="px-3 py-3 text-center text-gray-400 text-xs font-medium">No products found</div>
+                    ) : (
+                      productSuggestions.map((p, idx) => {
+                        const active = idx === activeSugIdx;
+                        return (
+                          <li
+                            key={p._id}
+                            data-stockin-sug-idx={idx}
+                            onClick={() => handleSelectProduct(p)}
+                            className={`px-3 py-2 cursor-pointer flex items-center justify-between border-l-2 transition-all ${
+                              active ? 'bg-blue-100 border-blue-600 font-semibold' : 'border-transparent hover:bg-blue-50'
+                            }`}
+                          >
+                            <div>
+                              <span className="font-medium text-gray-900">{p.name}</span>
+                              {p.companyName && (
+                                <span className="text-xs text-gray-500 ml-2">({p.companyName})</span>
+                              )}
+                            </div>
+                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                              {p.unit || 'unit'}
+                            </span>
+                          </li>
+                        );
+                      })
+                    )}
+                  </div>
                 )}
               </div>
 

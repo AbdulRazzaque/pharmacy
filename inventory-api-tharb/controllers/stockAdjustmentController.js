@@ -5,6 +5,7 @@ const StockAdjustmentHeader = require("../models/StockAdjustmentHeaderModule");
 const StockAdjustmentItem = require("../models/StockAdjustmentItemModule");
 const Product = require("../models/ProductModule");
 const Sequence = require("../models/SequenceModule");
+const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
 const moment = require('moment');
 
 const normalizeExpiry = (expiry) => (expiry ? new Date(expiry) : null);
@@ -72,17 +73,6 @@ const validateAdjustmentItems = async (items, session = null) => {
                 backendErrors.push(`Row ${rowNum}: Expiry Date is required.`);
             }
         }
-
-        if (delta < 0) {
-            const bal = await StockBalance.findOne({
-                productId: mongoose.Types.ObjectId(productId),
-                expiry: requestedExpiry
-            }).session(session);
-            const currentQty = bal ? bal.quantity : 0;
-            if (currentQty < Math.abs(delta)) {
-                backendErrors.push(`Row ${rowNum}: Quantity Out exceeds available stock (${currentQty}).`);
-            }
-        }
     }
 
     if (backendErrors.length > 0) {
@@ -111,9 +101,6 @@ const applySingleAdjustmentLine = async ({ item, reqUser, docNo, note, locationI
     let balance = await StockBalance.findOne(filter).session(session);
     const previousBalance = balance ? Number(balance.quantity || 0) : 0;
     const newBalance = previousBalance + delta;
-    if (newBalance < 0) {
-        throw new Error(`Insufficient stock in expiry batch ${requestedExpiry ? moment(requestedExpiry).format("YYYY-MM-DD") : "No Expiry"}`);
-    }
 
     if (!balance) {
         balance = new StockBalance({
@@ -156,6 +143,36 @@ class stockAdjustmentController {
         }
     }
 
+    async getAdjustmentDocuments(req, res) {
+        try {
+            const headers = await StockAdjustmentHeader.find()
+                .populate("createdBy", "userName role")
+                .sort({ docNo: -1 })
+                .lean();
+
+            const docs = await Promise.all(headers.map(async (h) => {
+                const items = await StockAdjustmentItem.find({ stockAdjustmentId: h._id }).lean();
+                let totalQtyAdjusted = 0;
+                items.forEach(i => {
+                    totalQtyAdjusted += Math.abs(i.quantityDelta || 0);
+                });
+                return {
+                    _id: h._id,
+                    docNo: h.docNo,
+                    date: h.date,
+                    note: h.note || "",
+                    createdBy: h.createdBy?.userName || "admin",
+                    itemCount: items.length,
+                    totalQtyAdjusted
+                };
+            }));
+
+            return res.status(200).json({ msg: "success", result: docs });
+        } catch (err) {
+            return res.status(500).json({ msg: "error", error: err.message });
+        }
+    }
+
     async createAdjustmentDocument(req, res) {
         const executeUpdate = async (session) => {
             const { date, note, items, locationId } = req.body || {};
@@ -182,12 +199,13 @@ class stockAdjustmentController {
 
             const batchSize = 500;
             const appliedItems = [];
+            const affectedProductIds = new Set();
 
             for (let i = 0; i < items.length; i += batchSize) {
                 const batch = items.slice(i, i + batchSize);
-                const batchAppliedItems = [];
 
                 for (const item of batch) {
+                    affectedProductIds.add(String(item.productId));
                     const applied = await applySingleAdjustmentLine({
                         item,
                         reqUser: req.user,
@@ -231,9 +249,15 @@ class stockAdjustmentController {
                     });
                     await txn.save(session ? { session } : {});
 
-                    batchAppliedItems.push(applied);
-                    appliedItems.push(applied);
+                    appliedItems.push({
+                        ...applied,
+                        _id: adjItem._id
+                    });
                 }
+            }
+
+            for (const pid of affectedProductIds) {
+                await recalculateRunningBalances(pid, session);
             }
 
             return {
@@ -302,6 +326,208 @@ class stockAdjustmentController {
         }
     }
 
+    async updateAdjustmentDocument(req, res) {
+        const executeUpdate = async (session) => {
+            const { docNo, date, note, items, locationId } = req.body || {};
+            if (!docNo) throw new Error("Document number (docNo) is required");
+            if (!Array.isArray(items)) throw new Error("items must be an array");
+
+            await validateAdjustmentItems(items, session);
+
+            const headerDoc = await StockAdjustmentHeader.findOne({ docNo: Number(docNo) }).session(session);
+            if (!headerDoc) throw new Error(`Stock Adjustment Document #${docNo} not found`);
+
+            if (date) headerDoc.date = new Date(date);
+            if (note !== undefined) headerDoc.note = note;
+            if (locationId !== undefined) headerDoc.locationId = locationId || null;
+            await headerDoc.save(session ? { session } : {});
+
+            const existingItems = await StockAdjustmentItem.find({ stockAdjustmentId: headerDoc._id }).session(session);
+            const existingItemMap = new Map();
+            existingItems.forEach(i => existingItemMap.set(String(i._id), i));
+
+            const payloadItemIds = new Set(items.filter(i => i._id).map(i => String(i._id)));
+
+            const affectedProductIds = new Set();
+
+            // 1. Delete items not present in payload
+            for (const [idStr, oldItem] of existingItemMap.entries()) {
+                if (!payloadItemIds.has(idStr)) {
+                    affectedProductIds.add(String(oldItem.productId));
+                    await InventoryTransaction.deleteMany(
+                        { referenceType: "StockAdjustment", referenceId: oldItem._id },
+                        session ? { session } : {}
+                    );
+                    await StockAdjustmentItem.deleteOne({ _id: oldItem._id }, session ? { session } : {});
+                }
+            }
+
+            // 2. Insert or update payload items
+            const appliedItems = [];
+            for (const item of items) {
+                const productId = String(item.productId);
+                const delta = Number(item.quantityDelta);
+                const requestedExpiry = normalizeExpiry(item.expiry);
+                const price = item.price !== undefined && item.price !== null && item.price !== '' ? Number(item.price) : 0;
+                const batchNumber = item.batchNumber || "";
+                const reason = item.reason || note || (delta > 0 ? "Stock adjustment (in)" : "Stock adjustment (out)");
+
+                affectedProductIds.add(productId);
+
+                let adjItem;
+                if (item._id && existingItemMap.has(String(item._id))) {
+                    adjItem = existingItemMap.get(String(item._id));
+                    adjItem.productId = productId;
+                    adjItem.expiry = requestedExpiry;
+                    adjItem.batchNumber = batchNumber;
+                    adjItem.price = price;
+                    adjItem.quantityDelta = delta;
+                    adjItem.reason = reason;
+                    await adjItem.save(session ? { session } : {});
+
+                    let txn = await InventoryTransaction.findOne({ referenceType: "StockAdjustment", referenceId: adjItem._id }).session(session);
+                    if (txn) {
+                        txn.productId = productId;
+                        txn.locationId = locationId || null;
+                        txn.batchNumber = batchNumber;
+                        txn.expiry = requestedExpiry;
+                        txn.quantityDelta = delta;
+                        txn.unitCost = price;
+                        txn.sellingPrice = price;
+                        txn.date = date ? new Date(date) : headerDoc.date;
+                        txn.remarks = reason;
+                        await txn.save(session ? { session } : {});
+                    } else {
+                        txn = new InventoryTransaction({
+                            productId,
+                            locationId: locationId || null,
+                            batchNumber,
+                            expiry: requestedExpiry,
+                            quantityDelta: delta,
+                            previousBalance: 0,
+                            newBalance: 0,
+                            unitCost: price,
+                            sellingPrice: price,
+                            transactionType: "STOCK_ADJUSTMENT",
+                            referenceType: "StockAdjustment",
+                            referenceId: adjItem._id,
+                            docNo: headerDoc.docNo,
+                            createdBy: req.user?._id,
+                            date: date ? new Date(date) : headerDoc.date,
+                            remarks: reason
+                        });
+                        await txn.save(session ? { session } : {});
+                    }
+                } else {
+                    adjItem = new StockAdjustmentItem({
+                        stockAdjustmentId: headerDoc._id,
+                        productId,
+                        expiry: requestedExpiry,
+                        batchNumber,
+                        price,
+                        quantityDelta: delta,
+                        previousQuantity: 0,
+                        newQuantity: 0,
+                        runningBalance: 0,
+                        reason
+                    });
+                    await adjItem.save(session ? { session } : {});
+
+                    const txn = new InventoryTransaction({
+                        productId,
+                        locationId: locationId || null,
+                        batchNumber,
+                        expiry: requestedExpiry,
+                        quantityDelta: delta,
+                        previousBalance: 0,
+                        newBalance: 0,
+                        unitCost: price,
+                        sellingPrice: price,
+                        transactionType: "STOCK_ADJUSTMENT",
+                        referenceType: "StockAdjustment",
+                        referenceId: adjItem._id,
+                        docNo: headerDoc.docNo,
+                        createdBy: req.user?._id,
+                        date: date ? new Date(date) : headerDoc.date,
+                        remarks: reason
+                    });
+                    await txn.save(session ? { session } : {});
+                }
+
+                appliedItems.push(adjItem);
+            }
+
+            // 3. Recalculate running balances and stock balance for all affected products
+            for (const pid of affectedProductIds) {
+                await recalculateRunningBalances(pid, session);
+            }
+
+            return {
+                assignedDocNo: headerDoc.docNo,
+                result: {
+                    ...headerDoc.toObject(),
+                    items: appliedItems
+                }
+            };
+        };
+
+        try {
+            const session = await mongoose.startSession();
+            let useTransaction = true;
+            try {
+                session.startTransaction();
+            } catch (e) {
+                useTransaction = false;
+                session.endSession();
+            }
+
+            if (useTransaction) {
+                try {
+                    const updateRes = await executeUpdate(session);
+                    await session.commitTransaction();
+                    session.endSession();
+                    return res.status(200).json({
+                        msg: "success",
+                        assignedDocNo: updateRes.assignedDocNo,
+                        result: updateRes.result
+                    });
+                } catch (txError) {
+                    await session.abortTransaction();
+                    session.endSession();
+
+                    const errorMsg = txError.message || '';
+                    const isTxUnsupported = errorMsg.includes('replica set') ||
+                        errorMsg.includes('Transaction numbers') ||
+                        errorMsg.includes('does not support') ||
+                        txError.code === 20 ||
+                        txError.codeName === 'IllegalOperation';
+
+                    if (isTxUnsupported) {
+                        console.warn('⚠️ MongoDB transaction unsupported. Retrying without transaction.');
+                        const updateRes = await executeUpdate(null);
+                        return res.status(200).json({
+                            msg: "success",
+                            assignedDocNo: updateRes.assignedDocNo,
+                            result: updateRes.result
+                        });
+                    } else {
+                        throw txError;
+                    }
+                }
+            } else {
+                const updateRes = await executeUpdate(null);
+                return res.status(200).json({
+                    msg: "success",
+                    assignedDocNo: updateRes.assignedDocNo,
+                    result: updateRes.result
+                });
+            }
+        } catch (err) {
+            console.error("Update stock adjustment document failed:", err);
+            return res.status(500).json({ msg: "error", error: err.message });
+        }
+    }
+
     async createStockAdjustment(req, res) {
         return this.createAdjustmentDocument(req, res);
     }
@@ -333,7 +559,7 @@ class stockAdjustmentController {
             if (!header) return res.status(404).json({ msg: "Not Found", result: "Document not found" });
 
             const items = await StockAdjustmentItem.find({ stockAdjustmentId: header._id })
-                .populate("productId", "name companyName type unit");
+                .populate("productId", "name companyName type unit requiresExpiry");
 
             const doc = {
                 _id: header._id,
@@ -346,8 +572,13 @@ class stockAdjustmentController {
                 createdAt: header.createdAt,
                 updatedAt: header.updatedAt,
                 items: items.map(item => ({
-                    productId: item.productId,
+                    _id: item._id,
+                    productId: item.productId?._id || item.productId,
                     productName: item.productId?.name || item.productName || "",
+                    companyName: item.productId?.companyName || "",
+                    type: item.productId?.type || "",
+                    unit: item.productId?.unit || "",
+                    requiresExpiry: item.productId?.requiresExpiry !== false,
                     expiry: item.expiry,
                     batchNumber: item.batchNumber || "",
                     price: item.price || 0,
@@ -367,3 +598,4 @@ class stockAdjustmentController {
 }
 
 module.exports = new stockAdjustmentController();
+

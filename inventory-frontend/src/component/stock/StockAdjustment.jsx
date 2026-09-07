@@ -6,7 +6,8 @@ import { getToken, getUserInfo } from '../../utils/auth';
 import {
   AlertCircle, CheckCircle2, X, Save,
   Upload, Download, Trash2, RefreshCw,
-  FileSpreadsheet, Info, Keyboard
+  FileSpreadsheet, Info, Keyboard, Search,
+  FolderOpen, PlusCircle
 } from 'lucide-react';
 import moment from 'moment';
 import * as XLSX from 'xlsx';
@@ -21,6 +22,7 @@ const newRowId = () => `row-${_rowId++}-${Date.now()}`;
 
 const emptyRow = () => ({
   id: newRowId(),
+  _id: null,
   productId: '',
   productName: '',
   companyName: '',
@@ -36,6 +38,7 @@ const emptyRow = () => ({
   _showDrop: false,
   _batches: [],     // available expiry batches for selected product
   _requiresExpiry: false,
+  _prevDelta: 0,
 });
 
 const IMPORT_CHUNK = 500;
@@ -100,10 +103,8 @@ function Highlight({ text, query }) {
 
 /* ─────────────────────────────────────────────────────────────────────────────
    PORTAL DROPDOWN — rendered into document.body via createPortal.
-   Completely escapes the overflow:auto table container.
-   Auto-flips upward when near the bottom of the viewport.
 ───────────────────────────────────────────────────────────────────────────── */
-function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSelect }) {
+function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSelect, onHover }) {
   const [rect, setRect] = useState(null);
 
   useEffect(() => {
@@ -118,6 +119,15 @@ function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSel
       window.removeEventListener('resize', update);
     };
   }, [anchorRef]);
+
+  useEffect(() => {
+    if (activeSug >= 0) {
+      const el = document.querySelector(`[data-suggestion-idx="${activeSug}"]`);
+      if (el) {
+        el.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [activeSug]);
 
   if (!rect) return null;
 
@@ -167,6 +177,7 @@ function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSel
               className={`flex items-start gap-3 px-3 py-2.5 cursor-pointer border-l-2 transition-all ${
                 active ? 'bg-amber-50 border-amber-500' : 'border-transparent hover:bg-slate-50 hover:border-slate-300'
               }`}
+              onMouseEnter={() => onHover && onHover(i)}
               onMouseDown={() => onSelect(s)}>
 
               {/* avatar */}
@@ -185,9 +196,9 @@ function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSel
                   <Highlight text={name} query={query} />
                 </p>
                 <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
-                  <Highlight text={s.companyName || '\u2014'} query={query} />
-                  {s.type && <><span className="mx-1 text-slate-300">\u00B7</span><span>{s.type}</span></>}
-                  {s.unit && <><span className="mx-1 text-slate-300">\u00B7</span><span>{s.unit}</span></>}
+                  <Highlight text={s.companyName || '—'} query={query} />
+                  {s.type && <><span className="mx-1 text-slate-300">·</span><span>{s.type}</span></>}
+                  {s.unit && <><span className="mx-1 text-slate-300">·</span><span>{s.unit}</span></>}
                 </p>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   {s.barcode && (
@@ -224,6 +235,103 @@ function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSel
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   KEYBOARD-FRIENDLY EXPIRY INPUT CELL
+───────────────────────────────────────────────────────────────────────────── */
+const ExpiryInputCell = React.memo(({ row, cellCls, onCellFocus, onCellChange, onCellKeyDown }) => {
+  const formatForDisplay = (val) => {
+    if (!val) return '';
+    const m = moment(val, ['YYYY-MM-DD', 'DD/MM/YYYY', 'DD-MM-YYYY', 'YYYY/MM/DD'], true);
+    if (m.isValid()) return m.format('DD/MM/YYYY');
+    return val;
+  };
+
+  const [inputText, setInputText] = useState(() => formatForDisplay(row.expiry));
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      setInputText(formatForDisplay(row.expiry));
+    }
+  }, [row.expiry, isFocused]);
+
+  if (!row.productId) {
+    return <div className="px-2 py-1 text-slate-300 text-xs text-center">—</div>;
+  }
+  if (!row._requiresExpiry) {
+    return <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 text-center bg-slate-50 rounded mx-1">Not Required</div>;
+  }
+
+  const handleChange = (e) => {
+    let val = e.target.value;
+
+    // Smart auto-slash insertion if user types 8 digits e.g. "05092026" -> "05/09/2026"
+    const digitsOnly = val.replace(/\D/g, '');
+    if (digitsOnly.length === 8 && !val.includes('/') && !val.includes('-')) {
+      val = `${digitsOnly.slice(0,2)}/${digitsOnly.slice(2,4)}/${digitsOnly.slice(4,8)}`;
+    }
+
+    setInputText(val);
+
+    const formats = ['DD/MM/YYYY', 'DD-MM-YYYY', 'YYYY-MM-DD', 'DDMMYYYY', 'D/M/YYYY', 'D-M-YYYY'];
+    const parsed = moment(val, formats, true);
+    if (parsed.isValid()) {
+      onCellChange(row.id, 'expiry', parsed.format('YYYY-MM-DD'));
+    } else {
+      onCellChange(row.id, 'expiry', val);
+    }
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    const parsed = moment(inputText, ['DD/MM/YYYY', 'DD-MM-YYYY', 'YYYY-MM-DD', 'DDMMYYYY', 'D/M/YYYY', 'D-M-YYYY'], true);
+    if (parsed.isValid()) {
+      const formatted = parsed.format('DD/MM/YYYY');
+      setInputText(formatted);
+      onCellChange(row.id, 'expiry', parsed.format('YYYY-MM-DD'));
+    }
+  };
+
+  const isoVal = moment(row.expiry, ['YYYY-MM-DD', 'DD/MM/YYYY', 'DD-MM-YYYY']).isValid()
+    ? moment(row.expiry, ['YYYY-MM-DD', 'DD/MM/YYYY', 'DD-MM-YYYY']).format('YYYY-MM-DD')
+    : '';
+
+  return (
+    <div className="relative flex items-center w-full">
+      <input
+        type="text"
+        placeholder="DD/MM/YYYY"
+        value={inputText}
+        data-row-id={row.id} data-field="expiry"
+        onFocus={(e) => {
+          setIsFocused(true);
+          onCellFocus(row.id, 'expiry');
+          e.target.select();
+        }}
+        onBlur={handleBlur}
+        onChange={handleChange}
+        onKeyDown={(e) => onCellKeyDown(e, row.id, 'expiry')}
+        className={`${cellCls('expiry')} text-xs font-medium tracking-tight pr-6 placeholder:text-slate-300 placeholder:font-normal`}
+      />
+      <input
+        type="date"
+        value={isoVal}
+        onChange={(e) => {
+          const dVal = e.target.value;
+          if (dVal) {
+            const formatted = moment(dVal).format('DD/MM/YYYY');
+            setInputText(formatted);
+            onCellChange(row.id, 'expiry', dVal);
+          }
+        }}
+        className="absolute right-1 w-4 h-4 opacity-40 hover:opacity-100 cursor-pointer border-0 bg-transparent p-0 flex-shrink-0"
+        tabIndex={-1}
+        title="Choose date from calendar"
+      />
+    </div>
+  );
+});
+
+/* ─────────────────────────────────────────────────────────────────────────────
    MEMOIZED ROW — re-renders only when its own data or focus changes
 ───────────────────────────────────────────────────────────────────────────── */
 const GridRow = React.memo(({
@@ -234,8 +342,11 @@ const GridRow = React.memo(({
 }) => {
   const inQty  = parseFloat(row.qtyIn)  || 0;
   const outQty = parseFloat(row.qtyOut) || 0;
-  const avail  = parseFloat(row.currentQty) || 0;
-  const finalQty = avail + inQty - outQty;
+  const currentStock = parseFloat(row.currentQty) || 0;
+
+  // Base stock before this row's previous adjustment
+  const baseStock = row._id ? currentStock - (row._prevDelta || 0) : currentStock;
+  const finalQty = baseStock + inQty - outQty;
   const hasAdjust = inQty > 0 || outQty > 0;
 
   const cellCls = (field) =>
@@ -251,14 +362,14 @@ const GridRow = React.memo(({
         {rowIdx + 1}
       </td>
 
-      {/* PRODUCT — inputRef passed to focused row for portal anchor */}
+      {/* PRODUCT */}
       <td className="border-r border-slate-100 min-w-[220px]">
         <input
           ref={isFocused ? inputRef : null}
           type="text"
           value={row._query}
           data-row-id={row.id} data-field="product"
-          placeholder={row.productId ? '' : 'Search product\u2026'}
+          placeholder={row.productId ? '' : 'Search product…'}
           autoComplete="off"
           onFocus={()    => { onCellFocus(row.id, 'product'); onQueryChange(row.id, row._query, true); }}
           onChange={(e)  => onQueryChange(row.id, e.target.value, false)}
@@ -286,41 +397,19 @@ const GridRow = React.memo(({
 
       {/* EXPIRY */}
       <td className="border-r border-slate-100 min-w-[150px]">
-        {!row.productId ? (
-          <div className="px-2 py-1 text-slate-300 text-xs text-center">—</div>
-        ) : !row._requiresExpiry ? (
-          <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 text-center bg-slate-50 rounded mx-1">Not Required</div>
-        ) : row._batches.length > 1 ? (
-          <select
-            value={row.expiry}
-            data-row-id={row.id} data-field="expiry"
-            onFocus={() => onCellFocus(row.id, 'expiry')}
-            onChange={(e) => onCellChange(row.id, 'expiry', e.target.value)}
-            onKeyDown={(e) => onCellKeyDown(e, row.id, 'expiry')}
-            className="w-full h-7 px-1.5 text-xs bg-transparent focus:outline-none focus:bg-amber-50 focus:ring-1 focus:ring-amber-400 rounded border-0 cursor-pointer"
-          >
-            <option value="">Choose expiry…</option>
-            {row._batches.map((b, i) => (
-              <option key={i} value={b.expiry}>{b.expiryLabel} (Avail: {b.qty})</option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type="date"
-            value={row.expiry}
-            data-row-id={row.id} data-field="expiry"
-            onFocus={() => onCellFocus(row.id, 'expiry')}
-            onChange={(e) => onCellChange(row.id, 'expiry', e.target.value)}
-            onKeyDown={(e) => onCellKeyDown(e, row.id, 'expiry')}
-            className={cellCls('expiry')}
-          />
-        )}
+        <ExpiryInputCell
+          row={row}
+          cellCls={cellCls}
+          onCellFocus={onCellFocus}
+          onCellChange={onCellChange}
+          onCellKeyDown={onCellKeyDown}
+        />
       </td>
 
       {/* CURRENT QTY (read-only display) */}
       <td className="border-r border-slate-100 min-w-[80px]">
         <div className="px-2 py-1 text-xs text-right font-semibold text-slate-600">
-          {row.productId ? (avail || 0) : <span className="text-slate-300">—</span>}
+          {row.productId ? (baseStock || 0) : <span className="text-slate-300">—</span>}
         </div>
       </td>
 
@@ -359,7 +448,7 @@ const GridRow = React.memo(({
         }`}>
           {row.productId ? (hasAdjust ? (
             <span className={`px-1.5 rounded ${finalQty < 0 ? 'bg-red-50' : 'bg-slate-100'}`}>{finalQty}</span>
-          ) : avail) : '—'}
+          ) : baseStock) : '—'}
         </div>
       </td>
 
@@ -413,6 +502,162 @@ const GridRow = React.memo(({
   if (next.isFocused && prev.activeCell !== next.activeCell) return false;
   return true;
 });
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   OPEN EXISTING DOCUMENT SELECTOR MODAL
+───────────────────────────────────────────────────────────────────────────── */
+const DocumentSelectorModal = ({ isOpen, onClose, onSelectDoc }) => {
+  const [docs, setDocs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const accessToken = getToken();
+
+  const fetchDocs = useCallback(() => {
+    setLoading(true);
+    axios.get(`${API}/api/stockAdjustment/getAdjustmentDocuments`, { headers: { token: accessToken } })
+      .then(res => {
+        setDocs(res.data.result || []);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error(err);
+        setLoading(false);
+      });
+  }, [accessToken]);
+
+  useEffect(() => {
+    if (isOpen) fetchDocs();
+  }, [isOpen, fetchDocs]);
+
+  const filteredDocs = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return docs;
+    return docs.filter(d => {
+      const docNoStr = String(d.docNo || '');
+      const noteStr = String(d.note || '').toLowerCase();
+      const creatorStr = String(d.createdBy || '').toLowerCase();
+      const dateStr = d.date ? moment(d.date).format('DD/MM/YYYY').toLowerCase() : '';
+      const dateIsoStr = d.date ? moment(d.date).format('YYYY-MM-DD').toLowerCase() : '';
+      return docNoStr.includes(q) ||
+             `#${docNoStr}`.includes(q) ||
+             `adjustment #${docNoStr}`.includes(q) ||
+             noteStr.includes(q) ||
+             creatorStr.includes(q) ||
+             dateStr.includes(q) ||
+             dateIsoStr.includes(q);
+    });
+  }, [docs, search]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="bg-slate-800 text-white px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <FolderOpen className="w-5 h-5 text-amber-400" />
+            <h2 className="text-lg font-bold">Open Existing Stock Adjustment Document</h2>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-slate-700 rounded-lg text-slate-300 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Search Bar */}
+        <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder="Search by Document Number (#2), Date, Reason, or Created By..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full h-10 pl-9 pr-4 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500"
+              autoFocus
+            />
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+          </div>
+          <button
+            onClick={fetchDocs}
+            className="p-2.5 text-slate-600 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors"
+            title="Refresh document list"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
+
+        {/* Document List Table */}
+        <div className="overflow-y-auto flex-1 p-4">
+          {loading ? (
+            <div className="py-12 text-center text-slate-400 flex flex-col items-center gap-2">
+              <RefreshCw className="w-6 h-6 animate-spin text-amber-500" />
+              <p className="text-sm font-medium">Loading documents...</p>
+            </div>
+          ) : filteredDocs.length === 0 ? (
+            <div className="py-12 text-center text-slate-400">
+              <p className="text-sm font-medium">No stock adjustment documents found</p>
+            </div>
+          ) : (
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50">
+                  <th className="px-4 py-2.5">Doc No</th>
+                  <th className="px-4 py-2.5">Date</th>
+                  <th className="px-4 py-2.5">Note / Reason</th>
+                  <th className="px-4 py-2.5">Created By</th>
+                  <th className="px-4 py-2.5 text-center">Items</th>
+                  <th className="px-4 py-2.5 text-right">Total Qty</th>
+                  <th className="px-4 py-2.5 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredDocs.map(doc => (
+                  <tr key={doc._id} className="hover:bg-amber-50/50 transition-colors">
+                    <td className="px-4 py-3 font-bold text-amber-800 font-mono">#{doc.docNo}</td>
+                    <td className="px-4 py-3 text-slate-600 font-medium">
+                      {doc.date ? moment(doc.date).format('DD/MM/YYYY') : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-slate-700 max-w-xs truncate font-medium">
+                      {doc.note || <span className="text-slate-300 italic">No note</span>}
+                    </td>
+                    <td className="px-4 py-3 text-slate-500 text-xs">{doc.createdBy || 'N/A'}</td>
+                    <td className="px-4 py-3 text-center font-semibold text-slate-600">
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">
+                        {doc.itemCount} Product{doc.itemCount !== 1 ? 's' : ''}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-slate-700">
+                      {doc.totalQtyAdjusted}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => onSelectDoc(doc.docNo)}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition-colors shadow-sm"
+                      >
+                        Open Document
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+          <span>Total {filteredDocs.length} documents</span>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /* ─────────────────────────────────────────────────────────────────────────────
    IMPORT PROGRESS MODAL
@@ -495,9 +740,6 @@ const ImportProgressModal = ({ progress, onClose }) => {
 /* ─────────────────────────────────────────────────────────────────────────────
    MAIN COMPONENT
 ───────────────────────────────────────────────────────────────────────────── */
-
-
-
 const StockAdjustment = () => {
   // ── DATA ──────────────────────────────────────────────────────────────────
   const [products, setProducts]   = useState([]);
@@ -506,14 +748,23 @@ const StockAdjustment = () => {
   const [docDate,  setDocDate]    = useState(moment().format('YYYY-MM-DD'));
   const [docNote,  setDocNote]    = useState('');
 
+  // ── EDITING MODE ──────────────────────────────────────────────────────────
+  const [isEditing, setIsEditing] = useState(false);
+  const [loadedDocNo, setLoadedDocNo] = useState(null);
+  const [showDocSelectorModal, setShowDocSelectorModal] = useState(false);
+
   // ── GRID ──────────────────────────────────────────────────────────────────
   const [gridRows, setGridRows] = useState([emptyRow()]);
   const [focusedRowId, setFocusedRowId] = useState(null);
   const [activeCell,    setActiveCell]    = useState(null);
   const [activeSug,     setActiveSug]     = useState(0);
-  // debounced search query — keeps typing instantaneous, fuzzy search at 250ms
   const [searchQuery,   setSearchQuery]   = useState('');
-  const debounceRef = useRef(null);
+  const activeSugRef       = useRef(0);
+  const rowSuggestionsRef  = useRef([]);
+  const debounceRef        = useRef(null);
+
+  // Keep refs up to date on every render
+  activeSugRef.current = activeSug;
 
   // ── UI STATE ──────────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(false);
@@ -521,7 +772,7 @@ const StockAdjustment = () => {
   const [importProgress, setImportProgress] = useState(null);
 
   const accessToken     = getToken();
-  const productInputRef = useRef(null); // anchor for Portal dropdown
+  const productInputRef = useRef(null);
   const fileInputRef    = useRef(null);
 
   /* ── FETCH ─────────────────────────────────────────────────────────────── */
@@ -532,19 +783,20 @@ const StockAdjustment = () => {
     axios.get(`${API}/api/stock/getAllStocks`, { headers: { token: accessToken } })
       .then(r => setStocks(r.data.result || []))
       .catch(console.error);
-    axios.get(`${API}/api/stockAdjustment/getStockAdjustmentDocNo`, { headers: { token: accessToken } })
-      .then(r => {
-        const arr = r.data.result;
-        setDocNo((Array.isArray(arr) && arr.length > 0) ? (arr[0].docNo || 1) : 1);
-      })
-      .catch(console.error);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken]);
+
+    if (!isEditing) {
+      axios.get(`${API}/api/stockAdjustment/getStockAdjustmentDocNo`, { headers: { token: accessToken } })
+        .then(r => {
+          const arr = r.data.result;
+          setDocNo((Array.isArray(arr) && arr.length > 0) ? (arr[0].docNo || 1) : 1);
+        })
+        .catch(console.error);
+    }
+  }, [accessToken, isEditing]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   /* ── STOCK LOOKUP MAP ──────────────────────────────────────────────────── */
-  // productId → stock record (cached for O(1) lookup even with 50k products)
   const stockMap = useMemo(() => {
     const m = new Map();
     stocks.forEach(s => {
@@ -554,11 +806,99 @@ const StockAdjustment = () => {
     return m;
   }, [stocks]);
 
-  /* ── SUGGESTIONS (debounced, fuzzy: name · company · barcode · SKU) ──── */
+  /* ── OPEN DOCUMENT HANDLER ─────────────────────────────────────────────── */
+  const handleOpenDocument = useCallback((targetDocNo) => {
+    setLoading(true);
+    setShowDocSelectorModal(false);
+    axios.post(`${API}/api/stockAdjustment/getStockAdjustmentByDocNo`, { docNo: targetDocNo }, { headers: { token: accessToken } })
+      .then(res => {
+        const doc = res.data.result;
+        if (!doc) {
+          showAlert(`Document #${targetDocNo} not found`, 'error');
+          setLoading(false);
+          return;
+        }
+        setIsEditing(true);
+        setLoadedDocNo(doc.docNo);
+        setDocNo(doc.docNo);
+        setDocDate(doc.date ? moment(doc.date).format('YYYY-MM-DD') : moment().format('YYYY-MM-DD'));
+        setDocNote(doc.note || '');
+
+        const loadedRows = (doc.items || []).map(item => {
+          const pid = String(item.productId?._id || item.productId || '');
+          const stock = stockMap.get(pid);
+          const delta = item.quantityDelta || 0;
+          const currentQty = stock?.totalQuantity || 0;
+
+          return {
+            id: newRowId(),
+            _id: item._id,
+            productId: pid,
+            productName: item.productName || item.productId?.name || '',
+            companyName: item.companyName || item.productId?.companyName || '',
+            type: item.type || item.productId?.type || '',
+            unit: item.unit || item.productId?.unit || '',
+            expiry: item.expiry ? moment(item.expiry).format('YYYY-MM-DD') : '',
+            currentQty,
+            qtyIn: delta > 0 ? String(delta) : '',
+            qtyOut: delta < 0 ? String(Math.abs(delta)) : '',
+            price: item.price ? String(item.price) : '',
+            remarks: item.reason || '',
+            _query: item.productName || item.productId?.name || '',
+            _showDrop: false,
+            _batches: (stock?.expiryArray || []).map(b => ({
+              expiry: b.expiry ? moment(b.expiry).format('YYYY-MM-DD') : '',
+              expiryLabel: b.expiry ? moment(b.expiry).format('DD/MM/YYYY') : 'No expiry',
+              qty: b.quantity || 0,
+              price: b.purchasingPrice || b.sellingPrice || 0
+            })),
+            _requiresExpiry: item.requiresExpiry !== false,
+            _prevDelta: delta
+          };
+        });
+
+        loadedRows.push(emptyRow());
+        setGridRows(loadedRows);
+        setLoading(false);
+        showAlert(`Document #${doc.docNo} loaded successfully. You are now editing this document.`, 'success');
+      })
+      .catch(err => {
+        console.error(err);
+        setLoading(false);
+        showAlert(err.response?.data?.result || err.message || 'Failed to load document', 'error');
+      });
+  }, [accessToken, stockMap]);
+
+  /* ── START NEW DOCUMENT ─────────────────────────────────────────────────── */
+  const startNewDocument = () => {
+    setIsEditing(false);
+    setLoadedDocNo(null);
+    setGridRows([emptyRow()]);
+    setDocNote('');
+    setDocDate(moment().format('YYYY-MM-DD'));
+    axios.get(`${API}/api/stockAdjustment/getStockAdjustmentDocNo`, { headers: { token: accessToken } })
+      .then(r => {
+        const arr = r.data.result;
+        setDocNo((Array.isArray(arr) && arr.length > 0) ? (arr[0].docNo || 1) : 1);
+      })
+      .catch(console.error);
+  };
+
+  /* ── SUGGESTIONS ───────────────────────────────────────────────────────── */
   const rowSuggestions = useMemo(() => {
     if (focusedRowId === null) return [];
     return fuzzySearch(products, stockMap, searchQuery);
   }, [products, stockMap, searchQuery, focusedRowId]);
+
+  rowSuggestionsRef.current = rowSuggestions;
+
+  useEffect(() => {
+    if (activeSug >= rowSuggestions.length && rowSuggestions.length > 0) {
+      const clamped = Math.max(0, rowSuggestions.length - 1);
+      setActiveSug(clamped);
+      activeSugRef.current = clamped;
+    }
+  }, [rowSuggestions, activeSug]);
 
   /* ── outside-click: close dropdown ──────────────────────────────────── */
   useEffect(() => {
@@ -633,16 +973,15 @@ const StockAdjustment = () => {
         _batches:        batches,
         _requiresExpiry: reqEx,
       };
-      // always ensure there is one empty row after the last filled one
       const isLast = idx === prev.length - 1;
       if (isLast) next.push(emptyRow());
       return next;
     });
     setActiveSug(0);
-    setSearchQuery('');  // reset debounced search so portal closes
+    activeSugRef.current = 0;
+    setSearchQuery('');
 
-    // focus next cell
-    const nextField = reqEx && batches.length !== 1 ? 'expiry' : 'qtyIn';
+    const nextField = reqEx ? 'expiry' : 'qtyIn';
     setActiveCell(nextField);
     focusDom(rowId, nextField);
   }, [stockMap, focusDom]);
@@ -654,21 +993,33 @@ const StockAdjustment = () => {
       if (idx === -1) return prev;
       const next  = [...prev];
       const row   = { ...next[idx] };
-      const batch = row._batches.find(b => b.expiry === expiryVal);
-      row.expiry     = expiryVal;
-      row.currentQty = batch?.qty   ?? 0;
-      row.price      = batch?.price ?? row.price;
+      const isoExp = moment(expiryVal, ['YYYY-MM-DD', 'DD/MM/YYYY', 'DD-MM-YYYY', 'DDMMYYYY'], true).isValid()
+        ? moment(expiryVal, ['YYYY-MM-DD', 'DD/MM/YYYY', 'DD-MM-YYYY', 'DDMMYYYY']).format('YYYY-MM-DD')
+        : expiryVal;
+
+      const batch = (row._batches || []).find(b => b.expiry === isoExp);
+      row.expiry = expiryVal;
+      if (batch) {
+        row.currentQty = batch.qty;
+        if (batch.price) row.price = batch.price;
+      } else {
+        const stock = stockMap.get(row.productId);
+        if (!row._requiresExpiry) {
+          row.currentQty = stock?.totalQuantity || 0;
+        } else {
+          row.currentQty = 0;
+        }
+      }
       next[idx] = row;
       return next;
     });
-    setActiveCell('qtyIn');
-    focusDom(rowId, 'qtyIn');
-  }, [focusDom]);
+  }, [stockMap]);
 
   /* ── GRID HANDLERS ─────────────────────────────────────────────────────── */
   const handleQueryChange = useCallback((rowId, val, isFocus) => {
     setFocusedRowId(rowId);
     setActiveSug(0);
+    activeSugRef.current = 0;
     setGridRows(prev => {
       const idx = prev.findIndex(r => r.id === rowId);
       if (idx === -1) return prev;
@@ -677,7 +1028,6 @@ const StockAdjustment = () => {
       row._query    = val;
       row._showDrop = true;
       if (!val && !isFocus) {
-        // clear product selection when user blanks the field
         row.productId = '';  row.productName = '';
         row.companyName = ''; row.type = ''; row.unit = '';
         row.expiry = ''; row.currentQty = ''; row.price = '';
@@ -686,7 +1036,6 @@ const StockAdjustment = () => {
       next[idx] = row;
       return next;
     });
-    // debounce fuzzy search update by 250ms to keep typing lag-free
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => setSearchQuery(val), 250);
   }, []);
@@ -694,33 +1043,60 @@ const StockAdjustment = () => {
   const handleKeyDownProduct = useCallback((e, rowId) => {
     const row = gridRows.find(r => r.id === rowId);
     if (!row) return;
+    const currentSugList = rowSuggestionsRef.current;
+    const currentIdx = activeSugRef.current;
+
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
+        e.stopPropagation();
         if (!row._showDrop) {
           setGridRows(prev => prev.map(r => r.id === rowId ? { ...r, _showDrop: true } : r));
-        } else {
-          setActiveSug(p => Math.min(p + 1, rowSuggestions.length - 1));
+          setActiveSug(0);
+          activeSugRef.current = 0;
+        } else if (currentSugList.length > 0) {
+          const nextIdx = Math.min(currentIdx + 1, currentSugList.length - 1);
+          setActiveSug(nextIdx);
+          activeSugRef.current = nextIdx;
         }
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setActiveSug(p => Math.max(p - 1, 0));
+        e.stopPropagation();
+        if (row._showDrop && currentSugList.length > 0) {
+          const prevIdx = Math.max(currentIdx - 1, 0);
+          setActiveSug(prevIdx);
+          activeSugRef.current = prevIdx;
+        }
         break;
       case 'Enter':
-        e.preventDefault();
-        if (row._showDrop && rowSuggestions[activeSug]) applyProduct(rowId, rowSuggestions[activeSug]);
+        if (row._showDrop && currentSugList.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          const targetProduct = currentSugList[currentIdx] || currentSugList[0];
+          if (targetProduct) {
+            applyProduct(rowId, targetProduct);
+          }
+        }
         break;
       case 'Tab':
-        if (row._showDrop && rowSuggestions[activeSug]) { e.preventDefault(); applyProduct(rowId, rowSuggestions[activeSug]); }
+        if (row._showDrop && currentSugList.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          const targetProduct = currentSugList[currentIdx] || currentSugList[0];
+          if (targetProduct) {
+            applyProduct(rowId, targetProduct);
+          }
+        }
         break;
       case 'Escape':
         e.preventDefault();
+        e.stopPropagation();
         setGridRows(prev => prev.map(r => r.id === rowId ? { ...r, _showDrop: false } : r));
         break;
       default: break;
     }
-  }, [gridRows, activeSug, rowSuggestions, applyProduct]);
+  }, [gridRows, applyProduct]);
 
   const handleCellChange = useCallback((rowId, field, val) => {
     if (field === 'expiry') {
@@ -732,7 +1108,6 @@ const StockAdjustment = () => {
       if (idx === -1) return prev;
       const next = [...prev];
       next[idx] = { ...next[idx], [field]: val };
-      // auto-create new row if editing last row's qty
       if ((field === 'qtyIn' || field === 'qtyOut') && idx === prev.length - 1 && val !== '' && next[idx].productId) {
         next.push(emptyRow());
       }
@@ -753,7 +1128,6 @@ const StockAdjustment = () => {
         setActiveCell(nextField);
         focusDom(rowId, nextField);
       } else {
-        // last field → jump to next row product
         const nextRi = ri + 1;
         let nextRow = rows[nextRi];
         if (nextRi >= rows.length) {
@@ -800,25 +1174,16 @@ const StockAdjustment = () => {
   const handleCellFocus = useCallback((rowId, field) => {
     setFocusedRowId(rowId);
     setActiveCell(field);
-    if (field !== 'product') {
-      setGridRows(prev => {
-        const idx = prev.findIndex(r => r.id === rowId);
-        if (idx !== -1 && prev[idx]._showDrop) {
-          const n = [...prev]; n[idx] = { ...n[idx], _showDrop: false }; return n;
-        }
-        return prev;
-      });
-    }
   }, []);
 
-  const handleRemoveRow = useCallback((id) => {
+  const handleRemoveRow = useCallback((rowId) => {
     setGridRows(prev => {
-      const filtered = prev.filter(r => r.id !== id);
-      return filtered.length === 0 ? [emptyRow()] : filtered;
+      const next = prev.filter(r => r.id !== rowId);
+      if (next.length === 0) return [emptyRow()];
+      return next;
     });
   }, []);
 
-  /* ── STATS ─────────────────────────────────────────────────────────────── */
   const { filledCount, activeCount } = useMemo(() => {
     let filled = 0, active = 0;
     gridRows.forEach(r => {
@@ -831,14 +1196,13 @@ const StockAdjustment = () => {
     return { filledCount: filled, activeCount: active };
   }, [gridRows]);
 
-  /* ── BULK SAVE ─────────────────────────────────────────────────────────── */
+  /* ── SAVE DOCUMENT ──────────────────────────────────────────────────────── */
   const [validationErrors, setValidationErrors] = useState([]);
 
   const saveDocument = () => {
     const lines = [];
     const errors = [];
 
-    // Filter rows that are actively submitted (ignore trailing completely empty row if untouched)
     const rowsToValidate = gridRows.filter((r, idx) => {
       const isLastEmpty = idx === gridRows.length - 1 && !r.productId && !r._query && !r.expiry && !r.qtyIn && !r.qtyOut;
       return !isLastEmpty;
@@ -853,19 +1217,22 @@ const StockAdjustment = () => {
       const excelRow = idx + 1;
       let rowHasError = false;
 
-      // 1. Product Name check
       if (!row.productId || !row.productName) {
         errors.push(`Row ${excelRow}: Product Name is required.`);
         rowHasError = true;
       }
 
-      // 2. Expiry Date check
       if (row._requiresExpiry && !row.expiry) {
         errors.push(`Row ${excelRow}: Expiry Date is required.`);
         rowHasError = true;
+      } else if (row.expiry) {
+        const parsedExp = moment(row.expiry, ['YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY'], true);
+        if (!parsedExp.isValid()) {
+          errors.push(`Row ${excelRow}: Expiry Date "${row.expiry}" is invalid.`);
+          rowHasError = true;
+        }
       }
 
-      // 3. Quantity In or Quantity Out check
       const inQty  = Math.max(0, parseFloat(row.qtyIn)  || 0);
       const outQty = Math.max(0, parseFloat(row.qtyOut) || 0);
 
@@ -875,9 +1242,16 @@ const StockAdjustment = () => {
       } else if (inQty > 0 && outQty > 0) {
         errors.push(`Row ${excelRow}: Cannot have both Quantity In and Quantity Out.`);
         rowHasError = true;
-      } else if (outQty > 0 && outQty > Number(row.currentQty || 0)) {
-        errors.push(`Row ${excelRow}: Quantity Out exceeds available stock (${row.currentQty || 0}).`);
-        rowHasError = true;
+      }
+
+      if (outQty > 0) {
+        const currentAvail = Number(row.currentQty || 0);
+        const prevDelta = Number(row._prevDelta || 0);
+        const baseStock = row._id ? currentAvail - prevDelta : currentAvail;
+        if (outQty > baseStock) {
+          errors.push(`Row ${excelRow}: Quantity Out (${outQty}) exceeds available stock (${baseStock}).`);
+          rowHasError = true;
+        }
       }
 
       const price = row.price !== '' && row.price != null ? parseFloat(row.price) : 0;
@@ -887,17 +1261,21 @@ const StockAdjustment = () => {
       }
 
       if (!rowHasError) {
-        lines.push({
+        const lineObj = {
           productId:     row.productId,
           productName:   row.productName,
           companyName:   row.companyName || '',
           unit:          row.unit || '',
-          expiry:        row._requiresExpiry ? row.expiry : null,
+          expiry:        row._requiresExpiry ? moment(row.expiry, ['YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY']).format('YYYY-MM-DD') : null,
           batchNumber:   '',
           quantityDelta: inQty > 0 ? inQty : -outQty,
           price,
-          reason:        docNote || 'Stock Adjustment',
-        });
+          reason:        docNote || row.remarks || 'Stock Adjustment',
+        };
+        if (row._id) {
+          lineObj._id = row._id;
+        }
+        lines.push(lineObj);
       }
     });
 
@@ -909,29 +1287,67 @@ const StockAdjustment = () => {
 
     setValidationErrors([]);
     setLoading(true);
-    axios.post(
-      `${API}/api/stockAdjustment/createAdjustmentDocument`,
-      { date: docDate, note: docNote, items: lines },
-      { headers: { token: accessToken } }
-    )
-      .then(res => {
-        const no = res.data?.assignedDocNo || res.data?.result?.docNo;
-        setLoading(false);
-        fetchAll();
-        setGridRows([emptyRow()]);
-        setDocNote('');
-        setDocDate(moment().format('YYYY-MM-DD'));
-        showAlert(no ? `Document #${no} saved successfully` : 'Document saved', 'success');
-      })
-      .catch(err => {
-        setLoading(false);
-        showAlert(err.response?.data?.result || err.response?.data?.error || err.message || 'Save failed', 'error');
-      });
+
+    if (isEditing) {
+      axios.post(
+        `${API}/api/stockAdjustment/updateAdjustmentDocument`,
+        { docNo: loadedDocNo, date: docDate, note: docNote, items: lines },
+        { headers: { token: accessToken } }
+      )
+        .then(res => {
+          const no = res.data?.assignedDocNo || loadedDocNo;
+          setLoading(false);
+          fetchAll();
+          handleOpenDocument(no);
+          showAlert(`Document #${no} updated successfully`, 'success');
+        })
+        .catch(err => {
+          setLoading(false);
+          showAlert(err.response?.data?.result || err.response?.data?.error || err.message || 'Update failed', 'error');
+        });
+    } else {
+      axios.post(
+        `${API}/api/stockAdjustment/createAdjustmentDocument`,
+        { date: docDate, note: docNote, items: lines },
+        { headers: { token: accessToken } }
+      )
+        .then(res => {
+          const no = res.data?.assignedDocNo || res.data?.result?.docNo;
+          setLoading(false);
+          fetchAll();
+          setGridRows([emptyRow()]);
+          setDocNote('');
+          setDocDate(moment().format('YYYY-MM-DD'));
+          showAlert(no ? `Document #${no} saved successfully` : 'Document saved', 'success');
+        })
+    }
   };
+
+  const saveDocumentRef = useRef(saveDocument);
+  const loadingRef = useRef(loading);
+  useEffect(() => {
+    saveDocumentRef.current = saveDocument;
+    loadingRef.current = loading;
+  });
+
+  useEffect(() => {
+    const handleF10Key = (e) => {
+      const isF10 = e.key === 'F10' || e.code === 'F10' || e.keyCode === 121;
+      if (isF10) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (!loadingRef.current && typeof saveDocumentRef.current === 'function') {
+          saveDocumentRef.current();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleF10Key, true);
+    return () => window.removeEventListener('keydown', handleF10Key, true);
+  }, []);
 
   /* ── DOWNLOAD SAMPLE EXCEL ─────────────────────────────────────────────── */
   const downloadSample = () => {
-    // ── Column headers ──────────────────────────────────────────────────────
     const headers = [
       'Product Name',
       'Company Name',
@@ -945,12 +1361,7 @@ const StockAdjustment = () => {
       'Remarks',
     ];
 
-    // ── Sample rows ─────────────────────────────────────────────────────────
-    // Dates must be in DD-MM-YYYY format (e.g. 31-12-2026).
-    // Provide EITHER Quantity In OR Quantity Out — not both.
-    // Current Quantity is for reference only; leave it as-is from your stock list.
     const sample = [
-      // Product Name       Company Name   Type       Unit     Expiry         CurrQty  QtyIn  QtyOut  Price  Remarks
       ['Paracetamol 500mg', 'PharmaCo',   'Tablet',  'Box',   '31-12-2026',  100,     20,    0,      2.50,  'Monthly audit correction'],
       ['Amoxicillin 250mg', 'MediCorp',   'Capsule', 'Strip', '30-06-2025',   50,      0,    5,      4.75,  'Expired batch removal'],
       ['Ibuprofen 400mg',   'HealthPlus', 'Tablet',  'Pack',  '15-03-2027',  200,     50,    0,      3.00,  'Stock replenishment'],
@@ -958,19 +1369,12 @@ const StockAdjustment = () => {
       ['Cough Syrup 100ml', 'PharmaCo',  'Syrup',   'Bottle','20-09-2026',   30,     10,    0,      6.00,  'Quarterly stock check'],
     ];
 
-    // ── Build workbook ───────────────────────────────────────────────────────
     const wb = XLSX.utils.book_new();
-
-    // Sheet 1 — Data sheet
     const ws = XLSX.utils.aoa_to_sheet([headers, ...sample]);
-
-    // Column widths
     const colWidths = [30, 20, 12, 10, 26, 24, 12, 12, 12, 30];
     ws['!cols'] = colWidths.map(wch => ({ wch }));
-
     XLSX.utils.book_append_sheet(wb, ws, 'Stock Adjustment');
 
-    // Sheet 2 — Instructions
     const instructions = [
       ['STOCK ADJUSTMENT IMPORT — INSTRUCTIONS'],
       [''],
@@ -1002,17 +1406,13 @@ const StockAdjustment = () => {
     XLSX.writeFile(wb, 'stock_adjustment_sample.xlsx');
   };
 
-
   /* ── EXCEL IMPORT ──────────────────────────────────────────────────────── */
   const handleImportFile = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = '';
 
-    // read file
     const buf  = await file.arrayBuffer();
-    // cellDates:true makes XLSX return native JS Date objects for date cells,
-    // avoiding raw serial-number ambiguity
     const wb   = XLSX.read(buf, { type: 'array', cellDates: true });
     const ws   = wb.Sheets[wb.SheetNames[0]];
     const raw  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
@@ -1045,7 +1445,6 @@ const StockAdjustment = () => {
 
     if (totalRows === 0) { showAlert('No data rows found in Excel file', 'error'); return; }
 
-    // initialise progress
     const prog = {
       phase: 'Validating rows…',
       total: totalRows, done: 0,
@@ -1054,16 +1453,6 @@ const StockAdjustment = () => {
     };
     setImportProgress({ ...prog });
 
-    // ── Product search index (O(1), multi-tier keying) ──────────────────────
-    // Products can share the same name+company but differ by unit or type
-    // (e.g. "Aintree E1000 | Day Son | 1kg" vs "Aintree E1000 | Day Son | 3.5kg").
-    // We build keys at four specificity levels so we always resolve the most
-    // precise match, with graceful fallback when Excel omits type/unit columns.
-    //
-    //  key4 = name::company::type::unit  ← most specific (set always)
-    //  key3 = name::company::unit        ← set only once (first product wins)
-    //  key2 = name::company              ← set only once (first product wins)
-    //  key1 = name                       ← set only once (first product wins)
     const nameIndex = new Map();
     products.forEach(p => {
       const n = (p.name || p.productName || '').toLowerCase().trim();
@@ -1071,16 +1460,12 @@ const StockAdjustment = () => {
       const t = (p.type     || '').toLowerCase().trim();
       const u = (p.unit     || '').toLowerCase().trim();
 
-      // Most specific key always overwrites (last product in sort wins for key4,
-      // but for key3/key2/key1 only the FIRST product in the array is stored so
-      // there is a stable, deterministic winner for ambiguous lookups).
-      nameIndex.set(`${n}::${c}::${t}::${u}`, p);          // key4
-      if (!nameIndex.has(`${n}::${c}::${u}`)) nameIndex.set(`${n}::${c}::${u}`, p);  // key3
-      if (!nameIndex.has(`${n}::${c}`))       nameIndex.set(`${n}::${c}`, p);         // key2
-      if (!nameIndex.has(n))                  nameIndex.set(n, p);                    // key1
+      nameIndex.set(`${n}::${c}::${t}::${u}`, p);
+      if (!nameIndex.has(`${n}::${c}::${u}`)) nameIndex.set(`${n}::${c}::${u}`, p);
+      if (!nameIndex.has(`${n}::${c}`))       nameIndex.set(`${n}::${c}`, p);
+      if (!nameIndex.has(n))                  nameIndex.set(n, p);
     });
 
-    // process in chunks
     const newGridRows = [];
     let imported = 0, updated = 0, skipped = 0, failed = 0;
     const errors = [];
@@ -1090,31 +1475,24 @@ const StockAdjustment = () => {
 
       for (let i = startIdx; i < endIdx; i++) {
         const r   = dataRows[i];
-        const rNo = i + 2; // Excel row number (1-based header + 1)
+        const rNo = i + 2;
 
         const nameVal    = String(r[colIdx.name]    ?? '').trim();
         const compVal    = String(r[colIdx.company]  ?? '').trim();
         const typeVal    = String(r[colIdx.type]     ?? '').trim();
         const unitVal    = String(r[colIdx.unit]     ?? '').trim();
-        // Keep the raw cell value WITHOUT String-coercing so we can detect
-        // JS Date objects returned by XLSX when cellDates:true is set.
         const expiryRaw  = colIdx.expiry >= 0 ? (r[colIdx.expiry] ?? '') : '';
         const qtyInRaw   = colIdx.qtyIn  >= 0 ? r[colIdx.qtyIn]  : '';
         const qtyOutRaw  = colIdx.qtyOut >= 0 ? r[colIdx.qtyOut] : '';
         const priceRaw   = colIdx.price  >= 0 ? r[colIdx.price]  : '';
         const remarksVal = colIdx.remarks >= 0 ? String(r[colIdx.remarks] ?? '').trim() : '';
 
-        // Validate required
         if (!nameVal) { errors.push({ row: rNo, msg: 'Product Name is required', data: r }); failed++; continue; }
         if (!compVal) { errors.push({ row: rNo, msg: 'Company Name is required', data: r }); failed++; continue; }
 
-        // ── Expiry Date Parsing ─────────────────────────────────────────────
-        // Supports: JS Date objects (from cellDates:true), Excel serial numbers,
-        // and all common string formats including DD-MM-YYYY (user's format).
         let expiryVal = '';
         if (expiryRaw !== '' && expiryRaw != null) {
           if (expiryRaw instanceof Date) {
-            // XLSX returned a native JS Date (cellDates:true)
             if (!isNaN(expiryRaw.getTime())) {
               expiryVal = moment(expiryRaw).format('YYYY-MM-DD');
             } else {
@@ -1122,43 +1500,31 @@ const StockAdjustment = () => {
             }
           } else {
             const rawStr = String(expiryRaw).trim();
-            if (!rawStr) {
-              // empty string — skip, expiry stays ''
-            } else if (!isNaN(Number(rawStr)) && rawStr !== '') {
-              // Excel serial number (e.g. 45765)
-              const d = XLSX.SSF.parse_date_code(Number(rawStr));
-              if (d) {
-                expiryVal = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+            if (rawStr) {
+              if (!isNaN(Number(rawStr))) {
+                const d = XLSX.SSF.parse_date_code(Number(rawStr));
+                if (d) {
+                  expiryVal = `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+                } else {
+                  errors.push({ row: rNo, msg: `Invalid Expiry Date serial: ${rawStr}`, data: r }); failed++; continue;
+                }
               } else {
-                errors.push({ row: rNo, msg: `Invalid Expiry Date serial: ${rawStr}`, data: r }); failed++; continue;
+                const ACCEPTED_FORMATS = [
+                  'YYYY-MM-DD', 'DD-MM-YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY',
+                  'MM-DD-YYYY', 'YYYY/MM/DD', 'D-M-YYYY', 'D/M/YYYY',
+                  'M/D/YYYY', 'DD MMM YYYY', 'D MMM YYYY',
+                ];
+                const parsed = moment(rawStr, ACCEPTED_FORMATS, true);
+                if (!parsed.isValid()) {
+                  errors.push({ row: rNo, msg: `Invalid Expiry Date format "${rawStr}"`, data: r });
+                  failed++; continue;
+                }
+                expiryVal = parsed.format('YYYY-MM-DD');
               }
-            } else {
-              // String date — support all common formats including DD-MM-YYYY (user's format)
-              const ACCEPTED_FORMATS = [
-                'YYYY-MM-DD',   // ISO standard
-                'DD-MM-YYYY',   // User's format: 19-04-2025
-                'DD/MM/YYYY',   // Common: 19/04/2025
-                'MM/DD/YYYY',   // US: 04/19/2025
-                'MM-DD-YYYY',   // US with dashes
-                'YYYY/MM/DD',   // Asian ISO variant
-                'D-M-YYYY',     // Single-digit day/month with dashes
-                'D/M/YYYY',     // Single-digit day/month with slashes
-                'M/D/YYYY',     // US single-digit
-                'DD MMM YYYY',  // 19 Apr 2025
-                'D MMM YYYY',   // 9 Apr 2025
-                'YYYY-MM-DDTHH:mm:ss.SSSZ', // ISO with time
-              ];
-              const parsed = moment(rawStr, ACCEPTED_FORMATS, true);
-              if (!parsed.isValid()) {
-                errors.push({ row: rNo, msg: `Invalid Expiry Date format "${rawStr}" — accepted: DD-MM-YYYY, YYYY-MM-DD, DD/MM/YYYY`, data: r });
-                failed++; continue;
-              }
-              expiryVal = parsed.format('YYYY-MM-DD');
             }
           }
         }
 
-        // Validate quantities
         const qtyIn  = parseFloat(qtyInRaw)  || 0;
         const qtyOut = parseFloat(qtyOutRaw) || 0;
         if (qtyIn < 0)  { errors.push({ row: rNo, msg: 'Quantity In cannot be negative', data: r }); failed++; continue; }
@@ -1168,18 +1534,11 @@ const StockAdjustment = () => {
         const price = parseFloat(priceRaw) || 0;
         if (price < 0) { errors.push({ row: rNo, msg: 'Price cannot be negative', data: r }); failed++; continue; }
 
-        // ── Product matching (most-specific key first, then fallback) ───────
-        // Build normalised lookup tokens from the Excel row.
         const nLow = nameVal.toLowerCase().trim();
         const cLow = compVal.toLowerCase().trim();
         const tLow = typeVal.toLowerCase().trim();
         const uLow = unitVal.toLowerCase().trim();
 
-        // Try keys from most-specific to least-specific:
-        //   1. name + company + type + unit  — distinguishes 1kg vs 3.5kg
-        //   2. name + company + unit          — when type column is absent/blank
-        //   3. name + company                 — when unit column is also absent/blank
-        //   4. name only                      — last resort
         const product =
           nameIndex.get(`${nLow}::${cLow}::${tLow}::${uLow}`) ||
           nameIndex.get(`${nLow}::${cLow}::${uLow}`)           ||
@@ -1187,12 +1546,11 @@ const StockAdjustment = () => {
           nameIndex.get(nLow);
 
         if (!product) {
-          errors.push({ row: rNo, msg: `Product not found: "${nameVal}" / "${compVal}" / "${unitVal}"`, data: r });
+          errors.push({ row: rNo, msg: `Product not found: "${nameVal}" / "${compVal}"`, data: r });
           failed++;
           continue;
         }
 
-        // Build grid row
         const pid   = String(product._id);
         const stock = stockMap.get(pid);
         const reqEx = product.requiresExpiry !== false;
@@ -1213,6 +1571,7 @@ const StockAdjustment = () => {
 
         newGridRows.push({
           id:          newRowId(),
+          _id:         null,
           productId:   pid,
           productName: product.name || product.productName || nameVal,
           companyName: compVal,
@@ -1228,6 +1587,7 @@ const StockAdjustment = () => {
           _showDrop:       false,
           _batches:        batches,
           _requiresExpiry: reqEx,
+          _prevDelta:      0
         });
 
         if (qtyIn > 0 || qtyOut > 0) imported++;
@@ -1247,13 +1607,11 @@ const StockAdjustment = () => {
       setImportProgress({ ...prog });
 
       if (endIdx < totalRows) {
-        await new Promise(r => setTimeout(r, 10)); // yield to browser
+        await new Promise(r => setTimeout(r, 10));
         await processChunk(endIdx);
       } else {
-        // done
         prog.finished = true;
         setImportProgress({ ...prog });
-        // push rows into grid
         setGridRows(prev => {
           const existing = prev.filter(r => r.productId);
           const combined = [...existing, ...newGridRows, emptyRow()];
@@ -1262,7 +1620,6 @@ const StockAdjustment = () => {
       }
     };
 
-    // start processing asynchronously
     setTimeout(() => processChunk(0), 50);
   };
 
@@ -1277,6 +1634,13 @@ const StockAdjustment = () => {
 
   return (
     <div className="min-h-screen bg-slate-50/60 flex flex-col">
+      {/* Document Selector Modal */}
+      <DocumentSelectorModal
+        isOpen={showDocSelectorModal}
+        onClose={() => setShowDocSelectorModal(false)}
+        onSelectDoc={handleOpenDocument}
+      />
+
       {/* Import Progress Modal */}
       {importProgress && (
         <ImportProgressModal
@@ -1285,7 +1649,7 @@ const StockAdjustment = () => {
         />
       )}
 
-      {/* Portal Dropdown — rendered into document.body, escapes overflow:auto */}
+      {/* Portal Dropdown */}
       {showPortal && (
         <ProductDropdownPortal
           anchorRef={productInputRef}
@@ -1293,6 +1657,10 @@ const StockAdjustment = () => {
           activeSug={activeSug}
           query={searchQuery}
           onSelect={(product) => applyProduct(focusedRowId, product)}
+          onHover={(i) => {
+            setActiveSug(i);
+            activeSugRef.current = i;
+          }}
         />
       )}
 
@@ -1307,13 +1675,54 @@ const StockAdjustment = () => {
                   <FileSpreadsheet className="w-8 h-8 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-2xl md:text-3xl font-black tracking-tight">Stock Adjustment</h1>
+                  <div className="flex items-center gap-3">
+                    <h1 className="text-2xl md:text-3xl font-black tracking-tight">Stock Adjustment</h1>
+                    {isEditing ? (
+                      <span className="bg-blue-500/30 text-blue-100 border border-blue-300/40 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                        <FolderOpen className="w-3.5 h-3.5" /> Editing Document #{loadedDocNo}
+                      </span>
+                    ) : (
+                      <span className="bg-amber-500/30 text-amber-100 border border-amber-300/40 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                        <PlusCircle className="w-3.5 h-3.5" /> New Adjustment (#{docNo})
+                      </span>
+                    )}
+                  </div>
                   <p className="text-amber-100 text-xs mt-1 max-w-md">
-                    Excel-style bulk entry — search products, fill quantities, press Enter to jump rows.
+                    Excel-style bulk entry — search products, fill quantities, edit existing documents, or press Enter to jump rows.
                   </p>
                 </div>
               </div>
+
+              {/* Header Buttons */}
               <div className="flex flex-wrap items-center gap-2">
+                {/* New Adjustment Button */}
+                <button
+                  type="button"
+                  onClick={startNewDocument}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                    !isEditing
+                      ? 'bg-white text-amber-800 border border-white'
+                      : 'bg-white/15 hover:bg-white/25 text-white border border-white/30'
+                  }`}
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  New Adjustment
+                </button>
+
+                {/* Open Existing Document Button */}
+                <button
+                  type="button"
+                  onClick={() => setShowDocSelectorModal(true)}
+                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
+                    isEditing
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-400'
+                      : 'bg-white/15 hover:bg-white/25 text-white border border-white/30'
+                  }`}
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  Open Existing Document
+                </button>
+
                 {/* Download Sample */}
                 <button
                   type="button"
@@ -1323,6 +1732,7 @@ const StockAdjustment = () => {
                   <Download className="w-3.5 h-3.5" />
                   Sample Excel
                 </button>
+
                 {/* Import Excel */}
                 <button
                   type="button"
@@ -1339,14 +1749,15 @@ const StockAdjustment = () => {
                   className="hidden"
                   onChange={handleImportFile}
                 />
+
                 {/* Keyboard hint */}
                 <div className="flex items-center gap-1.5 px-3 py-2 bg-white/10 border border-white/20 rounded-xl text-[10px] text-amber-100">
                   <Keyboard className="w-3.5 h-3.5" />
                   Enter/Tab moves cells · ↑↓ navigates rows
-                 </div>
-               </div>
-             </div>
-           </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
           {/* ── STACKED VALIDATION ERRORS ALERT ───────────────────────── */}
           {validationErrors.length > 0 && (
@@ -1379,7 +1790,9 @@ const StockAdjustment = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Doc No</label>
-                  <div className="h-10 px-3.5 border border-amber-100 rounded-lg flex items-center font-black text-amber-800 bg-amber-50/40 text-base">
+                  <div className={`h-10 px-3.5 border rounded-lg flex items-center font-black text-base ${
+                    isEditing ? 'border-blue-200 bg-blue-50/50 text-blue-900' : 'border-amber-100 bg-amber-50/40 text-amber-800'
+                  }`}>
                     #{docNo}
                   </div>
                 </div>
@@ -1420,17 +1833,22 @@ const StockAdjustment = () => {
                   type="button"
                   onClick={saveDocument}
                   disabled={loading || activeCount === 0}
-                  className="flex-1 h-10 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-100 disabled:text-slate-400 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all shadow-sm"
+                  className={`flex-1 h-10 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all shadow-sm ${
+                    isEditing
+                      ? 'bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400'
+                      : 'bg-amber-600 hover:bg-amber-700 disabled:bg-slate-100 disabled:text-slate-400'
+                  }`}
                 >
-                  {loading
-                    ? <><RefreshCw className="w-4 h-4 animate-spin" /> Saving…</>
-                    : <><Save className="w-4 h-4" /> Save Document #{docNo}</>
-                  }
+                  {loading ? (
+                    <><RefreshCw className="w-4 h-4 animate-spin" /> {isEditing ? 'Updating…' : 'Saving…'}</>
+                  ) : (
+                    <><Save className="w-4 h-4" /> {isEditing ? `Update Document #${docNo}` : `Save Document #${docNo}`}</>
+                  )}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setGridRows([emptyRow()])}
-                  title="Clear grid"
+                  onClick={startNewDocument}
+                  title="Clear / New document"
                   className="px-3 h-10 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-400 rounded-lg transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -1478,7 +1896,7 @@ const StockAdjustment = () => {
                     <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[130px]">Company</th>
                     <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[90px]">Type</th>
                     <th className="px-2 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[65px]">Unit</th>
-                    <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[150px]">Expiry Date</th>
+                    <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[140px]">Expiry Date (DD/MM/YYYY)</th>
                     <th className="px-2 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[80px]">Current Qty</th>
                     <th className="px-2 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[90px] text-green-300">Qty IN ▲</th>
                     <th className="px-2 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[90px] text-red-300">Qty OUT ▼</th>

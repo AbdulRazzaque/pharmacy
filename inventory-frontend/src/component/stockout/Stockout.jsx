@@ -44,6 +44,51 @@ const Stockout = () => {
   const [stockQuery, setStockQuery] = useState('');
   const [stockDropdownOpen, setStockDropdownOpen] = useState(false);
   const stockAutocompleteRef = useRef(null);
+  const [activeStockSugIdx, setActiveStockSugIdx] = useState(0);
+
+  const stockSuggestions = useMemo(() => {
+    const q = (stockQuery || '').trim().toLowerCase();
+    if (!q) return stocks.slice(0, 25);
+    return stocks.filter(
+      (s) => (s.productName || '').toLowerCase().includes(q) || (s.type || '').toLowerCase().includes(q)
+    ).slice(0, 25);
+  }, [stocks, stockQuery]);
+
+  const handleSaveAndPrintRef = useRef(null);
+  const loadingRef = useRef(loading);
+  useEffect(() => {
+    handleSaveAndPrintRef.current = handleSaveAndPrint;
+    loadingRef.current = loading;
+  });
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e) => {
+      const isF10 = e.key === 'F10' || e.code === 'F10' || e.keyCode === 121;
+      if (isF10) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        if (!loadingRef.current && typeof handleSaveAndPrintRef.current === 'function') {
+          handleSaveAndPrintRef.current(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown, true);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown, true);
+  }, []);
+
+  useEffect(() => {
+    setActiveStockSugIdx(0);
+  }, [stockQuery, stockSuggestions]);
+
+  useEffect(() => {
+    if (stockDropdownOpen && stockSuggestions.length > 0) {
+      const activeEl = document.querySelector(`[data-stockout-sug-idx="${activeStockSugIdx}"]`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [activeStockSugIdx, stockDropdownOpen, stockSuggestions]);
 
   // Edit item state
   const [editingItem, setEditingItem] = useState(null);
@@ -64,14 +109,6 @@ const Stockout = () => {
   const editStockAutocompleteRef = useRef(null);
 
   const accessToken = getToken();
-
-  const stockSuggestions = useMemo(() => {
-    const q = (stockQuery || '').trim().toLowerCase();
-    if (!q) return stocks.slice(0, 25);
-    return stocks.filter(
-      (s) => (s.productName || '').toLowerCase().includes(q) || (s.type || '').toLowerCase().includes(q)
-    ).slice(0, 25);
-  }, [stocks, stockQuery]);
 
   const editStockSuggestions = useMemo(() => {
     const q = (editStockQuery || '').trim().toLowerCase();
@@ -716,13 +753,31 @@ const Stockout = () => {
                     }}
                     onFocus={() => setStockDropdownOpen(true)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (!stockDropdownOpen) setStockDropdownOpen(true);
+                        else {
+                          setActiveStockSugIdx(prev => Math.min(prev + 1, stockSuggestions.length - 1));
+                        }
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (!stockDropdownOpen) setStockDropdownOpen(true);
+                        else {
+                          setActiveStockSugIdx(prev => Math.max(prev - 1, 0));
+                        }
+                      } else if (e.key === 'Enter') {
+                        if (stockDropdownOpen && stockSuggestions.length > 0) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const item = stockSuggestions[activeStockSugIdx] || stockSuggestions[0];
+                          if (item) handleSelectStock(item);
+                        }
+                      } else if (e.key === 'Escape') {
+                        e.preventDefault();
                         setStockDropdownOpen(false);
                         if (!formData.stockId) setStockQuery('');
-                      }
-                      if (e.key === 'Enter' && stockSuggestions.length > 0 && !formData.stockId) {
-                        e.preventDefault();
-                        handleSelectStock(stockSuggestions[0]);
+                      } else if (e.key === 'Tab') {
+                        setStockDropdownOpen(false);
                       }
                     }}
                     placeholder="Type product name..."
@@ -748,14 +803,18 @@ const Stockout = () => {
                           stocks.length === 0 ? (
                             <div className="px-3 py-4 text-sm text-gray-500">No stock available.</div>
                           ) : stockSuggestions.length === 0 ? (
-                            <div className="px-3 py-4 text-sm text-gray-500">No matching products.</div>
+                            <div className="px-3 py-4 text-sm text-gray-500 font-medium">No products found</div>
                           ) : (
-                            stockSuggestions.map((stock) => (
+                            stockSuggestions.map((stock, index) => (
                               <button
                                 key={stock._id}
                                 type="button"
-                                className="w-full px-3 py-2.5 text-left text-sm hover:bg-red-50 flex flex-col gap-0.5 border-b border-gray-50 last:border-0"
+                                data-stockout-sug-idx={index}
+                                className={`w-full px-3 py-2.5 text-left text-sm flex flex-col gap-0.5 border-b border-gray-50 last:border-0 ${
+                                  index === activeStockSugIdx ? 'bg-red-100 text-red-900 border-l-4 border-red-600 font-semibold' : 'hover:bg-red-50'
+                                }`}
                                 onClick={() => handleSelectStock(stock)}
+                                onMouseEnter={() => setActiveStockSugIdx(index)}
                               >
                                 <span className="font-medium text-gray-900">
                                   {stock.productName} | {stock.companyName || 'N/A'} | {stock.unit || 'N/A'}
