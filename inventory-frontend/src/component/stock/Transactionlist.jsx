@@ -22,7 +22,7 @@ const Transactionlist = () => {
   const [alert, setAlert] = useState({ show: false, message: '', type: '' });
   const [filterType, setFilterType] = useState('all'); // 'all', 'in', 'out', 'adjustment'
   const [sortBy, setSortBy] = useState('date'); // 'date', 'quantity', 'value'
-  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' = oldest first so Running Balance runs top-to-bottom
+  const [sortOrder, setSortOrder] = useState('desc'); // 'desc' = newest first so latest transaction appears at top
   const [searchQuery, setSearchQuery] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [productName, setProductName] = useState('');
@@ -254,9 +254,11 @@ const Transactionlist = () => {
   };
 
   const exportToExcel = () => {
-    const fullList = getFullListByDate();
-    const excelBalanceMap = buildBalanceMap(fullList);
-    const exportData = fullList.map((item, index) => ({
+    const listToExport = transactionsWithBalance.length > 0 ? transactionsWithBalance : fullByDateAsc.map((t) => ({
+      ...t,
+      runningBalance: balanceMap.get(getTransactionId(t)) ?? getStoredRunningBalance(t) ?? 0,
+    }));
+    const exportData = listToExport.map((item, index) => ({
       'SI No': index + 1,
       'Doc Type': getDocType(item),
       'Doc Code': item.docNo || '',
@@ -267,7 +269,7 @@ const Transactionlist = () => {
       'Transaction Type': item.transactionType || (getTransactionDelta(item) >= 0 ? 'IN' : 'OUT'),
       'Receipt': getTransactionDelta(item) > 0 ? Math.abs(getTransactionDelta(item)) : '',
       'Issue': getTransactionDelta(item) < 0 ? Math.abs(getTransactionDelta(item)) : '',
-      'Current Stock Balance': excelBalanceMap.get(getTransactionId(item)) ?? '',
+      'Current Stock Balance': item.runningBalance ?? '',
       'User': item.userName || '',
       'Reference/Remarks': item.remarks || '',
       'Rate': (item.type === 'in' ? (item.purchasingPrice ?? 0) : (item.sellingPrice ?? 0)).toFixed(2),
