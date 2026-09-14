@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import { getToken, getUserInfo } from '../../utils/auth';
-import { FileText, ArrowDownToLine, ArrowUpFromLine, Calendar, PieChart } from 'lucide-react';
+import { FileText, ArrowDownToLine, ArrowUpFromLine, Calendar, PieChart, Calculator } from 'lucide-react';
 import moment from 'moment';
 import * as XLSX from 'xlsx';
 import { saveAs } from '../../utils/fileDownload';
@@ -12,6 +13,7 @@ import StockOutReport from './StockOutReport';
 import MonthlyReport from './MonthlyReport';
 import SummaryReport from './SummaryReport';
 import StockAdjustmentHistoryReport from './StockAdjustmentHistoryReport';
+import AveragePriceReport from './AveragePriceReport';
 import './Reports.css';
 
 applyPlugin(jsPDF);
@@ -21,6 +23,7 @@ const TAB_STOCK_OUT = 'stockout';
 const TAB_MONTHLY = 'monthly';
 const TAB_SUMMARY = 'summary';
 const TAB_STOCK_ADJUSTMENT_HISTORY = 'stock-adjustment-history';
+const TAB_AVERAGE_PRICE = 'average-price';
 
 const CHART_BAR = 'bar';
 const CHART_LINE = 'line';
@@ -41,6 +44,7 @@ const getDatePresets = () => {
 const isUserRole = () => (getUserInfo()?.role || '').toLowerCase() === 'user';
 
 const Reports = () => {
+  const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(TAB_STOCK_IN);
   const isAdmin = useMemo(
     () => (getUserInfo()?.role || '').toLowerCase() === 'admin',
@@ -87,12 +91,32 @@ const Reports = () => {
   const [stockAdjustmentHistoryFilters, setStockAdjustmentHistoryFilters] = useState({ date: '', docNo: '', productId: [] });
   const [stockAdjustmentHistoryPage, setStockAdjustmentHistoryPage] = useState(1);
   const [stockAdjustmentHistoryPageSize, setStockAdjustmentHistoryPageSize] = useState(25);
+
+  const [averagePriceData, setAveragePriceData] = useState([]);
+
   const accessToken = getToken();
   const datePresets = getDatePresets();
   const yearOptions = useMemo(() => {
     const current = moment().year();
     return Array.from({ length: 11 }, (_, i) => current - 5 + i);
   }, []);
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam === TAB_AVERAGE_PRICE) {
+      setActiveTab(TAB_AVERAGE_PRICE);
+    } else if (tabParam === TAB_STOCK_IN) {
+      setActiveTab(TAB_STOCK_IN);
+    } else if (tabParam === TAB_STOCK_OUT) {
+      setActiveTab(TAB_STOCK_OUT);
+    } else if (tabParam === TAB_MONTHLY) {
+      setActiveTab(TAB_MONTHLY);
+    } else if (tabParam === TAB_SUMMARY) {
+      setActiveTab(TAB_SUMMARY);
+    } else if (tabParam === TAB_STOCK_ADJUSTMENT_HISTORY && !isUserRole()) {
+      setActiveTab(TAB_STOCK_ADJUSTMENT_HISTORY);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (isUserRole() && activeTab === TAB_STOCK_ADJUSTMENT_HISTORY) {
@@ -318,6 +342,27 @@ const Reports = () => {
       });
   };
 
+  const fetchAveragePriceReport = () => {
+    setLoading(true);
+    axios.post(`${process.env.REACT_APP_DEVELOPMENT}/api/report/getAveragePriceReport`, {}, { headers: { token: accessToken } })
+      .then((res) => {
+        setAveragePriceData(res.data.result || []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Error fetching average price report:', err);
+        showAlert('Failed to load average price report', 'error');
+        setLoading(false);
+      });
+  };
+
+  useEffect(() => {
+    if (activeTab === TAB_AVERAGE_PRICE) {
+      fetchAveragePriceReport();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   const stockInKpis = useMemo(() => {
     const totalQty = stockInData.reduce((s, r) => s + (r.quantity ?? 0), 0);
     const totalVal = stockInData.reduce((s, r) => s + (r.quantity ?? 0) * (r.purchasingPrice ?? 0), 0);
@@ -489,6 +534,58 @@ const Reports = () => {
     }
     doc.autoTable({ head: headers, body: tableData, startY: 22, styles: { fontSize: 8 } });
     doc.save(`stock-out-report-${moment().format('YYYY-MM-DD')}.pdf`);
+    showAlert('PDF exported', 'success');
+  };
+
+  const exportAveragePriceExcel = (dataToExport) => {
+    const list = dataToExport && dataToExport.length > 0 ? dataToExport : averagePriceData;
+    if (list.length === 0) {
+      showAlert('No data to export', 'error');
+      return;
+    }
+    const rows = list.map((row, i) => ({
+      '#': i + 1,
+      'Product Name': row.productName || '',
+      'Company Name': row.companyName || '',
+      'Unit': row.unit || '',
+      'Total Quantity': row.totalQuantity ?? 0,
+      'Average Purchase Price': (row.averagePurchasePrice ?? row.exactAveragePrice ?? 0).toFixed(2),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Average Price Report');
+    saveAs(
+      new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+      `average-price-report-${moment().format('YYYY-MM-DD')}.xlsx`
+    );
+    showAlert('Excel exported', 'success');
+  };
+
+  const exportAveragePricePdf = (dataToExport) => {
+    const list = dataToExport && dataToExport.length > 0 ? dataToExport : averagePriceData;
+    if (list.length === 0) {
+      showAlert('No data to export', 'error');
+      return;
+    }
+    const doc = new jsPDF({ orientation: 'portrait' });
+    doc.setFontSize(14);
+    doc.text('Average Purchase Price Report', 14, 15);
+    const tableData = list.map((row, i) => [
+      i + 1,
+      row.productName || '',
+      row.companyName || '',
+      row.totalQuantity ?? 0,
+      `$${(row.averagePurchasePrice ?? row.exactAveragePrice ?? 0).toFixed(2)}`,
+    ]);
+    doc.autoTable({
+      head: [['#', 'Product Name', 'Company', 'Total Qty', 'Avg Purchase Price']],
+      body: tableData,
+      startY: 22,
+      styles: { fontSize: 9 },
+    });
+    doc.save(`average-price-report-${moment().format('YYYY-MM-DD')}.pdf`);
     showAlert('PDF exported', 'success');
   };
 
@@ -946,6 +1043,7 @@ const Reports = () => {
       { id: TAB_MONTHLY, label: 'Monthly Report', icon: <Calendar className="h-4 w-4" /> },
       { id: TAB_SUMMARY, label: 'Summary Report', icon: <PieChart className="h-4 w-4" /> },
       { id: TAB_STOCK_ADJUSTMENT_HISTORY, label: 'Stock Adjustment History', icon: <FileText className="h-4 w-4" /> },
+      { id: TAB_AVERAGE_PRICE, label: 'Average Price', icon: <Calculator className="h-4 w-4" /> },
     ];
     if (isUserRole()) {
       return allTabs.filter((t) => t.id !== TAB_STOCK_ADJUSTMENT_HISTORY);
@@ -1116,6 +1214,17 @@ const Reports = () => {
             setPage={setStockAdjustmentHistoryPage}
             pageSize={stockAdjustmentHistoryPageSize}
             setPageSize={setStockAdjustmentHistoryPageSize}
+          />
+        )}
+
+        {activeTab === TAB_AVERAGE_PRICE && (
+          <AveragePriceReport
+            data={averagePriceData}
+            loading={loading}
+            onFetch={fetchAveragePriceReport}
+            onExportExcel={exportAveragePriceExcel}
+            onExportPdf={exportAveragePricePdf}
+            onPrint={handlePrint}
           />
         )}
 

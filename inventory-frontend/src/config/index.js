@@ -38,6 +38,7 @@ export const API_ENDPOINTS = {
     monthlySummarized: '/api/report/getMonthlySummarizedReport',
     monthlyIssued: '/api/report/getMonthlyIssuedReport',
     summary: '/api/report/getSummaryReport',
+    averagePrice: '/api/report/getAveragePriceReport',
   },
   stockIn: {
     byDocNo: '/api/stockIn/getStockInByDocNo',

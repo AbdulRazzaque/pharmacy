@@ -11,5 +11,6 @@ router.post('/getMonthlySummarizedReport', isUserAuth, reportController.getMonth
 router.post('/getMonthlyIssuedReport', isUserAuth, reportController.getMonthlyIssuedReport);
 router.post('/getSummaryReport', isUserAuth, reportController.getSummaryReport);
 router.post('/getStockAdjustmentHistory', isUserAuth, reportController.getStockAdjustmentHistory);
+router.post('/getAveragePriceReport', isUserAuth, reportController.getAveragePriceReport);
 
 module.exports = router;

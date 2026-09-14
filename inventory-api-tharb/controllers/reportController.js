@@ -475,6 +475,103 @@ const reportController = {
             console.error("getStockAdjustmentHistory error:", err);
             return res.status(500).json({ msg: "error", result: err.message });
         }
+    },
+
+    async getAveragePriceReport(req, res) {
+        try {
+            const products = await Product.find({}).sort({ name: 1 }).lean();
+            const txns = await InventoryTransaction.find({ transactionType: 'STOCK_IN' })
+                .sort({ date: 1, createdAt: 1 })
+                .lean();
+
+            // Resolve suppliers for StockIn transactions
+            const headers = await StockInHeader.find({})
+                .populate("supplier", "name supplierName companyName")
+                .lean();
+
+            const supplierMapByDocNo = new Map();
+            const supplierMapByHeaderId = new Map();
+            headers.forEach(h => {
+                if (h.supplier) {
+                    if (h.docNo) supplierMapByDocNo.set(Number(h.docNo), h.supplier);
+                    supplierMapByHeaderId.set(String(h._id), h.supplier);
+                }
+            });
+
+            const itemIds = txns.map(t => t.referenceId).filter(Boolean);
+            const stockInItems = await StockInItem.find({ _id: { $in: itemIds } })
+                .populate("supplier", "name supplierName companyName")
+                .lean();
+            const itemMap = new Map();
+            const itemHeaderMap = new Map();
+            stockInItems.forEach(item => {
+                itemMap.set(String(item._id), item);
+                if (item.stockInHeaderId) {
+                    itemHeaderMap.set(String(item._id), String(item.stockInHeaderId));
+                }
+            });
+
+            const productTotalsMap = new Map();
+            txns.forEach((t) => {
+                const pId = String(t.productId);
+                const qty = Math.abs(t.quantityDelta || t.quantity || 0);
+                const price = Number(t.unitCost || 0);
+
+                let suppObj = null;
+                if (t.referenceId) {
+                    const item = itemMap.get(String(t.referenceId));
+                    if (item && item.supplier) suppObj = item.supplier;
+                }
+                if (!suppObj && t.docNo) {
+                    suppObj = supplierMapByDocNo.get(Number(t.docNo));
+                }
+                if (!suppObj && t.referenceId) {
+                    const hId = itemHeaderMap.get(String(t.referenceId));
+                    if (hId) suppObj = supplierMapByHeaderId.get(hId);
+                }
+                const supplierName = suppObj?.name || suppObj?.supplierName || suppObj?.companyName || 'N/A';
+
+                if (!productTotalsMap.has(pId)) {
+                    productTotalsMap.set(pId, { totalQty: 0, totalVal: 0, history: [] });
+                }
+                const entry = productTotalsMap.get(pId);
+                entry.totalQty += qty;
+                entry.totalVal += (qty * price);
+                entry.history.push({
+                    _id: t._id,
+                    docNo: t.docNo || '',
+                    date: t.date || t.createdAt,
+                    supplierName: supplierName,
+                    purchasingPrice: price,
+                    quantity: qty,
+                    totalValue: qty * price
+                });
+            });
+
+            const rows = products.map((p) => {
+                const pId = String(p._id);
+                const totals = productTotalsMap.get(pId) || { totalQty: 0, totalVal: 0, history: [] };
+                const totalQuantity = totals.totalQty;
+                const averagePurchasePrice = totalQuantity > 0 ? (totals.totalVal / totalQuantity) : 0;
+
+                return {
+                    _id: p._id,
+                    productName: p.name || '',
+                    companyName: p.companyName || '',
+                    unit: p.unit || '',
+                    totalQuantity: totalQuantity,
+                    averagePurchasePrice: Number(averagePurchasePrice.toFixed(2)),
+                    exactAveragePrice: averagePurchasePrice,
+                    totalPurchaseValue: totals.totalVal,
+                    history: totals.history
+                };
+            });
+
+            return res.status(200).json({ msg: "success", result: rows });
+        } catch (err) {
+            console.error("getAveragePriceReport error:", err);
+            return res.status(500).json({ msg: "error", error: err.message });
+        }
     }
 };
 
