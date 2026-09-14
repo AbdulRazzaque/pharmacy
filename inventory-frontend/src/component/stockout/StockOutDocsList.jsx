@@ -5,7 +5,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { Search, FileText, Calendar, User, Package, Hash, Eye, Edit, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Search, FileText, Calendar, User, Package, Hash, Eye, Edit, X, CheckCircle2, AlertCircle, MapPin } from 'lucide-react';
 import moment from 'moment';
 import { getToken } from '../../utils/auth';
 
@@ -57,9 +57,14 @@ const StockOutDocsList = () => {
     } else {
       const q = searchQuery.toLowerCase();
       const filtered = docs.filter(
-        d =>
-          d.docNo.toString().includes(q) ||
-          (d.createdBy?.userName || '').toLowerCase().includes(q)
+        d => {
+          const locName = d.location?.name || (typeof d.location === 'string' ? d.location : '') || d.items?.[0]?.location?.name || '';
+          return (
+            d.docNo.toString().includes(q) ||
+            (d.createdBy?.userName || '').toLowerCase().includes(q) ||
+            locName.toLowerCase().includes(q)
+          );
+        }
       );
       setFilteredDocs(filtered);
     }
@@ -181,7 +186,7 @@ const StockOutDocsList = () => {
           <div className="relative">
             <Input
               icon={Search}
-              placeholder="Search by Document Number or Creator..."
+              placeholder="Search by Document Number, Location, or Creator..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               clearable
@@ -209,6 +214,7 @@ const StockOutDocsList = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="font-semibold">Document Number</TableHead>
+                    <TableHead className="font-semibold">Location</TableHead>
                     <TableHead className="font-semibold">Date Created</TableHead>
                     <TableHead className="font-semibold">Created By</TableHead>
                     <TableHead className="font-semibold text-right">Distinct Products</TableHead>
@@ -221,6 +227,7 @@ const StockOutDocsList = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredDocs.map((doc) => {
+                    const locName = doc.location?.name || (typeof doc.location === 'string' ? doc.location : '') || doc.items?.[0]?.location?.name || '-';
                     const subTotal = doc.subTotal !== undefined ? doc.subTotal : (doc.items || []).reduce((s, i) => s + (i.quantity * i.sellingPrice), 0);
                     const totalDisc = doc.totalDiscount !== undefined ? doc.totalDiscount : (doc.items || []).reduce((s, i) => s + (i.discountAmount || 0), 0);
                     const grandTotal = doc.grandTotal !== undefined ? doc.grandTotal : (subTotal - totalDisc);
@@ -229,6 +236,12 @@ const StockOutDocsList = () => {
                       <TableRow key={doc.docNo} className="hover:bg-slate-50/50">
                         <TableCell className="font-medium text-blue-600">
                           Doc #{doc.docNo}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-gray-700 font-medium">
+                            <MapPin className="h-4 w-4 text-blue-500" />
+                            {locName}
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5 text-gray-700 font-medium">

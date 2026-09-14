@@ -5,7 +5,7 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { Search, FileText, Calendar, User, Package, Hash, Eye } from 'lucide-react';
+import { Search, FileText, Calendar, User, Package, Hash, Eye, Building2 } from 'lucide-react';
 import moment from 'moment';
 import { getToken } from '../../utils/auth';
 
@@ -50,9 +50,14 @@ const StockInDocsList = () => {
     } else {
       const q = searchQuery.toLowerCase();
       const filtered = docs.filter(
-        d =>
-          d.docNo.toString().includes(q) ||
-          (d.createdBy?.userName || '').toLowerCase().includes(q)
+        d => {
+          const suppName = d.supplier?.name || (typeof d.supplier === 'string' ? d.supplier : '') || d.items?.[0]?.supplier?.name || '';
+          return (
+            d.docNo.toString().includes(q) ||
+            (d.createdBy?.userName || '').toLowerCase().includes(q) ||
+            suppName.toLowerCase().includes(q)
+          );
+        }
       );
       setFilteredDocs(filtered);
     }
@@ -118,7 +123,7 @@ const StockInDocsList = () => {
           <div className="relative">
             <Input
               icon={Search}
-              placeholder="Search by Document Number or Creator..."
+              placeholder="Search by Document Number, Supplier Name, or Creator..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               clearable
@@ -146,6 +151,7 @@ const StockInDocsList = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead className="font-semibold">Document Number</TableHead>
+                    <TableHead className="font-semibold">Supplier Name</TableHead>
                     <TableHead className="font-semibold">Date Created</TableHead>
                     <TableHead className="font-semibold">Created By</TableHead>
                     <TableHead className="font-semibold text-right">Distinct Products</TableHead>
@@ -154,42 +160,51 @@ const StockInDocsList = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredDocs.map((doc) => (
-                    <TableRow key={doc.docNo} className="hover:bg-slate-50/50">
-                      <TableCell className="font-medium text-blue-600">
-                        Doc #{doc.docNo}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-gray-600">
-                          <Calendar className="h-4 w-4 text-gray-400" />
-                          {moment(doc.createdAt).format('DD/MM/YYYY hh:mm A')}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5 text-gray-600">
-                          <User className="h-4 w-4 text-gray-400" />
-                          {doc.createdBy?.userName || 'System'}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {doc.totalProducts}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-emerald-600">
-                        {doc.totalQuantity}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => navigate(`/dashboard/stockin-docs/${doc.docNo}`)}
-                          className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                        >
-                          <Eye className="mr-1 h-3.5 w-3.5" />
-                          Excel Edit
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {filteredDocs.map((doc) => {
+                    const suppName = doc.supplier?.name || (typeof doc.supplier === 'string' ? doc.supplier : '') || doc.items?.[0]?.supplier?.name || '-';
+                    return (
+                      <TableRow key={doc.docNo} className="hover:bg-slate-50/50">
+                        <TableCell className="font-medium text-blue-600">
+                          Doc #{doc.docNo}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-gray-700 font-medium">
+                            <Building2 className="h-4 w-4 text-blue-500" />
+                            {suppName}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-gray-600">
+                            <Calendar className="h-4 w-4 text-gray-400" />
+                            {moment(doc.createdAt).format('DD/MM/YYYY hh:mm A')}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1.5 text-gray-600">
+                            <User className="h-4 w-4 text-gray-400" />
+                            {doc.createdBy?.userName || 'System'}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {doc.totalProducts}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold text-emerald-600">
+                          {doc.totalQuantity}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => navigate(`/dashboard/stockin-docs/${doc.docNo}`)}
+                            className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                          >
+                            <Eye className="mr-1 h-3.5 w-3.5" />
+                            Excel Edit
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>
