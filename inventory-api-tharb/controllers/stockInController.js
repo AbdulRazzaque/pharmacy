@@ -128,6 +128,7 @@ const updateStockBalanceAndTransaction = async ({
 
 const updateStockInItemHelper = async ({
     item,
+    productId,
     quantity,
     purchasingPrice,
     sellingPrice,
@@ -137,7 +138,10 @@ const updateStockInItemHelper = async ({
     reqUser,
     session = null
 }) => {
-    const productId = item.productId;
+    const oldProductId = String(item.productId?._id || item.productId);
+    const newProductId = (productId && String(productId) !== '') ? String(productId) : oldProductId;
+    const productChanged = oldProductId !== newProductId;
+
     const oldQty = Number(item.quantity || 0);
     const oldExpiry = item.expiry ? new Date(item.expiry) : null;
 
@@ -151,11 +155,11 @@ const updateStockInItemHelper = async ({
     const qtyChanged = oldQty !== newQty;
     const priceChanged = item.purchasingPrice !== newPurchasingPrice || item.sellingPrice !== newSellingPrice;
 
-    if (expiryChanged || qtyChanged || priceChanged || remarks !== undefined) {
-        // 1. Deduct old quantity from old StockBalance batch
+    if (productChanged || expiryChanged || qtyChanged || priceChanged || remarks !== undefined) {
+        // 1. Deduct old quantity from old product/expiry StockBalance batch
         if (oldExpiry) {
             let oldBalance = await StockBalance.findOne({
-                productId,
+                productId: oldProductId,
                 expiry: oldExpiry
             }).session(session);
             if (oldBalance) {
@@ -164,15 +168,15 @@ const updateStockInItemHelper = async ({
             }
         }
 
-        // 2. Find or create StockBalance for new expiry date
+        // 2. Find or create StockBalance for new product and new expiry date
         let newBalance = await StockBalance.findOne({
-            productId,
+            productId: newProductId,
             expiry: newExpiry
         }).session(session);
 
         if (!newBalance) {
             newBalance = new StockBalance({
-                productId,
+                productId: newProductId,
                 expiry: newExpiry,
                 batchNumber: item.batchNumber || "",
                 quantity: newQty,
@@ -191,6 +195,7 @@ const updateStockInItemHelper = async ({
             { referenceId: item._id },
             {
                 $set: {
+                    productId: newProductId,
                     expiry: newExpiry,
                     quantityDelta: newQty,
                     unitCost: newPurchasingPrice,
@@ -203,25 +208,26 @@ const updateStockInItemHelper = async ({
 
         // 4. Synchronize selling price across Product, StockBalance, StockOutItem & InventoryTransaction records for this batch
         if (priceChanged && newSellingPrice > 0) {
-            await Product.findByIdAndUpdate(productId, { sellingPrice: newSellingPrice }, session ? { session } : {});
+            await Product.findByIdAndUpdate(newProductId, { sellingPrice: newSellingPrice }, session ? { session } : {});
             await StockBalance.updateMany(
-                { productId },
+                { productId: newProductId },
                 { $set: { sellingPrice: newSellingPrice } },
                 session ? { session } : {}
             );
             await StockOutItem.updateMany(
-                { productId, expiry: newExpiry },
+                { productId: newProductId, expiry: newExpiry },
                 { $set: { sellingPrice: newSellingPrice } },
                 session ? { session } : {}
             );
             await InventoryTransaction.updateMany(
-                { productId, expiry: newExpiry },
+                { productId: newProductId, expiry: newExpiry },
                 { $set: { sellingPrice: newSellingPrice } },
                 session ? { session } : {}
             );
         }
 
         // 5. Update StockInItem record
+        item.productId = newProductId;
         item.quantity = newQty;
         item.expiry = newExpiry;
         item.purchasingPrice = newPurchasingPrice;
@@ -229,8 +235,11 @@ const updateStockInItemHelper = async ({
         item.remarks = newRemarks;
         await item.save(session ? { session } : {});
 
-        // 6. Recalculate running balances for this product
-        await recalculateRunningBalances(productId, session);
+        // 6. Recalculate running balances
+        if (productChanged) {
+            await recalculateRunningBalances(oldProductId, session);
+        }
+        await recalculateRunningBalances(newProductId, session);
     }
 };
 
@@ -499,6 +508,7 @@ const stockInController = {
                     supplier: item.supplier || header.supplier,
                     supplierDocNo: item.supplierDocNo || header.supplierDocNo || "",
                     product: item.productId,
+                    productId: item.productId?._id || item.productId,
                     quantity: item.quantity,
                     unit: item.unit || item.productId?.unit || "",
                     purchasingPrice: item.purchasingPrice,
@@ -649,6 +659,7 @@ const stockInController = {
                     } else {
                         await updateStockInItemHelper({
                             item,
+                            productId: productId || update.product?._id || update.product,
                             quantity,
                             purchasingPrice,
                             sellingPrice,

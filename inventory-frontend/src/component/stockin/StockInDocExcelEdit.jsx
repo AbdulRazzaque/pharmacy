@@ -202,10 +202,10 @@ const StockInDocExcelEdit = () => {
   };
 
   // Handle cell values edits
-  const handleCellChange = (rowIndex, colKey, value) => {
+  const handleCellChange = (rowId, colKey, value) => {
     const updated = [...items];
-    const targetIdx = items.indexOf(activeItems[rowIndex]);
-    const rowId = updated[targetIdx]._id;
+    const targetIdx = items.findIndex(item => item._id === rowId);
+    if (targetIdx === -1) return;
     updated[targetIdx][colKey] = value;
     setItems(updated);
 
@@ -237,7 +237,7 @@ const StockInDocExcelEdit = () => {
     });
 
     // Check if row changed from original
-    const original = originalItems[targetIdx];
+    const original = originalItems.find(item => item._id === rowId);
     let rowChanged = false;
     if (!original) {
       rowChanged = true;
@@ -262,16 +262,21 @@ const StockInDocExcelEdit = () => {
   };
 
   // Product selection from dropdown
-  const handleProductChange = (rowIndex, product) => {
+  const handleProductChange = (rowId, product) => {
     const updated = [...items];
-    const targetIdx = items.indexOf(activeItems[rowIndex]);
+    const targetIdx = items.findIndex(item => item._id === rowId);
     if (targetIdx === -1) return;
-    const rowId = updated[targetIdx]._id;
 
     updated[targetIdx].productId = product._id;
     updated[targetIdx].name = product.name;
     updated[targetIdx].companyName = product.companyName || '-';
     updated[targetIdx].unit = product.unit || '-';
+    if ((!updated[targetIdx].purchasingPrice || Number(updated[targetIdx].purchasingPrice) === 0) && product.purchasingPrice) {
+      updated[targetIdx].purchasingPrice = product.purchasingPrice;
+    }
+    if ((!updated[targetIdx].sellingPrice || Number(updated[targetIdx].sellingPrice) === 0) && product.sellingPrice) {
+      updated[targetIdx].sellingPrice = product.sellingPrice;
+    }
     setItems(updated);
 
     setDirtyRows(prev => ({
@@ -281,24 +286,24 @@ const StockInDocExcelEdit = () => {
   };
 
   // Delete Confirm Triggers
-  const triggerDelete = (rowIndex) => {
-    setRowIdxToDelete(rowIndex);
+  const triggerDelete = (rowId) => {
+    setRowIdxToDelete(rowId);
     setShowDeleteModal(true);
   };
 
   const confirmDelete = () => {
     if (rowIdxToDelete !== null) {
       const updated = [...items];
-      const targetIdx = items.indexOf(activeItems[rowIdxToDelete]);
-      const rowId = updated[targetIdx]._id;
+      const targetIdx = items.findIndex(item => item._id === rowIdxToDelete);
+      if (targetIdx !== -1) {
+        updated[targetIdx].isDeleted = true;
+        setItems(updated);
 
-      updated[targetIdx].isDeleted = true;
-      setItems(updated);
-
-      setDirtyRows(prev => ({
-        ...prev,
-        [rowId]: true
-      }));
+        setDirtyRows(prev => ({
+          ...prev,
+          [rowIdxToDelete]: true
+        }));
+      }
     }
     setShowDeleteModal(false);
     setRowIdxToDelete(null);
@@ -598,7 +603,7 @@ const StockInDocExcelEdit = () => {
                           <ProductDropdownCell
                             item={item}
                             allProducts={allProducts}
-                            onSelect={(product) => handleProductChange(globalIdx, product)}
+                            onSelect={(product) => handleProductChange(item._id, product)}
                             cellId={`cell-${globalIdx}-productId`}
                             accentColor="emerald"
                           />
@@ -616,7 +621,7 @@ const StockInDocExcelEdit = () => {
                             type="date"
                             value={item.expiry}
                             onKeyDown={(e) => handleKeyDown(e, globalIdx, 'expiry')}
-                            onChange={(e) => handleCellChange(globalIdx, 'expiry', e.target.value)}
+                            onChange={(e) => handleCellChange(item._id, 'expiry', e.target.value)}
                             className={`w-full h-8 px-2 border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all ${
                               validationErrors[item._id]?.expiry ? 'border-red-500 bg-red-50' : 'border-transparent'
                             }`}
@@ -628,7 +633,7 @@ const StockInDocExcelEdit = () => {
                             type="number"
                             value={item.quantity}
                             onKeyDown={(e) => handleKeyDown(e, globalIdx, 'quantity')}
-                            onChange={(e) => handleCellChange(globalIdx, 'quantity', e.target.value)}
+                            onChange={(e) => handleCellChange(item._id, 'quantity', e.target.value)}
                             className={`w-full h-8 px-2 text-right border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all font-semibold ${
                               validationErrors[item._id]?.quantity ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent text-gray-800'
                             }`}
@@ -642,7 +647,7 @@ const StockInDocExcelEdit = () => {
                               step="0.01"
                               value={item.purchasingPrice}
                               onKeyDown={(e) => handleKeyDown(e, globalIdx, 'purchasingPrice')}
-                              onChange={(e) => handleCellChange(globalIdx, 'purchasingPrice', e.target.value)}
+                              onChange={(e) => handleCellChange(item._id, 'purchasingPrice', e.target.value)}
                               className={`w-full h-8 px-2 text-right border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all ${
                                 validationErrors[item._id]?.purchasingPrice ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent text-gray-800'
                               }`}
@@ -657,7 +662,7 @@ const StockInDocExcelEdit = () => {
                               step="0.01"
                               value={item.sellingPrice}
                               onKeyDown={(e) => handleKeyDown(e, globalIdx, 'sellingPrice')}
-                              onChange={(e) => handleCellChange(globalIdx, 'sellingPrice', e.target.value)}
+                              onChange={(e) => handleCellChange(item._id, 'sellingPrice', e.target.value)}
                               className={`w-full h-8 px-2 text-right border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all ${
                                 validationErrors[item._id]?.sellingPrice ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent text-gray-800'
                               }`}
@@ -669,7 +674,7 @@ const StockInDocExcelEdit = () => {
                             id={`cell-${globalIdx}-supplier`}
                             value={item.supplier}
                             onKeyDown={(e) => handleKeyDown(e, globalIdx, 'supplier')}
-                            onChange={(e) => handleCellChange(globalIdx, 'supplier', e.target.value)}
+                            onChange={(e) => handleCellChange(item._id, 'supplier', e.target.value)}
                             className="w-full h-8 px-2 border-0 bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all cursor-pointer"
                           >
                             <option value="">Select Supplier</option>
@@ -697,7 +702,7 @@ const StockInDocExcelEdit = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => triggerDelete(globalIdx)}
+                            onClick={() => triggerDelete(item._id)}
                             className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
                             title="Delete row"
                           >

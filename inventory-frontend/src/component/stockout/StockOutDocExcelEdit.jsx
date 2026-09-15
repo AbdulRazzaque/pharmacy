@@ -60,7 +60,7 @@ const StockOutDocExcelEdit = () => {
 
   // Columns definition based on permissions
   const columns = useMemo(() => {
-    return ['productId', 'quantity', 'sellingPrice', 'discountPercentage', 'locationId'];
+    return ['productId', 'quantity', 'sellingPrice', 'discountPercentage', 'locationId', 'expiry'];
   }, []);
 
   const hasUnsavedChanges = useMemo(() => Object.keys(dirtyRows).length > 0 || docDateChanged, [dirtyRows, docDateChanged]);
@@ -204,7 +204,7 @@ const StockOutDocExcelEdit = () => {
         }
         // Map to format editable state and look up current available quantity
         const mapped = rawItems.map(item => {
-          const itemPId = String(item.productId?._id || item.productId || '');
+          const itemPId = String(item.productId?._id || item.product?._id || item.productId || item.product || '');
           const itemExpiry = item.expiry ? moment(item.expiry).format('YYYY-MM-DD') : '';
 
           const matchingStock = (stockMap ? Array.from(stockMap.values()) : []).find(s => {
@@ -220,13 +220,13 @@ const StockOutDocExcelEdit = () => {
 
           const resolvedCompanyName = (item.companyName && item.companyName !== '-')
             ? item.companyName
-            : (item.productId?.companyName || matchingStock?.companyName || '-');
+            : (item.productId?.companyName || item.product?.companyName || matchingStock?.companyName || '-');
 
           return {
             _id: item._id,
-            name: item.name || item.productId?.name || '',
+            name: item.name || item.productId?.name || item.product?.name || '',
             companyName: resolvedCompanyName,
-            unit: item.unit || item.productId?.unit || '-',
+            unit: item.unit || item.productId?.unit || item.product?.unit || '-',
             productId: itemPId,
             expiry: itemExpiry,
             quantity: currentItemQty,
@@ -299,10 +299,10 @@ const StockOutDocExcelEdit = () => {
   };
 
   // Handle cell values edits
-  const handleCellChange = (rowIndex, colKey, value) => {
+  const handleCellChange = (rowId, colKey, value) => {
     const updated = [...items];
-    const targetIdx = items.indexOf(activeItems[rowIndex]);
-    const rowId = updated[targetIdx]._id;
+    const targetIdx = items.findIndex(item => item._id === rowId);
+    if (targetIdx === -1) return;
     updated[targetIdx][colKey] = value;
     setItems(updated);
 
@@ -335,7 +335,7 @@ const StockOutDocExcelEdit = () => {
     });
 
     // Check if row changed from original
-    const original = originalItems[targetIdx];
+    const original = originalItems.find(item => item._id === rowId);
     let rowChanged = false;
     if (!original) {
       rowChanged = true;
@@ -361,11 +361,10 @@ const StockOutDocExcelEdit = () => {
 
   // Product selection from Stock Out inventory dropdown
   // Mirrors handleSelectStock in Stockout.jsx — fills ALL inventory-derived fields
-  const handleProductChange = (rowIndex, stockEntry) => {
+  const handleProductChange = (rowId, stockEntry) => {
     const updated = [...items];
-    const targetIdx = items.indexOf(activeItems[rowIndex]);
+    const targetIdx = items.findIndex(item => item._id === rowId);
     if (targetIdx === -1) return;
-    const rowId = updated[targetIdx]._id;
 
     updated[targetIdx].productId = stockEntry.productId;
     updated[targetIdx].stockId = stockEntry.stockId;   // needed by bulkUpdate to deduct correct batch
@@ -383,24 +382,24 @@ const StockOutDocExcelEdit = () => {
   };
 
   // Delete Confirm Triggers
-  const triggerDelete = (rowIndex) => {
-    setRowIdxToDelete(rowIndex);
+  const triggerDelete = (rowId) => {
+    setRowIdxToDelete(rowId);
     setShowDeleteModal(true);
   };
 
   const confirmDelete = () => {
     if (rowIdxToDelete !== null) {
       const updated = [...items];
-      const targetIdx = items.indexOf(activeItems[rowIdxToDelete]);
-      const rowId = updated[targetIdx]._id;
+      const targetIdx = items.findIndex(item => item._id === rowIdxToDelete);
+      if (targetIdx !== -1) {
+        updated[targetIdx].isDeleted = true;
+        setItems(updated);
 
-      updated[targetIdx].isDeleted = true;
-      setItems(updated);
-
-      setDirtyRows(prev => ({
-        ...prev,
-        [rowId]: true
-      }));
+        setDirtyRows(prev => ({
+          ...prev,
+          [rowIdxToDelete]: true
+        }));
+      }
     }
     setShowDeleteModal(false);
     setRowIdxToDelete(null);
@@ -899,7 +898,7 @@ const StockOutDocExcelEdit = () => {
                           <StockOutProductDropdownCell
                             item={item}
                             stocks={stocks}
-                            onSelect={(stockEntry) => handleProductChange(globalIdx, stockEntry)}
+                            onSelect={(stockEntry) => handleProductChange(item._id, stockEntry)}
                             cellId={`cell-${globalIdx}-productId`}
                           />
                         </td>
@@ -913,7 +912,7 @@ const StockOutDocExcelEdit = () => {
                             type="date"
                             value={item.expiry || ''}
                             onKeyDown={(e) => handleKeyDown(e, globalIdx, 'expiry')}
-                            onChange={(e) => handleCellChange(globalIdx, 'expiry', e.target.value)}
+                            onChange={(e) => handleCellChange(item._id, 'expiry', e.target.value)}
                             className="w-full h-8 px-2 border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all text-xs"
                           />
                         </td>
@@ -923,7 +922,7 @@ const StockOutDocExcelEdit = () => {
                             type="number"
                             value={item.quantity}
                             onKeyDown={(e) => handleKeyDown(e, globalIdx, 'quantity')}
-                            onChange={(e) => handleCellChange(globalIdx, 'quantity', e.target.value)}
+                            onChange={(e) => handleCellChange(item._id, 'quantity', e.target.value)}
                             className={`w-full h-8 px-2 text-right border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all font-semibold ${validationErrors[item._id]?.quantity ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent text-gray-800'
                               }`}
                           />
@@ -935,7 +934,7 @@ const StockOutDocExcelEdit = () => {
                             step="0.01"
                             value={item.sellingPrice}
                             onKeyDown={(e) => handleKeyDown(e, globalIdx, 'sellingPrice')}
-                            onChange={(e) => handleCellChange(globalIdx, 'sellingPrice', e.target.value)}
+                            onChange={(e) => handleCellChange(item._id, 'sellingPrice', e.target.value)}
                             className={`w-full h-8 px-2 text-right border bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all ${validationErrors[item._id]?.sellingPrice ? 'border-red-500 bg-red-50 text-red-700' : 'border-transparent text-gray-800'
                               }`}
                           />
@@ -952,7 +951,7 @@ const StockOutDocExcelEdit = () => {
                             step="any"
                             value={item.discountPercentage}
                             onKeyDown={(e) => handleKeyDown(e, globalIdx, 'discountPercentage')}
-                            onChange={(e) => handleCellChange(globalIdx, 'discountPercentage', e.target.value)}
+                            onChange={(e) => handleCellChange(item._id, 'discountPercentage', e.target.value)}
                             className={`w-full h-8 px-2 text-right border bg-orange-50/40 focus:bg-white focus:ring-2 focus:ring-orange-500 rounded focus:outline-none transition-all font-semibold text-orange-900 ${validationErrors[item._id]?.discountPercentage ? 'border-red-500 bg-red-50 text-red-700' : 'border-orange-200'
                               }`}
                             placeholder="0%"
@@ -969,7 +968,7 @@ const StockOutDocExcelEdit = () => {
                             id={`cell-${globalIdx}-locationId`}
                             value={item.locationId}
                             onKeyDown={(e) => handleKeyDown(e, globalIdx, 'locationId')}
-                            onChange={(e) => handleCellChange(globalIdx, 'locationId', e.target.value)}
+                            onChange={(e) => handleCellChange(item._id, 'locationId', e.target.value)}
                             className="w-full h-8 px-2 border-0 bg-transparent focus:bg-white focus:ring-2 focus:ring-blue-500 rounded focus:outline-none transition-all cursor-pointer"
                           >
                             <option value="">Select Location</option>
@@ -997,7 +996,7 @@ const StockOutDocExcelEdit = () => {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => triggerDelete(globalIdx)}
+                            onClick={() => triggerDelete(item._id)}
                             className="h-7 w-7 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
                             title="Delete row"
                           >

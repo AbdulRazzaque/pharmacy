@@ -319,7 +319,8 @@ const stockOutController = {
                         locationName: locationName,
                         doctorName: doctorName,
                         trainerName: trainerName,
-                        productId: item.productId,
+                        productId: item.productId?._id || item.productId,
+                        product: item.productId,
                         quantity: item.quantity,
                         unit: item.productId?.unit || "",
                         sellingPrice: item.sellingPrice,
@@ -643,30 +644,38 @@ const stockOutController = {
                     const item = await StockOutItem.findById(_id).session(session);
                     if (!item) continue;
 
-                    const pId = String(item.productId);
+                    const oldProductId = String(item.productId?._id || item.productId);
+                    const newProductId = String(targetProductId || oldProductId);
+                    const oldQty = Number(item.quantity || 0);
+                    const newQty = quantity !== undefined ? Number(quantity) : oldQty;
+                    const oldExpiry = item.expiry ? new Date(item.expiry) : null;
+                    const newExpiry = update.expiry ? new Date(update.expiry) : null;
+
+                    const productChanged = oldProductId !== newProductId;
+                    const expiryChanged = (oldExpiry ? oldExpiry.getTime() : null) !== (newExpiry ? newExpiry.getTime() : null);
 
                     // 2a. Delete item
                     if (isDeleted) {
                         let bal = null;
-                        if (item.expiry) {
+                        if (oldExpiry) {
                             bal = await StockBalance.findOne({
-                                productId: item.productId,
-                                expiry: item.expiry
+                                productId: oldProductId,
+                                expiry: oldExpiry
                             }).session(session);
                         }
                         if (!bal) {
-                            bal = await StockBalance.findOne({ productId: item.productId }).sort({ createdAt: -1 }).session(session);
+                            bal = await StockBalance.findOne({ productId: oldProductId }).sort({ createdAt: -1 }).session(session);
                         }
 
                         if (bal) {
-                            bal.quantity = (bal.quantity || 0) + (item.quantity || 0);
+                            bal.quantity = (bal.quantity || 0) + oldQty;
                             await bal.save(session ? { session } : {});
                         } else {
                             await StockBalance.create(
                                 [{
-                                    productId: item.productId,
-                                    expiry: item.expiry || null,
-                                    quantity: item.quantity || 0,
+                                    productId: oldProductId,
+                                    expiry: oldExpiry || null,
+                                    quantity: oldQty,
                                     purchasingPrice: item.purchasingPrice || 0,
                                     sellingPrice: item.sellingPrice || 0
                                 }],
@@ -680,60 +689,216 @@ const stockOutController = {
                         );
 
                         await StockOutItem.findByIdAndDelete(_id, session ? { session } : {});
-                        touchedProductIds.add(pId);
+                        touchedProductIds.add(oldProductId);
                     }
-                    // 2b. Update item
-                    else {
-                        const oldQty = Number(item.quantity || 0);
-                        const newQty = quantity !== undefined ? Number(quantity) : oldQty;
-                        const diff = newQty - oldQty;
+                    // 2b. Product Changed
+                    else if (productChanged) {
+                        // Return old product quantity to old product stock balance
+                        let oldBal = null;
+                        if (oldExpiry) {
+                            oldBal = await StockBalance.findOne({
+                                productId: oldProductId,
+                                expiry: oldExpiry
+                            }).session(session);
+                        }
+                        if (!oldBal) {
+                            oldBal = await StockBalance.findOne({ productId: oldProductId }).sort({ createdAt: -1 }).session(session);
+                        }
+                        if (oldBal) {
+                            oldBal.quantity = (oldBal.quantity || 0) + oldQty;
+                            await oldBal.save(session ? { session } : {});
+                        } else {
+                            await StockBalance.create(
+                                [{
+                                    productId: oldProductId,
+                                    expiry: oldExpiry || null,
+                                    quantity: oldQty,
+                                    purchasingPrice: item.purchasingPrice || 0,
+                                    sellingPrice: item.sellingPrice || 0
+                                }],
+                                session ? { session } : {}
+                            );
+                        }
+                        touchedProductIds.add(oldProductId);
 
-                        if (diff > 0) {
+                        // Deduct new product quantity from new product stock balance
+                        const productDoc = await Product.findById(newProductId).session(session);
+                        if (!productDoc) {
+                            throw new Error(`Product not found for ID: ${newProductId}`);
+                        }
+
+                        let deducted = 0;
+                        let targetPurchasingPrice = 0;
+                        let targetSellingPrice = Number(sellingPrice ?? productDoc.sellingPrice ?? 0);
+                        let actualExpiry = newExpiry;
+
+                        if (newExpiry) {
+                            let batchBal = await StockBalance.findOne({
+                                productId: mongoose.Types.ObjectId(newProductId),
+                                expiry: newExpiry,
+                                quantity: { $gte: newQty }
+                            }).session(session);
+
+                            if (batchBal) {
+                                batchBal.quantity -= newQty;
+                                targetPurchasingPrice = batchBal.purchasingPrice || 0;
+                                await batchBal.save(session ? { session } : {});
+                                deducted = newQty;
+                            }
+                        }
+
+                        if (deducted < newQty) {
+                            const needed = newQty - deducted;
                             const balances = await StockBalance.find({
-                                productId: mongoose.Types.ObjectId(pId),
+                                productId: mongoose.Types.ObjectId(newProductId),
                                 quantity: { $gt: 0 }
                             }).sort({ expiry: 1, createdAt: 1 }).session(session);
 
                             const totalAvailable = balances.reduce((sum, b) => sum + (b.quantity || 0), 0);
-                            if (totalAvailable < diff) {
-                                throw new Error(`Insufficient stock to increase quantity. Needed: ${diff}, Available: ${totalAvailable}`);
+                            if (totalAvailable < needed) {
+                                throw new Error(`Insufficient stock for "${productDoc.name}". Requested: ${newQty}, Available: ${totalAvailable + deducted}`);
                             }
 
-                            let remaining = diff;
-                            for (const bal of balances) {
+                            let remaining = needed;
+                            for (const b of balances) {
                                 if (remaining <= 0) break;
-                                const takeQty = Math.min(remaining, bal.quantity);
-                                bal.quantity -= takeQty;
-                                await bal.save(session ? { session } : {});
+                                const takeQty = Math.min(remaining, b.quantity);
+                                b.quantity -= takeQty;
+                                targetPurchasingPrice = b.purchasingPrice || targetPurchasingPrice;
+                                if (!actualExpiry) actualExpiry = b.expiry;
+                                await b.save(session ? { session } : {});
                                 remaining -= takeQty;
                             }
-                        } else if (diff < 0) {
-                            const returnQty = Math.abs(diff);
-                            let bal = null;
-                            if (item.expiry) {
-                                bal = await StockBalance.findOne({
-                                    productId: item.productId,
-                                    expiry: item.expiry
+                        }
+
+                        const itemDiscPct = Number(update.discountPercentage !== undefined ? update.discountPercentage : (item.discountPercentage || 0));
+                        if (isNaN(itemDiscPct) || itemDiscPct < 0 || itemDiscPct > 100) {
+                            throw new Error("Discount percentage must be between 0 and 100");
+                        }
+                        const itemPrice = Number(sellingPrice ?? targetSellingPrice ?? item.sellingPrice ?? 0);
+                        const itemTotal = Math.round((newQty * itemPrice) * 100) / 100;
+                        const discountAmount = Math.round((itemTotal * itemDiscPct / 100) * 100) / 100;
+                        const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
+
+                        item.productId = newProductId;
+                        item.quantity = newQty;
+                        item.sellingPrice = itemPrice;
+                        item.purchasingPrice = targetPurchasingPrice;
+                        item.expiry = actualExpiry;
+                        item.discountPercentage = itemDiscPct;
+                        item.discountAmount = discountAmount;
+                        item.itemTotal = itemTotal;
+                        item.netTotal = netTotal;
+                        if (remarks !== undefined) {
+                            item.remarks = remarks;
+                        }
+                        await item.save(session ? { session } : {});
+
+                        await InventoryTransaction.updateMany(
+                            { referenceId: item._id },
+                            {
+                                $set: {
+                                    productId: newProductId,
+                                    expiry: actualExpiry,
+                                    quantityDelta: -newQty,
+                                    sellingPrice: item.sellingPrice,
+                                    unitCost: item.purchasingPrice,
+                                    locationId: header.location || undefined
+                                }
+                            },
+                            session ? { session } : {}
+                        );
+
+                        touchedProductIds.add(newProductId);
+                    }
+                    // 2c. Same product, update quantity / expiry / pricing
+                    else {
+                        if (expiryChanged) {
+                            // Return old quantity to old expiry batch
+                            let oldBal = null;
+                            if (oldExpiry) {
+                                oldBal = await StockBalance.findOne({
+                                    productId: oldProductId,
+                                    expiry: oldExpiry
                                 }).session(session);
                             }
-                            if (!bal) {
-                                bal = await StockBalance.findOne({ productId: item.productId }).sort({ createdAt: -1 }).session(session);
+                            if (!oldBal) {
+                                oldBal = await StockBalance.findOne({ productId: oldProductId }).sort({ createdAt: -1 }).session(session);
+                            }
+                            if (oldBal) {
+                                oldBal.quantity = (oldBal.quantity || 0) + oldQty;
+                                await oldBal.save(session ? { session } : {});
                             }
 
-                            if (bal) {
-                                bal.quantity = (bal.quantity || 0) + returnQty;
-                                await bal.save(session ? { session } : {});
-                            } else {
-                                await StockBalance.create(
-                                    [{
+                            // Deduct new quantity from new expiry batch
+                            const balances = await StockBalance.find({
+                                productId: mongoose.Types.ObjectId(oldProductId),
+                                quantity: { $gt: 0 }
+                            }).sort({ expiry: 1, createdAt: 1 }).session(session);
+
+                            const totalAvailable = balances.reduce((sum, b) => sum + (b.quantity || 0), 0);
+                            if (totalAvailable < newQty) {
+                                throw new Error(`Insufficient stock for updated expiry batch. Requested: ${newQty}, Available: ${totalAvailable}`);
+                            }
+
+                            let remaining = newQty;
+                            for (const b of balances) {
+                                if (remaining <= 0) break;
+                                const takeQty = Math.min(remaining, b.quantity);
+                                b.quantity -= takeQty;
+                                await b.save(session ? { session } : {});
+                                remaining -= takeQty;
+                            }
+                            item.expiry = newExpiry;
+                        } else {
+                            const diff = newQty - oldQty;
+                            if (diff > 0) {
+                                const balances = await StockBalance.find({
+                                    productId: mongoose.Types.ObjectId(oldProductId),
+                                    quantity: { $gt: 0 }
+                                }).sort({ expiry: 1, createdAt: 1 }).session(session);
+
+                                const totalAvailable = balances.reduce((sum, b) => sum + (b.quantity || 0), 0);
+                                if (totalAvailable < diff) {
+                                    throw new Error(`Insufficient stock to increase quantity. Needed: ${diff}, Available: ${totalAvailable}`);
+                                }
+
+                                let remaining = diff;
+                                for (const bal of balances) {
+                                    if (remaining <= 0) break;
+                                    const takeQty = Math.min(remaining, bal.quantity);
+                                    bal.quantity -= takeQty;
+                                    await bal.save(session ? { session } : {});
+                                    remaining -= takeQty;
+                                }
+                            } else if (diff < 0) {
+                                const returnQty = Math.abs(diff);
+                                let bal = null;
+                                if (item.expiry) {
+                                    bal = await StockBalance.findOne({
                                         productId: item.productId,
-                                        expiry: item.expiry || null,
-                                        quantity: returnQty,
-                                        purchasingPrice: item.purchasingPrice || 0,
-                                        sellingPrice: item.sellingPrice || 0
-                                    }],
-                                    session ? { session } : {}
-                                );
+                                        expiry: item.expiry
+                                    }).session(session);
+                                }
+                                if (!bal) {
+                                    bal = await StockBalance.findOne({ productId: item.productId }).sort({ createdAt: -1 }).session(session);
+                                }
+
+                                if (bal) {
+                                    bal.quantity = (bal.quantity || 0) + returnQty;
+                                    await bal.save(session ? { session } : {});
+                                } else {
+                                    await StockBalance.create(
+                                        [{
+                                            productId: item.productId,
+                                            expiry: item.expiry || null,
+                                            quantity: returnQty,
+                                            purchasingPrice: item.purchasingPrice || 0,
+                                            sellingPrice: item.sellingPrice || 0
+                                        }],
+                                        session ? { session } : {}
+                                    );
+                                }
                             }
                         }
 
@@ -766,6 +931,7 @@ const stockOutController = {
                             { referenceId: item._id },
                             {
                                 $set: {
+                                    expiry: item.expiry,
                                     quantityDelta: -newQty,
                                     sellingPrice: item.sellingPrice,
                                     locationId: header.location || undefined
@@ -774,7 +940,7 @@ const stockOutController = {
                             session ? { session } : {}
                         );
 
-                        touchedProductIds.add(pId);
+                        touchedProductIds.add(oldProductId);
                     }
                 }
             }
