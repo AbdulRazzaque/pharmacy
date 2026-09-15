@@ -47,7 +47,7 @@ const reportController = {
 
     async getMonthlyReport(req, res) {
         try {
-            const { month, year, locationId, from, to, startDate, endDate } = req.body || {};
+            const { month, year, locationId, from, to, startDate, endDate, trainerName, trainerId, trainer, doctorName } = req.body || {};
             const filter = { transactionType: 'STOCK_OUT' };
 
             let start = null;
@@ -84,10 +84,38 @@ const reportController = {
                 .sort({ date: -1, createdAt: -1 })
                 .lean();
 
-            const rows = txns.map(t => {
+            // Fetch all locations for fallback resolution
+            const allLocations = await Location.find({}).lean();
+            const locationMap = new Map();
+            allLocations.forEach(loc => {
+                locationMap.set(String(loc._id), loc);
+            });
+
+            // Fetch StockOutPdf records for docNo level overrides/fallbacks
+            const StockOutPdf = require("../models/StockOutPdfModule");
+            const docNos = Array.from(new Set(txns.map(t => Number(t.docNo)).filter(Boolean)));
+            const pdfRecords = docNos.length > 0 
+                ? await StockOutPdf.find({ docNo: { $in: docNos } }).lean()
+                : [];
+            const pdfMap = new Map();
+            pdfRecords.forEach(pdf => {
+                if (pdf.docNo) {
+                    pdfMap.set(Number(pdf.docNo), pdf);
+                }
+            });
+
+            let rows = txns.map(t => {
                 const qty = Math.abs(t.quantityDelta || 0);
                 const rate = Number(t.sellingPrice || t.unitCost || 0);
-                const locObj = t.locationId || {};
+                const locObj = (t.locationId && typeof t.locationId === 'object') ? t.locationId : null;
+                const locIdStr = String(locObj?._id || t.locationId || '');
+                const fallbackLoc = locationMap.get(locIdStr) || null;
+                const pdfObj = t.docNo ? pdfMap.get(Number(t.docNo)) : null;
+
+                const resolvedLocationName = locObj?.name || fallbackLoc?.name || pdfObj?.locationName || 'Default Location';
+                const resolvedDoctorName = locObj?.doctorName || fallbackLoc?.doctorName || pdfObj?.veterinarian || '';
+                const resolvedTrainerName = locObj?.trainerName || fallbackLoc?.trainerName || pdfObj?.trainerName || '';
+
                 return {
                     _id: t._id,
                     docNo: t.docNo,
@@ -104,14 +132,32 @@ const reportController = {
                     sellingPrice: rate,
                     totalAmount: qty * rate,
                     total: qty * rate,
-                    location: locObj,
-                    locationId: String(locObj._id || 'default'),
-                    locationName: locObj.name || 'Default Location',
-                    doctorName: locObj.doctorName || '',
-                    trainerName: locObj.trainerName || '',
-                    remarks: t.remarks || ''
+                    location: locObj || fallbackLoc || { _id: locIdStr, name: resolvedLocationName, doctorName: resolvedDoctorName, trainerName: resolvedTrainerName },
+                    locationId: locIdStr || 'default',
+                    locationName: resolvedLocationName,
+                    doctorName: resolvedDoctorName,
+                    trainerName: resolvedTrainerName,
+                    remarks: t.remarks || pdfObj?.comments || ''
                 };
             });
+
+            // Filter by Trainer if provided (and not 'all')
+            const targetTrainer = (trainerName || trainer || trainerId || '').trim().toLowerCase();
+            if (targetTrainer && targetTrainer !== 'all' && targetTrainer !== 'all trainers') {
+                rows = rows.filter(r => {
+                    const tName = (r.trainerName || '').toLowerCase();
+                    return tName === targetTrainer || tName.includes(targetTrainer);
+                });
+            }
+
+            // Filter by Doctor if provided (and not 'all')
+            const targetDoctor = (doctorName || '').trim().toLowerCase();
+            if (targetDoctor && targetDoctor !== 'all' && targetDoctor !== 'all doctors') {
+                rows = rows.filter(r => {
+                    const dName = (r.doctorName || '').toLowerCase();
+                    return dName === targetDoctor || dName.includes(targetDoctor);
+                });
+            }
 
             return res.status(200).json({ msg: "success", result: rows });
         } catch (err) {

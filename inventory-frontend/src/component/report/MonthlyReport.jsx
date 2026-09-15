@@ -8,6 +8,10 @@ import {
   Download,
   FileText,
   Package,
+  UserCheck,
+  Stethoscope,
+  MapPin,
+  Calendar,
 } from 'lucide-react';
 import moment from 'moment';
 
@@ -32,6 +36,11 @@ const MonthlyReport = ({
   locations = [],
   locationIds = [],
   setLocationIds,
+  trainer = '',
+  setTrainer,
+  trainerOptions = [],
+  doctor = '',
+  setDoctor,
   month,
   setMonth,
   year,
@@ -41,15 +50,15 @@ const MonthlyReport = ({
   onFetch,
   onClearFilters,
   hasFetched,
-  data,
-  kpis,
-  tableSearch,
+  data = [],
+  kpis = { count: 0, totalQty: 0, totalVal: 0 },
+  tableSearch = '',
   setTableSearch,
-  filtered,
-  paginated,
-  page,
+  filtered = [],
+  paginated = [],
+  page = 1,
   setPage,
-  pageSize,
+  pageSize = 25,
   setPageSize,
   onExportExcel,
   onExportPdf,
@@ -62,7 +71,8 @@ const MonthlyReport = ({
     if (!q) return locations;
     return locations.filter((loc) =>
       (loc.name || '').toLowerCase().includes(q) ||
-      (loc.doctorName || '').toLowerCase().includes(q)
+      (loc.doctorName || '').toLowerCase().includes(q) ||
+      (loc.trainerName || '').toLowerCase().includes(q)
     );
   }, [locations, locationSearch]);
 
@@ -73,16 +83,24 @@ const MonthlyReport = ({
 
   const totalPages = (len, size) => Math.max(1, Math.ceil(len / size));
   const emptyMessage = !hasFetched
-    ? 'Select month, year, and location(s), then click Apply'
+    ? 'Select month and year, choose optional filters, then click Apply filters'
     : data.length === 0
-      ? 'No products issued for the selected period'
+      ? 'No products issued for the selected period / filters'
       : null;
+
+  const selectedMonthLabel = MONTHS.find((m) => String(m.value) === String(month))?.label || '';
+  const selectedTrainerLabel = trainer
+    ? (trainerOptions.find((t) => t.name === trainer || t._id === trainer)?.name || trainer)
+    : 'All Trainers';
+  const selectedLocationNames = locationIds.length > 0 && locationIds.length < locations.length
+    ? locations.filter((l) => locationIds.includes(l._id)).map((l) => l.name).join(', ')
+    : 'All Locations';
 
   return (
     <>
       <div className="reports-card">
         <div className="reports-card-header">
-          <div className="reports-card-title">Monthly Report</div>
+          <div className="reports-card-title">Monthly Report Filters</div>
         </div>
         <div className="reports-card-content">
           <div className="reports-form-grid">
@@ -101,6 +119,7 @@ const MonthlyReport = ({
                 ))}
               </select>
             </div>
+
             <div className="reports-field">
               <label>Year *</label>
               <select
@@ -116,20 +135,47 @@ const MonthlyReport = ({
                 ))}
               </select>
             </div>
+
+            <div className="reports-field">
+              <label>Trainer Name</label>
+              <select
+                className="reports-select"
+                value={trainer}
+                onChange={(e) => setTrainer(e.target.value)}
+              >
+                <option value="">All Trainers</option>
+                {trainerOptions.map((opt) => (
+                  <option key={opt.name || opt._id} value={opt.name}>
+                    {opt.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="reports-field">
+              <label>Doctor Name</label>
+              <input
+                type="text"
+                className="reports-input"
+                placeholder="Doctor / Veterinarian"
+                value={doctor}
+                onChange={(e) => setDoctor(e.target.value)}
+              />
+            </div>
           </div>
 
-          {/* Location MultiSelect Checkbox Section (matching Summary Report) */}
+          {/* Location MultiSelect Checkbox Section */}
           <div className="reports-product-section" style={{ marginTop: '1.25rem' }}>
             <div className="reports-product-section-title">
               <Package size={20} />
-              Filter by location(s) — select one or more
+              Filter by location(s) — select one or more (Optional, defaults to all)
             </div>
             <div className="reports-product-toolbar">
               <div className="reports-product-search-wrap">
                 <Search className="search-icon" size={18} />
                 <input
                   type="text"
-                  placeholder="Search locations..."
+                  placeholder="Search locations, doctors, or trainers..."
                   value={locationSearch}
                   onChange={(e) => setLocationSearch(e.target.value)}
                 />
@@ -164,7 +210,19 @@ const MonthlyReport = ({
                       checked={(locationIds || []).includes(loc._id)}
                       onChange={() => toggleLocation(loc._id)}
                     />
-                    <span>{loc.name} {loc.doctorName ? `- ${loc.doctorName}` : ''}</span>
+                    <span>
+                      <strong className="text-slate-800">{loc.name}</strong>
+                      {loc.doctorName && (
+                        <span className="text-slate-500 text-xs ml-2">
+                          (Dr: {loc.doctorName})
+                        </span>
+                      )}
+                      {loc.trainerName && (
+                        <span className="text-blue-600 text-xs ml-2 font-medium">
+                          (Trainer: {loc.trainerName})
+                        </span>
+                      )}
+                    </span>
                   </label>
                 ))
               )}
@@ -214,6 +272,36 @@ const MonthlyReport = ({
 
       {data.length > 0 && !loading && (
         <>
+          {/* Active Filter Summary Badges */}
+          <div
+            className="reports-card"
+            style={{
+              padding: '0.85rem 1.25rem',
+              marginBottom: '1rem',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', fontSize: '0.85rem' }}>
+              <span style={{ fontWeight: 600, color: '#334155' }}>Active Summary:</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#1e40af', background: '#eff6ff', padding: '0.25rem 0.6rem', borderRadius: '6px' }}>
+                <Calendar size={14} /> {selectedMonthLabel} {year}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#0f766e', background: '#f0fdfa', padding: '0.25rem 0.6rem', borderRadius: '6px' }}>
+                <MapPin size={14} /> Location: {selectedLocationNames}
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#7c2d12', background: '#fff7ed', padding: '0.25rem 0.6rem', borderRadius: '6px' }}>
+                <UserCheck size={14} /> Trainer: <strong>{selectedTrainerLabel}</strong>
+              </span>
+              {doctor && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#4338ca', background: '#eef2ff', padding: '0.25rem 0.6rem', borderRadius: '6px' }}>
+                  <Stethoscope size={14} /> Doctor: {doctor}
+                </span>
+              )}
+            </div>
+          </div>
+
           <div className="reports-kpi-grid">
             <div className="reports-kpi-card">
               <div className="reports-kpi-label">Line items</div>
@@ -231,13 +319,13 @@ const MonthlyReport = ({
 
           <div className="reports-card">
             <div className="reports-card-header">
-              <div className="reports-card-title">Issued products</div>
+              <div className="reports-card-title">Issued Products</div>
               <div className="reports-table-toolbar">
                 <div className="reports-search-wrap">
                   <Search />
                   <input
                     type="text"
-                    placeholder="Search products..."
+                    placeholder="Search by product, location, doctor, trainer, doc no..."
                     value={tableSearch}
                     onChange={(e) => {
                       setTableSearch(e.target.value);
@@ -254,24 +342,49 @@ const MonthlyReport = ({
                   <thead>
                     <tr>
                       <th>Date</th>
+                      <th>Doc No</th>
+                      <th>Location</th>
+                      <th>Doctor Name</th>
+                      <th>Trainer Name</th>
                       <th>Product Name</th>
                       <th>Company</th>
-                      <th>Size</th>
+                      <th>Unit / Size</th>
                       <th className="text-right">Qty</th>
                       <th className="text-right">Rate</th>
                       <th className="text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {paginated.map((row) => (
-                      <tr key={row._id}>
-                        <td>{row.date ? moment(row.date).format('M/D/YYYY') : '-'}</td>
-                        <td className="font-medium">{row.productName || '-'}</td>
+                    {paginated.map((row, idx) => (
+                      <tr key={row._id || idx}>
+                        <td>{row.date ? moment(row.date).format('DD/MM/YYYY') : '-'}</td>
+                        <td>{row.docNo ? `#${row.docNo}` : '-'}</td>
+                        <td className="font-medium">{row.locationName || row.location?.name || '-'}</td>
+                        <td>{row.doctorName || row.location?.doctorName || '-'}</td>
+                        <td>
+                          <span
+                            style={{
+                              display: 'inline-block',
+                              padding: '0.2rem 0.55rem',
+                              borderRadius: '6px',
+                              background: row.trainerName ? '#f0fdf4' : '#f8fafc',
+                              color: row.trainerName ? '#166534' : '#64748b',
+                              fontWeight: row.trainerName ? 600 : 400,
+                              border: row.trainerName ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                              fontSize: '0.8125rem',
+                            }}
+                          >
+                            {row.trainerName || row.location?.trainerName || '-'}
+                          </span>
+                        </td>
+                        <td className="font-medium text-slate-900">{row.productName || '-'}</td>
                         <td>{row.companyName || '-'}</td>
-                        <td>{row.size || '-'}</td>
-                        <td className="text-right">{row.quantity ?? 0}</td>
-                        <td className="text-right">{row.rate ?? 0}</td>
-                        <td className="text-right">{(row.totalAmount ?? 0).toFixed(2)}</td>
+                        <td>{row.size || row.unit || '-'}</td>
+                        <td className="text-right font-medium">{row.quantity ?? 0}</td>
+                        <td className="text-right">{(row.rate ?? 0).toFixed(2)}</td>
+                        <td className="text-right font-bold text-slate-900">
+                          {(row.totalAmount ?? 0).toFixed(2)}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

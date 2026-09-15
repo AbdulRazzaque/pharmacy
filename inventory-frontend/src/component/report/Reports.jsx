@@ -75,12 +75,27 @@ const Reports = () => {
 
   const [monthlyData, setMonthlyData] = useState([]);
   const [monthlyLocationIds, setMonthlyLocationIds] = useState([]);
+  const [monthlyTrainer, setMonthlyTrainer] = useState('');
+  const [monthlyDoctor, setMonthlyDoctor] = useState('');
   const [monthlyMonth, setMonthlyMonth] = useState('');
   const [monthlyYear, setMonthlyYear] = useState('');
   const [monthlyHasFetched, setMonthlyHasFetched] = useState(false);
   const [monthlySearch, setMonthlySearch] = useState('');
   const [monthlyPage, setMonthlyPage] = useState(1);
   const [monthlyPageSize, setMonthlyPageSize] = useState(25);
+
+  const trainerOptions = useMemo(() => {
+    const list = [];
+    const seen = new Set();
+    locations.forEach((loc) => {
+      const name = (loc.trainerName || '').trim();
+      if (name && !seen.has(name.toLowerCase())) {
+        seen.add(name.toLowerCase());
+        list.push({ _id: loc._id, name: name });
+      }
+    });
+    return list.sort((a, b) => a.name.localeCompare(b.name));
+  }, [locations]);
 
   const [summaryData, setSummaryData] = useState([]);
   const [summaryFilters, setSummaryFilters] = useState({ startDate: '', endDate: '', locationId: [] });
@@ -163,6 +178,8 @@ const Reports = () => {
 
   const clearMonthlyFilters = () => {
     setMonthlyLocationIds([]);
+    setMonthlyTrainer('');
+    setMonthlyDoctor('');
     setMonthlyMonth('');
     setMonthlyYear('');
     setMonthlyData([]);
@@ -178,8 +195,8 @@ const Reports = () => {
   };
 
   const applyMonthlyReport = () => {
-    if (monthlyLocationIds.length === 0 || !monthlyMonth || !monthlyYear) {
-      showAlert('Please select month, year, and at least one location', 'error');
+    if (!monthlyMonth || !monthlyYear) {
+      showAlert('Please select month and year', 'error');
       return;
     }
     fetchMonthlyReport();
@@ -280,11 +297,30 @@ const Reports = () => {
     axios.post(`${process.env.REACT_APP_DEVELOPMENT}/api/report/getMonthlyIssuedReport`, {
       month: parseInt(monthlyMonth, 10),
       year: parseInt(monthlyYear, 10),
-      locationId: monthlyLocationIds,
+      locationId: monthlyLocationIds && monthlyLocationIds.length > 0 ? monthlyLocationIds : undefined,
+      trainerName: monthlyTrainer || undefined,
+      trainerId: monthlyTrainer || undefined,
+      doctorName: monthlyDoctor || undefined,
     }, { headers: { token: accessToken } })
       .then((res) => {
         if (fetchId !== monthlyFetchRef.current) return;
-        setMonthlyData(res.data.result || []);
+        const rawList = res.data.result || [];
+        const mappedList = rawList.map((row) => {
+          const locIdStr = String(row.locationId || row.location?._id || '');
+          const matchedLoc = locations.find((l) => String(l._id) === locIdStr) || null;
+          const locName = row.locationName || row.location?.name || matchedLoc?.name || '-';
+          const docName = row.doctorName || row.location?.doctorName || matchedLoc?.doctorName || '';
+          const trainName = row.trainerName || row.location?.trainerName || matchedLoc?.trainerName || '';
+
+          return {
+            ...row,
+            locationName: locName,
+            doctorName: docName,
+            trainerName: trainName
+          };
+        });
+
+        setMonthlyData(mappedList);
         setMonthlyPage(1);
         setMonthlyHasFetched(true);
         setLoading(false);
@@ -406,7 +442,18 @@ const Reports = () => {
 
   const monthlyFiltered = useMemo(() => {
     return filterRows(monthlyData, monthlySearch, (r) =>
-      [r.productName, r.size, r.date ? moment(r.date).format('M/D/YYYY') : ''].filter(Boolean).join(' ')
+      [
+        r.productName,
+        r.companyName,
+        r.size,
+        r.unit,
+        r.locationName,
+        r.doctorName,
+        r.trainerName,
+        r.docNo ? String(r.docNo) : '',
+        r.date ? moment(r.date).format('M/D/YYYY') : '',
+        r.date ? moment(r.date).format('DD/MM/YYYY') : ''
+      ].filter(Boolean).join(' ')
     );
   }, [monthlyData, monthlySearch]);
 
@@ -816,14 +863,24 @@ const Reports = () => {
     doc.setFontSize(14);
     doc.text(`Monthly Report — ${monthlyMonth}/${monthlyYear}`, 14, 15);
     const tableData = monthlyData.map((row) => [
-      row.date ? moment(row.date).format('M/D/YYYY') : '',
+      row.date ? moment(row.date).format('DD/MM/YYYY') : '',
+      row.docNo ? `#${row.docNo}` : '-',
+      row.locationName || row.location?.name || '-',
+      row.doctorName || row.location?.doctorName || '-',
+      row.trainerName || row.location?.trainerName || '-',
       row.productName || '',
-      row.size || '',
+      row.companyName || '',
+      row.size || row.unit || '',
       row.quantity ?? 0,
       row.rate ?? 0,
       (row.totalAmount ?? 0).toFixed(2),
     ]);
-    doc.autoTable({ head: [['Date', 'Product Name', 'Size', 'Qty', 'Rate', 'Total']], body: tableData, startY: 22, styles: { fontSize: 8 } });
+    doc.autoTable({
+      head: [['Date', 'Doc No', 'Location', 'Doctor', 'Trainer', 'Product Name', 'Company', 'Size', 'Qty', 'Rate', 'Total']],
+      body: tableData,
+      startY: 22,
+      styles: { fontSize: 8 }
+    });
     doc.save(`monthly-report-${monthlyYear}-${monthlyMonth}.pdf`);
     showAlert('PDF exported', 'success');
   };
@@ -1153,6 +1210,11 @@ const Reports = () => {
             locations={locations}
             locationIds={monthlyLocationIds}
             setLocationIds={setMonthlyLocationIds}
+            trainer={monthlyTrainer}
+            setTrainer={setMonthlyTrainer}
+            trainerOptions={trainerOptions}
+            doctor={monthlyDoctor}
+            setDoctor={setMonthlyDoctor}
             month={monthlyMonth}
             setMonth={setMonthlyMonth}
             year={monthlyYear}
