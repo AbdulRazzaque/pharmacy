@@ -36,7 +36,8 @@
 
 /* ─── Screen A4 Page Box (210mm x 297mm) ─── */
 .pdf-page {
-  background-color: #ffffff;
+  background: #ffffff !important;
+  background-color: #ffffff !important;
   width: 210mm;
   min-height: 297mm;
   padding: 6mm 12mm 6mm 12mm;
@@ -348,6 +349,8 @@
 .pdf-comments-section {
   margin-top: 4px;
   font-size: 13.5px;
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 .pdf-comments-title {
@@ -356,18 +359,24 @@
 
 .pdf-comments-lines {
   margin-top: 4px;
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 .pdf-comment-line-solid {
   border-bottom: 1.5px solid #000;
   min-height: 22px;
   margin-bottom: 6px;
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 .pdf-comment-line-dotted {
   border-bottom: 1.5px dotted #000;
   min-height: 22px;
   margin-bottom: 6px;
+  background: transparent !important;
+  background-color: transparent !important;
 }
 
 /* ================================================
@@ -397,17 +406,19 @@
   }
 
   #root,
+  .App,
   .pdf-viewport,
   .pdf-page-container {
     margin: 0 !important;
     padding: 0 !important;
     width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
+    height: 100% !important;
+    min-height: 100% !important;
     background: #ffffff !important;
     background-color: #ffffff !important;
     display: block !important;
     box-shadow: none !important;
+    border: none !important;
   }
 
   .no-print {
@@ -416,8 +427,8 @@
 
   .pdf-page {
     width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
+    height: 100% !important;
+    min-height: 100% !important;
     padding: 0 !important;
     margin: 0 auto !important;
     box-shadow: none !important;
@@ -541,12 +552,21 @@
   .pdf-comments-section {
     font-size: 13px !important;
     margin-top: 4px !important;
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+
+  .pdf-comments-lines {
+    background: transparent !important;
+    background-color: transparent !important;
   }
 
   .pdf-comment-line-solid,
   .pdf-comment-line-dotted {
     min-height: 22px !important;
     margin-bottom: 6px !important;
+    background: transparent !important;
+    background-color: transparent !important;
   }
 }
 
