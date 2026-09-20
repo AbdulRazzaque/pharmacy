@@ -3,9 +3,10 @@ import axios from 'axios';
 import { getToken, getUserInfo } from '../../utils/auth';
 import { Badge } from '../../components/ui/badge';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { Plus, Trash2, TrendingDown, Save, Package, AlertCircle, CheckCircle2, Search, X, Printer, Edit } from 'lucide-react';
+import { Plus, Trash2, Save, Package, AlertCircle, CheckCircle2, Search, X, Printer, Edit, Calendar, Building2, FileText } from 'lucide-react';
 import moment from 'moment';
 import { useNavigate } from 'react-router-dom';
+import { PageHeader } from '../../components/ui/page-header';
 
 const Stockout = () => {
   const navigate = useNavigate();
@@ -606,358 +607,369 @@ const Stockout = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-[1600px] mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <TrendingDown className="w-6 h-6 text-red-600" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Stock Out Entry</h1>
-                <p className="text-sm text-gray-500">Quick data entry like Excel</p>
-              </div>
+    <div className="ph-page space-y-6">
+      <PageHeader
+        title="Stock Out Dispensing Console"
+        subtitle="Dispense medications to wards, facilities, or departments with real-time inventory balances"
+        badge={
+          <Badge variant="teal" className="ml-2 font-mono text-xs">
+            Doc #{docNo}
+          </Badge>
+        }
+      >
+        <div className="flex items-center gap-2 text-xs text-[var(--ph-text-secondary)] bg-[var(--ph-surface)] px-3 py-1.5 rounded-lg border border-[var(--ph-border)]">
+          <Calendar className="w-3.5 h-3.5 text-[var(--ph-teal)]" />
+          <span>Dispatch Date: <strong>{date}</strong></span>
+        </div>
+      </PageHeader>
+
+      {/* Financial Summary Strip */}
+      {isAdmin && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="ph-card p-4 border border-[var(--ph-border)] flex items-center justify-between">
+            <div>
+              <span className="text-xs uppercase font-semibold text-[var(--ph-text-secondary)]">Gross Subtotal</span>
+              <div className="text-xl font-bold text-[var(--ph-text)] mt-1">QR {getSubTotal().toFixed(2)}</div>
             </div>
-            {isAdmin && (
-                <div className="ml-auto flex items-center gap-6 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 shadow-inner">
-                  <div className="text-right">
-                    <div className="text-xs text-gray-500 font-semibold">Total</div>
-                    <div className="text-base font-bold text-gray-800">QR{getSubTotal().toFixed(2)}</div>
-                  </div>
-                  <div className="text-right border-l border-gray-300 pl-4">
-                    <div className="text-xs text-gray-500 font-semibold">
-                      Total Discount
-                    </div>
-                    <div className="text-base font-bold text-orange-600">
-                      QR{getTotalDiscount().toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="text-right border-l border-gray-300 pl-4">
-                    <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">Grand Total</div>
-                    <div className="text-2xl font-black text-red-600">
-                      QR{getGrandTotal().toFixed(2)}
-                    </div>
-                  </div>
-                </div>
-              )}
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="text-xs text-gray-500">Document No</div>
-                <div className="text-lg font-bold text-red-600">#{docNo}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-xs text-gray-500 mb-1">Date</div>
-                <div className="bg-white rounded-lg shadow-sm p-2">
-                  <input
-                    type="date"
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    className="text-sm font-semibold text-black w-64 border border-gray-300 rounded-md px-2 py-1 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                  />
-                </div>
-              </div>
+            <Badge variant="outline" className="text-xs font-mono">Gross</Badge>
+          </div>
+          <div className="ph-card p-4 border border-[var(--ph-border)] flex items-center justify-between">
+            <div>
+              <span className="text-xs uppercase font-semibold text-amber-600 dark:text-amber-400">Total Deductions</span>
+              <div className="text-xl font-bold text-amber-600 dark:text-amber-400 mt-1">QR {getTotalDiscount().toFixed(2)}</div>
             </div>
+            <Badge variant="warning" className="text-xs font-mono">Discount</Badge>
+          </div>
+          <div className="ph-card p-4 border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20 flex items-center justify-between">
+            <div>
+              <span className="text-xs uppercase font-semibold text-emerald-800 dark:text-emerald-300">Net Payable Total</span>
+              <div className="text-2xl font-black text-emerald-700 dark:text-emerald-400 mt-0.5">QR {getGrandTotal().toFixed(2)}</div>
+            </div>
+            <Badge variant="success" className="text-xs font-mono font-bold">Net Total</Badge>
+          </div>
+        </div>
+      )}
+
+      {/* Alert */}
+      {alert.show && (
+        <Alert className={`animate-in fade-in ${alert.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300'}`}>
+          <div className="flex items-center gap-2">
+            {alert.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <AlertDescription className="text-xs sm:text-sm font-medium">
+              {alert.message}
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
+
+      {/* Facility & Dispensing Destination */}
+      <div className="ph-card shadow-sm border border-[var(--ph-border)] overflow-hidden">
+        <div className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] px-5 py-3.5 flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-[var(--ph-teal)]" />
+          <h2 className="font-semibold text-sm text-[var(--ph-text)]">
+            Facility & Dispensing Destination
+          </h2>
+        </div>
+        <div className="p-5 grid grid-cols-12 gap-4">
+          {/* Row 1: Receiving Facility / Location (50%) */}
+          <div className="col-span-12 md:col-span-6">
+            <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+              Receiving Facility / Location *
+            </label>
+            <select
+              id="docLocationId"
+              value={docLocationId}
+              onChange={(e) => setDocLocationId(e.target.value)}
+              className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] focus:outline-none transition-colors ${
+                formErrors.locationId && !docLocationId ? 'border-rose-500' : 'border-[var(--ph-border)]'
+              }`}
+            >
+              <option value="">Select Target Location</option>
+              {locations.map((location) => (
+                <option key={location._id} value={location._id}>
+                  {location.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Row 1: Supervisor / Trainer Name (50%) */}
+          <div className="col-span-12 md:col-span-6">
+            <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+              Supervisor / Trainer Name
+            </label>
+            <input
+              type="text"
+              value={docTrainerName}
+              onChange={(e) => setDocTrainerName(e.target.value)}
+              placeholder="e.g. Dr. Jane Doe"
+              className="w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-lg focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] focus:outline-none transition-colors"
+            />
+          </div>
+
+          {/* Row 2: Prescribing Doctor / Veterinarian (60% desktop) */}
+          <div className="col-span-12 md:col-span-6 lg:col-span-7">
+            <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+              Prescribing Doctor / Veterinarian
+            </label>
+            <input
+              type="text"
+              value={docDoctorName}
+              onChange={(e) => setDocDoctorName(e.target.value)}
+              placeholder="e.g. Dr. Robert Smith"
+              className="w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-lg focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] focus:outline-none transition-colors"
+            />
+          </div>
+
+          {/* Row 2: Transaction Date (40% desktop) */}
+          <div className="col-span-12 md:col-span-6 lg:col-span-5">
+            <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+              Transaction Date
+            </label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-lg focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] focus:outline-none transition-colors"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Fast Item Entry Form */}
+      <div className="ph-card shadow-sm border border-[var(--ph-border)] overflow-visible relative z-30">
+        <div className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 rounded-t-xl">
+          <div className="flex items-center gap-2">
+            <Package className="w-4 h-4 text-[var(--ph-teal)]" />
+            <h2 className="font-semibold text-sm text-[var(--ph-text)]">
+              Dispense Line Entry
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-[var(--ph-text-secondary)]">
+            <span className="px-2 py-0.5 bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded text-[11px] font-mono">Tab: Next</span>
+            <span className="px-2 py-0.5 bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded text-[11px] font-mono">Enter: Add Item</span>
           </div>
         </div>
 
-        {/* Alert */}
-        {alert.show && (
-          <Alert className={`mb-4 ${alert.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-            <div className="flex items-center gap-2">
-              {alert.type === 'success' ? (
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-600" />
-              )}
-              <AlertDescription className={alert.type === 'success' ? 'text-green-800' : 'text-red-800'}>
-                {alert.message}
-              </AlertDescription>
-            </div>
-          </Alert>
-        )}
-        {/* Document Details Form */}
-        <div className="bg-white rounded-lg shadow-sm mb-4 border border-gray-200">
-          <div className="bg-gradient-to-r from-gray-700 to-gray-800 text-white px-4 py-3 rounded-t-lg">
-            <h2 className="font-semibold flex items-center gap-2">
-              <Package className="w-4 h-4 text-red-500" />
-              Document / Dispatch Information
-            </h2>
-          </div>
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Location Selection */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-                Location *
+        <form onSubmit={addItem} className="p-5">
+          <div className="grid grid-cols-12 gap-3.5">
+            {/* Product – type-ahead autocomplete (Prioritized width) */}
+            <div className="col-span-12 lg:col-span-6 relative" ref={stockAutocompleteRef}>
+              <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+                Medication / Stock Batch *
               </label>
-              <select
-                id="docLocationId"
-                value={docLocationId}
-                onChange={(e) => setDocLocationId(e.target.value)}
-                className={`w-full h-10 px-3 text-sm border-2 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-red-500 focus:outline-none ${formErrors.locationId && !docLocationId ? 'border-red-500 bg-red-50' : 'border-gray-300'
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ph-muted)] pointer-events-none" />
+                <input
+                  id="stock-input"
+                  type="text"
+                  value={stockQuery}
+                  onChange={(e) => {
+                    setStockQuery(e.target.value);
+                    if (!e.target.value) {
+                      setFormData(prev => ({ ...prev, stockId: '' }));
+                      setSelectedStock(null);
+                    }
+                    setStockDropdownOpen(true);
+                  }}
+                  onFocus={() => setStockDropdownOpen(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      if (!stockDropdownOpen) setStockDropdownOpen(true);
+                      else {
+                        setActiveStockSugIdx(prev => Math.min(prev + 1, stockSuggestions.length - 1));
+                      }
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      if (!stockDropdownOpen) setStockDropdownOpen(true);
+                      else {
+                        setActiveStockSugIdx(prev => Math.max(prev - 1, 0));
+                      }
+                    } else if (e.key === 'Enter') {
+                      if (stockDropdownOpen && stockSuggestions.length > 0) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const item = stockSuggestions[activeStockSugIdx] || stockSuggestions[0];
+                        if (item) handleSelectStock(item);
+                      }
+                    } else if (e.key === 'Escape') {
+                      e.preventDefault();
+                      setStockDropdownOpen(false);
+                      if (!formData.stockId) setStockQuery('');
+                    } else if (e.key === 'Tab') {
+                      setStockDropdownOpen(false);
+                    }
+                  }}
+                  placeholder="Search medication by name, brand, batch..."
+                  autoComplete="off"
+                  className={`w-full h-10 pl-9.5 pr-8 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] transition-colors ${
+                    formErrors.stockId ? 'border-rose-500' : 'border-[var(--ph-border)]'
                   }`}
-              >
-                <option value="">Select Location</option>
-                {locations.map((location) => (
-                  <option key={location._id} value={location._id}>
-                    {location.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Trainer Name (Editable, auto-filled) */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-                Trainer Name
-              </label>
-              <input
-                type="text"
-                value={docTrainerName}
-                onChange={(e) => setDocTrainerName(e.target.value)}
-                placeholder="Trainer Name"
-                className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Excel-like Entry Form */}
-        <div className="bg-white rounded-lg shadow-sm mb-4">
-          <div className="bg-gradient-to-r from-red-500 to-red-600 text-white px-4 py-3 rounded-t-lg">
-            <h2 className="font-semibold flex items-center gap-2">
-              <Package className="w-4 h-4" />
-              Quick Entry Form (Press Tab to move between fields, Enter to add)
-            </h2>
-          </div>
-
-          <form onSubmit={addItem} className="p-4">
-            <div className="grid grid-cols-12 gap-3">
-              {/* Product – type-ahead autocomplete */}
-              <div className="col-span-4 relative" ref={stockAutocompleteRef}>
-                <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-                  Product *
-                </label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                  <input
-                    id="stock-input"
-                    type="text"
-                    value={stockQuery}
-                    onChange={(e) => {
-                      setStockQuery(e.target.value);
-                      if (!e.target.value) {
-                        setFormData(prev => ({ ...prev, stockId: '' }));
-                        setSelectedStock(null);
-                      }
-                      setStockDropdownOpen(true);
-                    }}
-                    onFocus={() => setStockDropdownOpen(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'ArrowDown') {
-                        e.preventDefault();
-                        if (!stockDropdownOpen) setStockDropdownOpen(true);
-                        else {
-                          setActiveStockSugIdx(prev => Math.min(prev + 1, stockSuggestions.length - 1));
-                        }
-                      } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        if (!stockDropdownOpen) setStockDropdownOpen(true);
-                        else {
-                          setActiveStockSugIdx(prev => Math.max(prev - 1, 0));
-                        }
-                      } else if (e.key === 'Enter') {
-                        if (stockDropdownOpen && stockSuggestions.length > 0) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          const item = stockSuggestions[activeStockSugIdx] || stockSuggestions[0];
-                          if (item) handleSelectStock(item);
-                        }
-                      } else if (e.key === 'Escape') {
-                        e.preventDefault();
-                        setStockDropdownOpen(false);
-                        if (!formData.stockId) setStockQuery('');
-                      } else if (e.key === 'Tab') {
-                        setStockDropdownOpen(false);
-                      }
-                    }}
-                    placeholder="Type product name..."
-                    autoComplete="off"
-                    className={`w-full h-10 pl-9 pr-9 text-sm border-2 rounded-lg shadow-sm transition-all duration-200 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent ${formErrors.stockId ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white'
-                      }`}
-                  />
-                  {
-                    selectedStock && (
-                      <button
-                        type="button"
-                        onClick={clearStock}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 rounded"
-                        aria-label="Clear product"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  {
-                    stockDropdownOpen && (
-                      <div className="absolute z-20 left-0 right-0 mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-                        {
-                          stocks.length === 0 ? (
-                            <div className="px-3 py-4 text-sm text-gray-500">No stock available.</div>
-                          ) : stockSuggestions.length === 0 ? (
-                            <div className="px-3 py-4 text-sm text-gray-500 font-medium">No products found</div>
-                          ) : (
-                            stockSuggestions.map((stock, index) => (
-                              <button
-                                key={stock._id}
-                                type="button"
-                                data-stockout-sug-idx={index}
-                                className={`w-full px-3 py-2.5 text-left text-sm flex flex-col gap-0.5 border-b border-gray-50 last:border-0 ${
-                                  index === activeStockSugIdx ? 'bg-red-100 text-red-900 border-l-4 border-red-600 font-semibold' : 'hover:bg-red-50'
-                                }`}
-                                onClick={() => handleSelectStock(stock)}
-                                onMouseEnter={() => setActiveStockSugIdx(index)}
-                              >
-                                <span className="font-medium text-gray-900">
-                                  {stock.productName} | {stock.companyName || 'N/A'} | {stock.unit || 'N/A'}
-                                </span>
-                                <span className="text-xs text-gray-500">
-                                  {stock.expiry ? `Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : 'No expiry'} • Qty: {stock.quantity}
-                                </span>
-                              </button>
-                            ))
-                          )}
+                />
+                {selectedStock && (
+                  <button
+                    type="button"
+                    onClick={clearStock}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[var(--ph-muted)] hover:text-[var(--ph-text)] rounded-full hover:bg-[var(--ph-surface-2)] transition-colors"
+                    aria-label="Clear product"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                {stockDropdownOpen && (
+                  <div className="absolute z-[70] left-0 top-[calc(100%+4px)] w-full min-w-full sm:min-w-[460px] max-w-[95vw] max-h-72 overflow-y-auto bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-xl shadow-2xl py-1 text-xs divide-y divide-[var(--ph-border)]/40">
+                    {stockSuggestions.length === 0 ? (
+                      <div className="px-4 py-5 text-center">
+                        <Search className="w-6 h-6 mx-auto mb-1 text-[var(--ph-muted)] opacity-40" />
+                        <p className="font-semibold text-[var(--ph-text)] text-xs">No matching products found</p>
+                        <p className="text-[11px] text-[var(--ph-text-secondary)] mt-0.5">Try searching with a different name or batch</p>
                       </div>
+                    ) : (
+                      stockSuggestions.map((s, idx) => {
+                        const active = idx === activeStockSugIdx;
+                        return (
+                          <div
+                            key={s._id || s.originalStockId || idx}
+                            data-stockout-sug-idx={idx}
+                            onClick={() => handleSelectStock(s)}
+                            className={`px-3.5 py-2.5 cursor-pointer flex items-center justify-between gap-3 border-l-4 transition-colors ${
+                              active
+                                ? 'bg-[var(--ph-navy)]/10 dark:bg-[var(--ph-navy)]/25 border-[var(--ph-navy)]'
+                                : 'border-transparent hover:bg-[var(--ph-surface-2)]'
+                            }`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-xs sm:text-sm text-[var(--ph-text)] whitespace-normal leading-snug">
+                                {s.productName}
+                              </div>
+                              {s.companyName && (
+                                <div className="text-[11px] text-[var(--ph-text-secondary)] mt-0.5">
+                                  {s.companyName}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 shrink-0 text-right">
+                              <span className="text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60">
+                                Available: {s.quantity} {s.unit || ''}
+                              </span>
+                              <span className="text-[10px] font-mono font-bold text-[var(--ph-text)] bg-[var(--ph-surface-2)] px-2 py-0.5 rounded-full border border-[var(--ph-border)]">
+                                QR {(s.sellingPrice || 0).toFixed(2)}
+                              </span>
+                              {s.expiry && (
+                                <span className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800/40">
+                                  Exp: {moment(s.expiry).format('DD/MM/YYYY')}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
                     )}
-                </div>
-              </div>
-
-              {/* Selling Price (from Stock In) */}
-              <div className="col-span-1">
-                <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-                  Sell. Price
-                </label>
-                <input
-                  id="sellingPrice"
-                  type="number"
-                  value={formData.sellingPrice}
-                  readOnly
-                  tabIndex={-1}
-                  placeholder="0.00"
-                  className="w-full h-10 px-2 text-sm border-2 border-gray-300 rounded-lg shadow-sm bg-gray-100 text-gray-700 cursor-default text-right font-medium"
-                  title="Selling price from Stock In (read-only)"
-                />
-              </div>
-
-              {/* Available Quantity */}
-              <div className="col-span-1">
-                <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-                  Available
-                </label>
-                <div className="h-10 px-2 flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-300 rounded-lg shadow-sm">
-                  <span className="text-sm font-bold text-blue-700">
-                    {selectedStock?.quantity || 0}
-                  </span>
-                </div>
-              </div>
-
-              {/* Quantity to Issue */}
-              <div className="col-span-2">
-                <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-                  Issue Qty *
-                </label>
-                <input
-                  id="quantity"
-                  type="number"
-                  value={formData.quantity}
-                  onChange={(e) => handleInputChange('quantity', e.target.value)}
-                  placeholder="0"
-                  min="1"
-                  max={selectedStock?.quantity || 999999}
-                  className={`w-full h-10 px-3 text-sm border-2 rounded-lg shadow-sm transition-all duration-200 hover:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent font-semibold ${formErrors.quantity ? 'border-red-500 bg-red-50' : 'border-gray-300 bg-white'}`}
-                />
-              </div>
-
-              {/* Product Discount (%) */}
-              <div className="col-span-2">
-                <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-                  Discount (%) <span className="text-gray-400 font-normal">(Opt)</span>
-                </label>
-                <div className="relative">
-                  <input
-                    id="discountPercentage"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="any"
-                    value={formData.discountPercentage}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 100)) {
-                        handleInputChange('discountPercentage', val);
-                      }
-                    }}
-                    placeholder="0%"
-                    className="w-full h-10 pl-3 pr-7 text-sm border-2 border-orange-300 rounded-lg shadow-sm bg-orange-50/50 focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold text-orange-900"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addItem(e);
-                      }
-                    }}
-                  />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-orange-500 pointer-events-none">%</span>
-                </div>
-              </div>
-
-              {/* Net Total */}
-              <div className="col-span-2">
-                <label className="block text-xs font-semibold text-gray-800 mb-1.5">
-                  Net Total
-                </label>
-                <div className="h-10 px-3 flex items-center justify-between bg-gradient-to-br from-red-50 to-red-100 border-2 border-red-300 rounded-lg shadow-sm">
-                  <span className="text-xs text-red-600 font-semibold">QR</span>
-                  <span className="text-sm font-bold text-red-700">
-                    {selectedStock && formData.quantity
-                      ? (() => {
-                          const qty = parseFloat(formData.quantity) || 0;
-                          const price = parseFloat(formData.sellingPrice) || selectedStock.sellingPrice || 0;
-                          const discPct = parseFloat(formData.discountPercentage) || 0;
-                          const itemTotal = qty * price;
-                          const discAmt = (itemTotal * discPct) / 100;
-                          return (itemTotal - discAmt).toFixed(2);
-                        })()
-                      : '0.00'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Stock Info Bar */}
-            {selectedStock && (
-              <div className="mt-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-lg shadow-md text-xs flex items-center gap-4">
-                <span><strong>Type:</strong> {selectedStock.type || 'N/A'}</span>
-                <span><strong>Unit:</strong> {selectedStock.unit || 'N/A'}</span>
-                <span><strong>Selling Price:</strong> QR{formData.sellingPrice || selectedStock.sellingPrice || 0}</span>
-                <span><strong>Available:</strong> <span className="font-semibold text-blue-600">{selectedStock.quantity}</span></span>
-                {selectedStock.expiry && (
-                  <span><strong>Expiry (FIFO):</strong> <span className="font-semibold text-orange-600">{moment(selectedStock.expiry).format('DD/MM/YYYY')}</span></span>
+                  </div>
                 )}
               </div>
-            )}
+            </div>
 
-            {formErrors.quantity && (
-              <div className="mt-2 text-xs text-red-600 flex items-center gap-1">
-                <AlertCircle className="w-3 h-3" />
-                {formErrors.quantity}
+            {/* Quantity */}
+            <div className="col-span-4 sm:col-span-4 lg:col-span-2">
+              <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+                Quantity *
+              </label>
+              <input
+                id="quantity"
+                type="number"
+                value={formData.quantity}
+                onChange={(e) => handleInputChange('quantity', e.target.value)}
+                placeholder="0"
+                min="1"
+                max={selectedStock?.quantity || 999999}
+                className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] font-semibold ${
+                  formErrors.quantity ? 'border-rose-500' : 'border-[var(--ph-border)]'
+                }`}
+              />
+            </div>
+
+            {/* Product Discount (%) */}
+            <div className="col-span-4 sm:col-span-4 lg:col-span-2">
+              <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+                Discount (%) <span className="text-[var(--ph-muted)] font-normal">(Opt)</span>
+              </label>
+              <div className="relative">
+                <input
+                  id="discountPercentage"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="any"
+                  value={formData.discountPercentage}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 100)) {
+                      handleInputChange('discountPercentage', val);
+                    }
+                  }}
+                  placeholder="0"
+                  className="w-full h-10 pl-3 pr-7 text-xs sm:text-sm bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-lg focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] focus:outline-none font-semibold text-amber-700 dark:text-amber-400"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addItem(e);
+                    }
+                  }}
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500 pointer-events-none">%</span>
               </div>
-            )}
+            </div>
 
-            {/* Action Buttons */}
-            <div className="mt-4 flex items-center gap-3">
+            {/* Net Line Total */}
+            <div className="col-span-4 sm:col-span-4 lg:col-span-2">
+              <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+                Line Total
+              </label>
+              <div className="h-10 px-3 flex items-center justify-between bg-[var(--ph-surface-2)] border border-[var(--ph-border)] rounded-lg">
+                <span className="text-xs text-[var(--ph-text-secondary)] font-medium">QR</span>
+                <span className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">
+                  {selectedStock && formData.quantity
+                    ? (() => {
+                        const qty = parseFloat(formData.quantity) || 0;
+                        const price = parseFloat(formData.sellingPrice) || selectedStock.sellingPrice || 0;
+                        const discPct = parseFloat(formData.discountPercentage) || 0;
+                        const itemTotal = qty * price;
+                        const discAmt = (itemTotal * discPct) / 100;
+                        return (itemTotal - discAmt).toFixed(2);
+                      })()
+                    : '0.00'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Stock Info Bar */}
+          {selectedStock && (
+            <div className="mt-3 p-2.5 bg-[var(--ph-navy)]/5 border border-[var(--ph-navy)]/15 rounded-lg text-xs flex flex-wrap items-center gap-4 text-[var(--ph-text)]">
+              <span>Type: <strong>{selectedStock.type || 'N/A'}</strong></span>
+              <span>Unit: <strong>{selectedStock.unit || 'N/A'}</strong></span>
+              <span>Price: <strong>QR {(formData.sellingPrice || selectedStock.sellingPrice || 0)}</strong></span>
+              <span>Available in Lot: <strong className="text-[var(--ph-teal)]">{selectedStock.quantity}</strong></span>
+              {selectedStock.expiry && (
+                <span>Batch Expiry (FIFO): <strong className="text-amber-600 dark:text-amber-400">{moment(selectedStock.expiry).format('DD/MM/YYYY')}</strong></span>
+              )}
+            </div>
+          )}
+
+          {/* Action Ribbon */}
+          <div className="mt-4 pt-3.5 border-t border-[var(--ph-border)] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 type="submit"
-                className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 font-semibold text-sm flex items-center gap-2 shadow-md hover:shadow-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                className="px-4 py-2 bg-[var(--ph-navy)] text-white rounded-lg hover:bg-[var(--ph-navy-hover)] font-medium text-xs flex items-center gap-1.5 transition-colors"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
                 Add Item (Enter)
               </button>
 
@@ -967,69 +979,76 @@ const Stockout = () => {
                     type="button"
                     onClick={() => handleSaveAndPrint(false)}
                     disabled={loading}
-                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-semibold text-sm flex items-center gap-2 shadow-md transition-all duration-200 disabled:opacity-50"
+                    className="px-4 py-2 bg-[var(--ph-teal)] text-white rounded-lg hover:bg-[var(--ph-teal-hover)] font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
                   >
-                    <Save className="w-4 h-4" />
-                    Save Only
+                    <Save className="w-3.5 h-3.5" />
+                    Save Dispatch
                   </button>
 
                   <button
                     type="button"
                     onClick={() => handleSaveAndPrint(true)}
                     disabled={loading}
-                    className="px-5 py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold text-sm flex items-center gap-2 shadow-md transition-all duration-200 disabled:opacity-50"
+                    className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
                   >
-                    <Printer className="w-4 h-4" />
-                    Save & Print PDF
+                    <Printer className="w-3.5 h-3.5" />
+                    Save & Print Voucher
                   </button>
                 </>
               )}
             </div>
-          </form>
-        </div>
+          </div>
+        </form>
+      </div>
 
-        {/* Added Items List */}
-        {stockOutItems.length > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="p-4 border-b bg-gray-50 flex items-center justify-between">
-              <div>
-                <h2 className="font-semibold text-gray-900">Document Out Items List</h2>
-                <p className="text-xs text-gray-500">{stockOutItems.length} items added ({getTotalQuantity()} total quantity)</p>
-              </div>
+      {/* Staged Items List */}
+      {stockOutItems.length > 0 && (
+        <div className="ph-card shadow-sm border border-[var(--ph-border)] overflow-hidden">
+          <div className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[var(--ph-navy)]" />
+              <h3 className="font-semibold text-sm text-[var(--ph-text)]">
+                Staged Outbound Dispatch Items
+              </h3>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant="teal">
+                {stockOutItems.length} Items • {getTotalQuantity()} Units
+              </Badge>
               <button
                 onClick={() => {
                   if (window.confirm('Clear all items from list?')) {
                     setStockOutItems([]);
                   }
                 }}
-                className="text-xs font-semibold text-red-600 hover:text-red-800"
+                className="text-xs font-semibold text-rose-600 hover:text-rose-800"
               >
                 Clear All
               </button>
             </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-3 py-3 text-left font-semibold text-gray-700">#</th>
-                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Product Name</th>
-                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Company</th>
-                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Unit</th>
-                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Location</th>
-                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Doctor</th>
-                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Trainer</th>
-                    <th className="px-3 py-3 text-right font-semibold text-gray-700">Qty</th>
-                    <th className="px-3 py-3 text-right font-semibold text-gray-700">Sell. Price</th>
-                    <th className="px-3 py-3 text-right font-semibold text-gray-700">Total</th>
-                    <th className="px-3 py-3 text-right font-semibold text-orange-700">Disc %</th>
-                    <th className="px-3 py-3 text-right font-semibold text-orange-700">Disc Amt</th>
-                    <th className="px-3 py-3 text-right font-semibold text-red-700">Net Total</th>
-                    <th className="px-3 py-3 text-left font-semibold text-gray-700">Expiry (Auto)</th>
-                    <th className="px-3 py-3 text-center font-semibold text-gray-700">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="ph-table w-full text-xs">
+              <thead>
+                <tr className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)]">
+                  <th className="px-3 py-3 text-left font-semibold text-gray-700">#</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-700">Product Name</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-700">Company</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-700">Unit</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-700">Location</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-700">Doctor</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-700">Trainer</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-700">Qty</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-700">Sell. Price</th>
+                  <th className="px-3 py-3 text-right font-semibold text-gray-700">Total</th>
+                  <th className="px-3 py-3 text-right font-semibold text-orange-700">Disc %</th>
+                  <th className="px-3 py-3 text-right font-semibold text-orange-700">Disc Amt</th>
+                  <th className="px-3 py-3 text-right font-semibold text-red-700">Net Total</th>
+                  <th className="px-3 py-3 text-left font-semibold text-gray-700">Expiry (Auto)</th>
+                  <th className="px-3 py-3 text-center font-semibold text-gray-700">Action</th>
+                </tr>
+              </thead>
+              <tbody>
                   {stockOutItems.map((item, index) => {
                     const itemTotal = item.itemTotal !== undefined ? item.itemTotal : (item.quantity * (item.sellingPrice || 0));
                     const discPct = item.discountPercentage || 0;
@@ -1361,7 +1380,6 @@ const Stockout = () => {
           </div>
         )}
       </div>
-    </div>
   );
 };
 

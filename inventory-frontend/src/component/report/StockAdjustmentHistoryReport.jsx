@@ -221,19 +221,19 @@ const StockAdjustmentHistoryReport = ({
               <table className="reports-table">
                 <thead>
                   <tr>
-                    <th>No</th>
-                    <th>Product Name</th>
-                    <th>Company Name</th>
-                    <th>Unit</th>
-                    <th>Adjustment Date</th>
-                    <th>Expiry Date</th>
-                    <th className="text-right">Adjusted Quantity</th>
-                    <th className="text-right">Price</th>
-                    <th className="text-right">Previous Stock</th>
-                    <th className="text-right">Updated Stock</th>
-                    <th>Doc Number / Ref</th>
-                    <th>User Name</th>
-                    <th>Action</th>
+                    <th className="col-num">#</th>
+                    <th className="col-product">Product Name</th>
+                    <th className="col-company">Company Name</th>
+                    <th className="col-unit">Unit</th>
+                    <th className="col-date">Adjustment Date</th>
+                    <th className="col-expiry">Expiry Date</th>
+                    <th className="col-qty text-right">Adjusted Quantity</th>
+                    <th className="col-price text-right">Price</th>
+                    <th className="col-qty text-right">Previous Stock</th>
+                    <th className="col-qty text-right">Updated Stock</th>
+                    <th className="col-docno">Doc Number / Ref</th>
+                    <th className="min-w-[120px]">User Name</th>
+                    <th className="min-w-[90px] text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -242,12 +242,12 @@ const StockAdjustmentHistoryReport = ({
                     const isEditing = editingId === row._id;
                     return (
                       <tr key={row._id || idx}>
-                        <td>{idx}</td>
-                        <td>{row.productName || '-'}</td>
-                        <td>{row.companyName || '-'}</td>
-                        <td>{row.unit || '-'}</td>
-                        <td>{row.adjustmentDate ? moment(row.adjustmentDate).format('DD/MM/YYYY') : '-'}</td>
-                        <td>
+                        <td className="col-num font-mono text-slate-500">{idx}</td>
+                        <td className="col-product font-semibold text-[var(--ph-text)]">{row.productName || '-'}</td>
+                        <td className="col-company text-[var(--ph-text-secondary)]">{row.companyName || '-'}</td>
+                        <td className="col-unit text-[var(--ph-text-secondary)]">{row.unit || '-'}</td>
+                        <td className="col-date">{row.adjustmentDate ? moment(row.adjustmentDate).format('DD/MM/YYYY') : '-'}</td>
+                        <td className="col-expiry">
                           {isEditing ? (
                             editForm.requiresExpiry ? (
                               <input
@@ -257,41 +257,43 @@ const StockAdjustmentHistoryReport = ({
                                 onChange={(e) => setEditForm((f) => ({ ...f, expiry: e.target.value }))}
                               />
                             ) : (
-                              <span className="text-gray-400 text-xs font-semibold bg-gray-100 px-2.5 py-1 rounded">Not Required</span>
+                              <span className="text-gray-400 text-xs font-semibold bg-gray-100 dark:bg-gray-800 px-2.5 py-1 rounded">Not Required</span>
                             )
                           ) : (
-                            row.expiry ? moment(row.expiry).format('DD/MM/YYYY') : '-'
+                            row.expiry ? (
+                              <span className="font-mono text-xs text-[var(--ph-text-secondary)]">{moment(row.expiry).format('DD/MM/YYYY')}</span>
+                            ) : '-'
                           )}
                         </td>
-                        <td className={`text-right ${(isEditing ? Number(editForm.quantityDelta || 0) : row.adjustedQuantity || 0) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                        <td className={`col-qty text-right font-mono font-bold ${(isEditing ? Number(editForm.quantityDelta || 0) : row.adjustedQuantity || 0) >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
                           {isEditing ? (
                             <input
                               type="number"
-                              className="reports-input text-right"
+                              className="reports-input text-right font-mono"
                               value={editForm.quantityDelta ?? ''}
                               onChange={(e) => setEditForm((f) => ({ ...f, quantityDelta: e.target.value }))}
                             />
                           ) : (
-                            (row.adjustedQuantity || 0) >= 0 ? `+${row.adjustedQuantity}` : row.adjustedQuantity
+                            (row.adjustedQuantity || 0) >= 0 ? `+${(row.adjustedQuantity || 0).toLocaleString()}` : (row.adjustedQuantity || 0).toLocaleString()
                           )}
                         </td>
-                        <td className="text-right">
+                        <td className="col-price text-right font-mono">
                           {isEditing ? (
                             <input
                               type="number"
-                              className="reports-input text-right"
+                              className="reports-input text-right font-mono"
                               value={editForm.price ?? ''}
                               onChange={(e) => setEditForm((f) => ({ ...f, price: e.target.value }))}
                             />
                           ) : (
-                            `QR${(row.price ?? 0).toFixed(2)}`
+                            `QR ${(row.price ?? 0).toFixed(2)}`
                           )}
                         </td>
-                        <td className="text-right">{row.previousStock ?? 0}</td>
-                        <td className="text-right">{row.updatedStock ?? 0}</td>
-                        <td>{row.docNo ?? '-'}</td>
-                        <td>{row.userName || 'N/A'}</td>
-                        <td>
+                        <td className="col-qty text-right font-mono text-[var(--ph-text-secondary)]">{(row.previousStock ?? 0).toLocaleString()}</td>
+                        <td className="col-qty text-right font-mono font-bold text-[var(--ph-text)]">{(row.updatedStock ?? 0).toLocaleString()}</td>
+                        <td className="col-docno font-mono">{row.docNo ?? '-'}</td>
+                        <td className="min-w-[120px] text-[var(--ph-text-secondary)]">{row.userName || 'N/A'}</td>
+                        <td className="min-w-[90px] text-center">
                           {isEditing ? (
                             <div className="flex gap-2">
                               <input

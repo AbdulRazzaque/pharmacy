@@ -1,6 +1,6 @@
 import * as React from "react"
 import { cn } from "../../lib/utils"
-import { Eye, EyeOff, Search, X } from "lucide-react"
+import { Eye, EyeOff, X } from "lucide-react"
 
 const Input = React.forwardRef(({ 
   className, 

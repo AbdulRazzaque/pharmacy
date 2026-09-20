@@ -20,6 +20,8 @@ import { Trash2, Edit, Plus, Download, Search, Upload, FileSpreadsheet, Loader2 
 import * as XLSX from 'xlsx';
 import { saveAs } from '../../utils/fileDownload';
 import { getToken, getUserInfo } from '../../utils/auth';
+import { PageHeader } from '../../components/ui/page-header';
+import { Badge } from '../../components/ui/badge';
 
 const IMPORT_COLUMNS = ['name', 'companyName', 'type', 'unit'];
 const ROW_HEIGHT = 49;
@@ -396,71 +398,91 @@ const Addproducts = () => {
     filteredData.every((item) => selectedRows.includes(item._id));
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-3xl font-bold">Products Management</h1>
-        <div className="flex flex-wrap gap-2">
-
-          <Button variant="destructive" onClick={handleBulkDelete}>
-            <Trash2 className="mr-2 h-4 w-4" />
+    <div className="ph-page space-y-6">
+      <PageHeader
+        title="Products Directory"
+        subtitle="Manage pharmacy medications, catalog categorization, and inventory master records"
+        badge={
+          <Badge variant="teal" className="ml-2">
+            {data.length} Total Records
+          </Badge>
+        }
+      >
+        {selectedRows.length > 0 && (
+          <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+            <Trash2 className="mr-1.5 h-4 w-4" />
             Delete ({selectedRows.length})
           </Button>
+        )}
 
-          {data.some((p) => !p.createdBy) && (
-            <Button variant="secondary" onClick={fixNullCreatedBy}>
-              Fix Missing Creators
-            </Button>
-          )}
-          {isAdmin && (
-            <>
-              <Button variant="outline" onClick={downloadImportTemplate}>
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Sample Template
-              </Button>
-              <Button variant="outline" onClick={openImportDialog}>
-                <Upload className="mr-2 h-4 w-4" />
-                Import Excel
-              </Button>
-            </>
-          )}
-          <Button variant="outline" onClick={exportToExcel}>
-            <Download className="mr-2 h-4 w-4" />
-            Export
+        {data.some((p) => !p.createdBy) && (
+          <Button variant="secondary" size="sm" onClick={fixNullCreatedBy}>
+            Fix Missing Creators
           </Button>
-        </div>
-      </div>
+        )}
+        {isAdmin && (
+          <>
+            <Button variant="outline" size="sm" onClick={downloadImportTemplate}>
+              <FileSpreadsheet className="mr-1.5 h-4 w-4 text-[var(--ph-teal)]" />
+              Sample Template
+            </Button>
+            <Button variant="outline" size="sm" onClick={openImportDialog}>
+              <Upload className="mr-1.5 h-4 w-4 text-[var(--ph-navy)]" />
+              Import Excel
+            </Button>
+          </>
+        )}
+        <Button variant="outline" size="sm" onClick={exportToExcel}>
+          <Download className="mr-1.5 h-4 w-4 text-emerald-600" />
+          Export
+        </Button>
+      </PageHeader>
 
       {alert.show && (
-        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'}>
+        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="animate-in fade-in">
           <AlertDescription>{alert.message}</AlertDescription>
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingId ? 'Edit Product' : 'Add New Product'}</CardTitle>
+      {/* Product Form Card */}
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)]">
+        <CardHeader className="border-b border-[var(--ph-border)] pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base font-semibold text-[var(--ph-text)]">
+                {editingId ? 'Edit Product Details' : 'Add New Product'}
+              </CardTitle>
+              <p className="text-xs text-[var(--ph-text-secondary)] mt-0.5">
+                {editingId ? 'Modify existing medication specifications' : 'Register a new medication or healthcare item in the catalog'}
+              </p>
+            </div>
+            {editingId && (
+              <Badge variant="warning">Editing Mode</Badge>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Product Name *</Label>
+        <CardContent className="pt-5">
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="name" className="text-xs font-semibold text-[var(--ph-text)]">Product Name *</Label>
                 <Input
                   id="name"
                   {...register('name', { required: 'Product name is required' })}
-                  placeholder="Enter product name"
+                  placeholder="e.g. Paracetamol 500mg"
+                  className="h-9.5 text-sm"
                 />
                 {errors.name && (
-                  <p className="text-sm text-red-500">{errors.name.message}</p>
+                  <p className="text-xs text-rose-600 font-medium">{errors.name.message}</p>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="unit">Unit *</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="unit" className="text-xs font-semibold text-[var(--ph-text)]">Unit *</Label>
                 <select
                   id="unit"
                   {...register('unit', { required: 'Unit is required' })}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  className="flex h-9.5 w-full rounded-lg border border-[var(--ph-border)] bg-[var(--ph-surface)] px-3 py-1.5 text-sm text-[var(--ph-text)] focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]"
                 >
                   <option value="">Select unit</option>
                   <option value="Kg">Kg</option>
@@ -471,76 +493,86 @@ const Addproducts = () => {
                   <option value="Packet">Packet</option>
                 </select>
                 {errors.unit && (
-                  <p className="text-sm text-red-500">{errors.unit.message}</p>
+                  <p className="text-xs text-rose-600 font-medium">{errors.unit.message}</p>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="type">Type/Group *</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="type" className="text-xs font-semibold text-[var(--ph-text)]">Type / Group *</Label>
                 <Input
                   id="type"
                   {...register('type', { required: 'Type is required' })}
-                  placeholder="Enter type/group"
+                  placeholder="e.g. Tablet, Syrup, Injection"
+                  className="h-9.5 text-sm"
                 />
                 {errors.type && (
-                  <p className="text-sm text-red-500">{errors.type.message}</p>
+                  <p className="text-xs text-rose-600 font-medium">{errors.type.message}</p>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="companyName">Company Name *</Label>
+              <div className="space-y-1.5">
+                <Label htmlFor="companyName" className="text-xs font-semibold text-[var(--ph-text)]">Company / Manufacturer *</Label>
                 <Input
                   id="companyName"
                   {...register('companyName', { required: 'Company is required' })}
-                  placeholder="Enter company name"
+                  placeholder="e.g. Pfizer, GSK, Novartis"
+                  className="h-9.5 text-sm"
                 />
                 {errors.companyName && (
-                  <p className="text-sm text-red-500">{errors.companyName.message}</p>
+                  <p className="text-xs text-rose-600 font-medium">{errors.companyName.message}</p>
                 )}
               </div>
+            </div>
 
-              <div className="flex items-center space-x-2 pt-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-2 border-t border-[var(--ph-border)]">
+              <label htmlFor="requiresExpiry" className="flex items-center gap-2.5 cursor-pointer text-xs font-medium text-[var(--ph-text)]">
                 <input
                   type="checkbox"
                   id="requiresExpiry"
                   {...register('requiresExpiry')}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-gray-300 text-[var(--ph-teal)] focus:ring-[var(--ph-teal)]"
                 />
-                <Label htmlFor="requiresExpiry" className="cursor-pointer font-semibold text-gray-700">Requires Expiry Tracking</Label>
-              </div>
-            </div>
+                <span>Requires Expiry Date Tracking (Mandatory for perishables)</span>
+              </label>
 
-            <div className="flex gap-2">
-              <Button type="submit">
-                <Plus className="mr-2 h-4 w-4" />
-                {editingId ? 'Update Product' : 'Add Product'}
-              </Button>
-              {editingId && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setEditingId(null);
-                    reset();
-                  }}
-                >
-                  Cancel
+              <div className="flex items-center gap-2">
+                {editingId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditingId(null);
+                      reset();
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                )}
+                <Button type="submit" size="sm" className="bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] text-white">
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  {editingId ? 'Save Changes' : 'Add to Catalog'}
                 </Button>
-              )}
+              </div>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader className="space-y-4">
+      {/* Products Directory Table */}
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)] overflow-hidden">
+        <CardHeader className="border-b border-[var(--ph-border)] py-3 px-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle>
-              Products List ({filteredData.length}
-              {searchQuery.trim() ? ` of ${data.length}` : ''})
-            </CardTitle>
-            <div className="relative w-full sm:max-w-md">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-semibold text-[var(--ph-text)]">
+                Catalog Registry
+              </CardTitle>
+              <Badge variant="outline" className="text-xs font-mono">
+                {filteredData.length} records
+              </Badge>
+            </div>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--ph-muted)] pointer-events-none" />
               <Input
                 type="search"
                 value={searchQuery}
@@ -549,38 +581,38 @@ const Addproducts = () => {
                   setScrollTop(0);
                   if (scrollRef.current) scrollRef.current.scrollTop = 0;
                 }}
-                placeholder="Search by name, company, type, or unit…"
-                className="pl-9"
+                placeholder="Search catalog..."
+                className="pl-8 h-8 text-xs bg-[var(--ph-surface)] border-[var(--ph-border)]"
                 aria-label="Search products"
               />
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <div
             ref={scrollRef}
-            className="overflow-auto border rounded-md"
-            style={{ maxHeight: 'min(60vh, 520px)' }}
+            className="overflow-auto"
+            style={{ maxHeight: 'min(65vh, 560px)' }}
             onScroll={(e) => setScrollTop(e.target.scrollTop)}
           >
             <Table>
-              <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+              <TableHeader className="sticky top-0 z-10 bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] shadow-xs">
                 <TableRow>
-                  <TableHead className="w-12">
+                  <TableHead className="w-10 pl-4">
                     <input
                       type="checkbox"
                       checked={allFilteredSelected}
                       onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-gray-300"
+                      className="h-3.5 w-3.5 rounded border-gray-300"
                     />
                   </TableHead>
-                  <TableHead>Product Name</TableHead>
-                  <TableHead>Unit</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Company</TableHead>
-                  <TableHead>Created By</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Product Name</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Unit</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Type / Group</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Manufacturer</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Registered By</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Role</TableHead>
+                  <TableHead className="text-right font-semibold text-xs text-[var(--ph-text)] pr-4">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -588,11 +620,11 @@ const Addproducts = () => {
                   <TableRow>
                     <TableCell
                       colSpan={8}
-                      className="text-center py-8 text-muted-foreground"
+                      className="text-center py-12 text-sm text-[var(--ph-text-secondary)]"
                     >
                       {data.length === 0
-                        ? 'No products found. Add your first product above.'
-                        : 'No products match your search.'}
+                        ? 'No products found. Register your first product above.'
+                        : 'No products match your search query.'}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -606,47 +638,57 @@ const Addproducts = () => {
                       </TableRow>
                     )}
                     {visibleRows.map((product) => (
-                      <TableRow key={product._id} style={{ height: ROW_HEIGHT }}>
-                        <TableCell className="w-12">
+                      <TableRow key={product._id} style={{ height: ROW_HEIGHT }} className="hover:bg-[var(--ph-surface-2)]/60 transition-colors border-b border-[var(--ph-border)]">
+                        <TableCell className="w-10 pl-4">
                           <input
                             type="checkbox"
                             checked={selectedRows.includes(product._id)}
                             onChange={() => toggleSelectRow(product._id)}
-                            className="h-4 w-4 rounded border-gray-300"
+                            className="h-3.5 w-3.5 rounded border-gray-300"
                           />
                         </TableCell>
-                        <TableCell className="font-medium">{product.name}</TableCell>
-                        <TableCell>{product.unit || '-'}</TableCell>
-                        <TableCell>{product.type || '-'}</TableCell>
-                        <TableCell>{product.companyName || '-'}</TableCell>
+                        <TableCell className="font-medium text-sm text-[var(--ph-text)]">
+                          {product.name}
+                        </TableCell>
                         <TableCell>
-                          <span
-                            className={!product.createdBy ? 'text-gray-400 italic' : ''}
-                          >
+                          <Badge variant="outline" className="text-[11px] font-medium py-0">
+                            {product.unit || '-'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-[var(--ph-text-secondary)]">
+                          {product.type || '-'}
+                        </TableCell>
+                        <TableCell className="text-xs font-medium text-[var(--ph-text)]">
+                          {product.companyName || '-'}
+                        </TableCell>
+                        <TableCell className="text-xs text-[var(--ph-text-secondary)]">
+                          <span className={!product.createdBy ? 'text-[var(--ph-muted)] italic' : ''}>
                             {product.createdBy?.userName || 'System/Legacy'}
                           </span>
                         </TableCell>
-                        <TableCell className="capitalize">
-                          {product.createdByRole || '-'}
+                        <TableCell>
+                          <Badge variant={product.createdByRole?.toLowerCase() === 'admin' ? 'teal' : 'default'} className="text-[10px] py-0 uppercase">
+                            {product.createdByRole || '-'}
+                          </Badge>
                         </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
+                        <TableCell className="text-right pr-4">
+                          <div className="flex justify-end gap-1">
                             <Button
                               variant="ghost"
                               size="sm"
+                              className="h-7 w-7 p-0 text-[var(--ph-text-secondary)] hover:text-[var(--ph-navy)]"
                               onClick={() => handleEdit(product)}
                             >
-                              <Edit className="h-4 w-4" />
+                              <Edit className="h-3.5 w-3.5" />
                             </Button>
-
                             <Button
                               variant="ghost"
                               size="sm"
+                              className="h-7 w-7 p-0 text-[var(--ph-text-secondary)] hover:text-rose-600"
                               onClick={() => handleDelete(product._id)}
                             >
-                              <Trash2 className="h-4 w-4 text-red-500" />
+                              <Trash2 className="h-3.5 w-3.5 text-rose-500" />
                             </Button>
-
                           </div>
                         </TableCell>
                       </TableRow>

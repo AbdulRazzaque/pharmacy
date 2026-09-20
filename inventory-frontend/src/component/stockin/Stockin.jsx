@@ -3,8 +3,9 @@ import axios from 'axios';
 import { getToken, getUserInfo } from '../../utils/auth';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Badge } from '../../components/ui/badge';
-import { Plus, Trash2, Edit, TrendingUp, Save, Package, AlertCircle, CheckCircle2, Search, X } from 'lucide-react';
+import { Plus, Trash2, Edit, Save, Package, AlertCircle, CheckCircle2, Search, X, Calendar, FileText } from 'lucide-react';
 import moment from 'moment';
+import { PageHeader } from '../../components/ui/page-header';
 
 const Stockin = () => {
   const [products, setProducts] = useState([]);
@@ -411,65 +412,68 @@ const Stockin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-[1600px] mx-auto">
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Package className="w-6 h-6 text-blue-600" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Stock In Entry</h1>
-                <p className="text-sm text-gray-500">Quick data entry (F10 to Save)</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-right">
-                <span className="text-xs text-gray-500 block font-semibold">Document No</span>
-                <span className="text-lg font-black text-blue-800">#{docNo}</span>
-              </div>
-            </div>
+    <div className="ph-page space-y-6">
+      <PageHeader
+        title="Stock In Receiving Console"
+        subtitle="Stage and verify incoming pharmaceutical shipments, lot expiry dates, and purchase invoice batches"
+        badge={
+          <Badge variant="teal" className="ml-2 font-mono text-xs">
+            Doc #{docNo}
+          </Badge>
+        }
+      >
+        <div className="flex items-center gap-2 text-xs text-[var(--ph-text-secondary)] bg-[var(--ph-surface)] px-3 py-1.5 rounded-lg border border-[var(--ph-border)]">
+          <Calendar className="w-3.5 h-3.5 text-[var(--ph-teal)]" />
+          <span>Date: <strong>{date}</strong></span>
+        </div>
+      </PageHeader>
+
+      {/* Alert */}
+      {alert.show && (
+        <Alert className={`animate-in fade-in ${alert.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300'}`}>
+          <div className="flex items-center gap-2">
+            {alert.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            )}
+            <AlertDescription className="text-xs sm:text-sm font-medium">
+              {alert.message}
+            </AlertDescription>
+          </div>
+        </Alert>
+      )}
+
+      {/* Rapid Entry Form Card */}
+      <div className="ph-card shadow-sm border border-[var(--ph-border)] overflow-visible relative z-30">
+        <div className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 rounded-t-xl">
+          <div className="flex items-center gap-2">
+            <Package className="w-4 h-4 text-[var(--ph-teal)]" />
+            <h2 className="font-semibold text-sm text-[var(--ph-text)]">
+              Fast Receipt Entry
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-[var(--ph-text-secondary)]">
+            <span className="px-2 py-0.5 bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded text-[11px] font-mono">Tab: Next</span>
+            <span className="px-2 py-0.5 bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded text-[11px] font-mono">Enter: Stage</span>
+            <span className="px-2 py-0.5 bg-[var(--ph-teal)]/10 text-[var(--ph-teal)] border border-[var(--ph-teal)]/20 rounded text-[11px] font-mono font-semibold">F10: Save All</span>
           </div>
         </div>
 
-        {/* Alert */}
-        {alert.show && (
-          <Alert className={`mb-4 ${alert.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-            <div className="flex items-center gap-2">
-              {alert.type === 'success' ? (
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-600" />
-              )}
-              <AlertDescription className={alert.type === 'success' ? 'text-green-800' : 'text-red-800'}>
-                {alert.message}
-              </AlertDescription>
-            </div>
-          </Alert>
-        )}
-
-        {/* Excel-like Entry Form */}
-        <div className="bg-white rounded-lg shadow-sm mb-4">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-3 rounded-t-lg">
-            <h2 className="font-semibold flex items-center gap-2">
-              <Package className="w-4 h-4" />
-              Quick Entry Form (Tab moves fields, Enter selects product / adds item, F10 to Save Document)
-            </h2>
-          </div>
-
-          <form onSubmit={addItem} className="p-4">
-            <div className="grid grid-cols-12 gap-3">
+        <form onSubmit={addItem} className="p-5">
+          <div className="space-y-3.5">
+            {/* Row 1: Supplier & Invoice Information */}
+            <div className="grid grid-cols-12 gap-3.5 pb-3 border-b border-[var(--ph-border)]/60">
               {/* Supplier */}
-              <div className={isAdmin ? "col-span-2" : "col-span-3"}>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Supplier *
+              <div className="col-span-12 sm:col-span-6">
+                <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+                  Supplier / Vendor *
                 </label>
                 <select
                   id="supplierId"
                   value={formData.supplierId}
                   onChange={(e) => handleInputChange('supplierId', e.target.value)}
-                  className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.supplierId ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                  className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] ${formErrors.supplierId ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -477,7 +481,7 @@ const Stockin = () => {
                     }
                   }}
                 >
-                  <option value="">Select</option>
+                  <option value="">Select Supplier</option>
                   {suppliers.map((supplier) => (
                     <option key={supplier._id} value={supplier._id}>
                       {supplier.name}
@@ -487,18 +491,17 @@ const Stockin = () => {
               </div>
 
               {/* Supplier Doc */}
-              <div className="col-span-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Supplier Doc *
+              <div className="col-span-12 sm:col-span-6">
+                <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+                  Supplier Doc / Inv # *
                 </label>
                 <input
                   id="supplierDocNo"
                   type="text"
                   value={formData.supplierDocNo}
                   onChange={(e) => handleInputChange('supplierDocNo', e.target.value)}
-                  placeholder="INV-001"
-                  className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.supplierDocNo ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                  placeholder="e.g. INV-001"
+                  className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] ${formErrors.supplierDocNo ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -507,14 +510,17 @@ const Stockin = () => {
                   }}
                 />
               </div>
+            </div>
 
-              {/* Product – type-ahead autocomplete */}
-              <div className={isAdmin ? "col-span-2 relative" : "col-span-3 relative"} ref={productAutocompleteRef}>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Product *
+            {/* Row 2: Medication & Line Details */}
+            <div className="grid grid-cols-12 gap-3.5">
+              {/* Product – type-ahead autocomplete (Prioritized width) */}
+              <div className={isAdmin ? "col-span-12 lg:col-span-5 relative" : "col-span-12 lg:col-span-6 relative"} ref={productAutocompleteRef}>
+                <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+                  Medication / Product *
                 </label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--ph-muted)] pointer-events-none" />
                   <input
                     id="product-input"
                     type="text"
@@ -525,10 +531,9 @@ const Stockin = () => {
                       setActiveSugIdx(0);
                     }}
                     onFocus={() => setProductDropdownOpen(true)}
-                    placeholder="Search product..."
+                    placeholder="Search medication by name, brand, generic..."
                     autoComplete="off"
-                    className={`w-full h-10 pl-9 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.productId ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                    className={`w-full h-10 pl-9.5 pr-8 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] transition-colors ${formErrors.productId ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                     onKeyDown={(e) => {
                       if (e.key === 'ArrowDown') {
                         e.preventDefault();
@@ -556,38 +561,55 @@ const Stockin = () => {
                     <button
                       type="button"
                       onClick={clearProduct}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[var(--ph-muted)] hover:text-[var(--ph-text)] rounded-full hover:bg-[var(--ph-surface-2)] transition-colors"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
                 {productDropdownOpen && (
-                  <div className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg py-1 text-sm">
+                  <div className="absolute z-[70] left-0 top-[calc(100%+4px)] w-full min-w-full sm:min-w-[460px] max-w-[95vw] max-h-72 overflow-y-auto bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-xl shadow-2xl py-1 text-xs divide-y divide-[var(--ph-border)]/40">
                     {productSuggestions.length === 0 ? (
-                      <div className="px-3 py-3 text-center text-gray-400 text-xs font-medium">No products found</div>
+                      <div className="px-4 py-5 text-center">
+                        <Search className="w-6 h-6 mx-auto mb-1 text-[var(--ph-muted)] opacity-40" />
+                        <p className="font-semibold text-[var(--ph-text)] text-xs">No products found</p>
+                        <p className="text-[11px] text-[var(--ph-text-secondary)] mt-0.5">Try searching with a different name or brand</p>
+                      </div>
                     ) : (
                       productSuggestions.map((p, idx) => {
                         const active = idx === activeSugIdx;
                         return (
-                          <li
+                          <div
                             key={p._id}
                             data-stockin-sug-idx={idx}
                             onClick={() => handleSelectProduct(p)}
-                            className={`px-3 py-2 cursor-pointer flex items-center justify-between border-l-2 transition-all ${
-                              active ? 'bg-blue-100 border-blue-600 font-semibold' : 'border-transparent hover:bg-blue-50'
+                            className={`px-3.5 py-2.5 cursor-pointer flex items-center justify-between gap-3 border-l-4 transition-colors ${
+                              active
+                                ? 'bg-[var(--ph-navy)]/10 dark:bg-[var(--ph-navy)]/25 border-[var(--ph-navy)]'
+                                : 'border-transparent hover:bg-[var(--ph-surface-2)]'
                             }`}
                           >
-                            <div>
-                              <span className="font-medium text-gray-900">{p.name}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-xs sm:text-sm text-[var(--ph-text)] whitespace-normal leading-snug">
+                                {p.name}
+                              </div>
                               {p.companyName && (
-                                <span className="text-xs text-gray-500 ml-2">({p.companyName})</span>
+                                <div className="text-[11px] text-[var(--ph-text-secondary)] mt-0.5">
+                                  {p.companyName}
+                                </div>
                               )}
                             </div>
-                            <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                              {p.unit || 'unit'}
-                            </span>
-                          </li>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[10px] font-medium bg-[var(--ph-surface-2)] text-[var(--ph-text-secondary)] px-2 py-0.5 rounded-full border border-[var(--ph-border)]">
+                                {p.unit || 'unit'}
+                              </span>
+                              {p.purchasingPrice !== undefined && p.purchasingPrice !== null && (
+                                <span className="text-[10px] font-mono text-[var(--ph-text)] bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/40">
+                                  Cost: QR {Number(p.purchasingPrice).toFixed(2)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         );
                       })
                     )}
@@ -596,8 +618,8 @@ const Stockin = () => {
               </div>
 
               {/* Quantity */}
-              <div className="col-span-1">
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+              <div className={isAdmin ? "col-span-6 sm:col-span-3 lg:col-span-1" : "col-span-6 sm:col-span-3 lg:col-span-3"}>
+                <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
                   Quantity *
                 </label>
                 <input
@@ -606,8 +628,7 @@ const Stockin = () => {
                   min="1"
                   value={formData.quantity}
                   onChange={(e) => handleInputChange('quantity', e.target.value)}
-                  className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.quantity ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                  className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] ${formErrors.quantity ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -623,9 +644,9 @@ const Stockin = () => {
 
               {/* Purchasing Price - Admin only */}
               {isAdmin && (
-                <div className="col-span-1">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Purch. Price *
+                <div className="col-span-6 sm:col-span-3 lg:col-span-2">
+                  <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+                    Cost (QR) *
                   </label>
                   <input
                     id="purchasingPrice"
@@ -634,8 +655,7 @@ const Stockin = () => {
                     min="0.01"
                     value={formData.purchasingPrice}
                     onChange={(e) => handleInputChange('purchasingPrice', e.target.value)}
-                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.purchasingPrice ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                    className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] ${formErrors.purchasingPrice ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -648,9 +668,9 @@ const Stockin = () => {
 
               {/* Selling Price - Admin only */}
               {isAdmin && (
-                <div className="col-span-1">
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Sell. Price
+                <div className="col-span-6 sm:col-span-3 lg:col-span-2">
+                  <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
+                    Sell (QR)
                   </label>
                   <input
                     id="sellingPrice"
@@ -659,8 +679,7 @@ const Stockin = () => {
                     min="0"
                     value={formData.sellingPrice}
                     onChange={(e) => handleInputChange('sellingPrice', e.target.value)}
-                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.sellingPrice ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                    className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] ${formErrors.sellingPrice ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
@@ -672,8 +691,8 @@ const Stockin = () => {
               )}
 
               {/* Expiry Date */}
-              <div className={isAdmin ? "col-span-2" : "col-span-3"}>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+              <div className={isAdmin ? "col-span-12 sm:col-span-6 lg:col-span-2" : "col-span-6 sm:col-span-3 lg:col-span-3"}>
+                <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
                   Expiry Date *
                 </label>
                 <input
@@ -681,8 +700,7 @@ const Stockin = () => {
                   type="date"
                   value={formData.expiry || ''}
                   onChange={(e) => handleInputChange('expiry', e.target.value)}
-                  className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${formErrors.expiry ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                  className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] ${formErrors.expiry ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                       e.preventDefault();
@@ -692,15 +710,17 @@ const Stockin = () => {
                 />
               </div>
             </div>
+          </div>
 
-            {/* Action Buttons */}
-            <div className="mt-4 flex items-center gap-3">
+          {/* Action Ribbon */}
+          <div className="mt-4 pt-3.5 border-t border-[var(--ph-border)] flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
               <button
                 type="submit"
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium text-sm flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-4 py-2 bg-[var(--ph-navy)] text-white rounded-lg hover:bg-[var(--ph-navy-hover)] font-medium text-xs flex items-center gap-1.5 transition-colors"
               >
-                <Plus className="w-4 h-4" />
-                Add Item (Enter)
+                <Plus className="w-3.5 h-3.5" />
+                Stage Item (Enter)
               </button>
 
               {stockItems.length > 0 && (
@@ -708,133 +728,148 @@ const Stockin = () => {
                   type="button"
                   onClick={saveStockIn}
                   disabled={loading}
-                  className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium text-sm flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                  className="px-5 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-semibold text-xs flex items-center gap-1.5 shadow-xs transition-colors disabled:opacity-50"
                 >
-                  <Save className="w-4 h-4" />
-                  {loading ? 'Saving...' : `Save All (${stockItems.length} items)`}
+                  <Save className="w-3.5 h-3.5" />
+                  {loading ? 'Saving...' : `Save All Receipt (${stockItems.length} items)`}
                 </button>
               )}
+            </div>
 
-              {isAdmin && (
-                <div className="ml-auto text-right">
-                  <div className="text-xs text-gray-500">Grand Total</div>
-                  <div className="text-2xl font-bold text-green-600">QR{getGrandTotal().toFixed(2)}</div>
-                </div>
-              )}
-            </div>
-          </form>
-        </div>
-
-        {/* Items Table */}
-        {stockItems.length > 0 && (
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-            <div className="bg-gray-700 text-white px-4 py-3 flex items-center justify-between">
-              <h3 className="font-semibold">Items List</h3>
-              <Badge variant="secondary" className="bg-white text-gray-700">
-                {stockItems.length} Items • {getTotalQuantity()} Total Qty
-              </Badge>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">#</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Product Name</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Company Name</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Unit</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Supplier</th>
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Doc No</th>
-                    <th className="px-4 py-3 text-right font-semibold text-gray-700">Qty</th>
-                    {isAdmin && <th className="px-4 py-3 text-right font-semibold text-gray-700">Purch. Price</th>}
-                    {isAdmin && <th className="px-4 py-3 text-right font-semibold text-gray-700">Sell. Price</th>}
-                    {isAdmin && <th className="px-4 py-3 text-right font-semibold text-gray-700">Total</th>}
-                    <th className="px-4 py-3 text-left font-semibold text-gray-700">Expiry</th>
-                    <th className="px-4 py-3 text-center font-semibold text-gray-700">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stockItems.map((item, index) => (
-                    <tr key={item.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-600">{index + 1}</td>
-                      <td className="px-4 py-3 font-medium text-gray-900">{item.productName}</td>
-                      <td className="px-4 py-3 text-gray-700">{item.companyName || '-'}</td>
-                      <td className="px-4 py-3 text-gray-700">{item.unit || '-'}</td>
-                      <td className="px-4 py-3">{item.supplierName}</td>
-                      <td className="px-4 py-3">
-                        <span className="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
-                          {item.supplierDocNo}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right font-semibold">{item.quantity}</td>
-                      {isAdmin && <td className="px-4 py-3 text-right">QR{item.purchasingPrice.toFixed(2)}</td>}
-                      {isAdmin && (
-                        <td className="px-4 py-3 text-right">
-                          {item.sellingPrice != null ? `QR${item.sellingPrice.toFixed(2)}` : '—'}
-                        </td>
-                      )}
-                      {isAdmin && (
-                        <td className="px-4 py-3 text-right font-semibold text-green-600">
-                          QR{item.total.toFixed(2)}
-                        </td>
-                      )}
-                      <td className="px-4 py-3 text-sm">{moment(item.expiry).format('DD/MM/YYYY')}</td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditModal(item)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                            title="Edit item"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeItem(item.id)}
-                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                            title="Remove item"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {isAdmin && stockItems.length > 0 && (
+              <div className="text-right">
+                <span className="text-[11px] uppercase tracking-wider text-[var(--ph-text-secondary)] font-semibold mr-2">
+                  Grand Receipt Total:
+                </span>
+                <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                  QR {getGrandTotal().toFixed(2)}
+                </span>
+              </div>
+            )}
           </div>
-        )}
+        </form>
       </div>
+
+      {/* Staged Items Table */}
+      {stockItems.length > 0 && (
+        <div className="ph-card shadow-sm border border-[var(--ph-border)] overflow-hidden">
+          <div className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-[var(--ph-navy)]" />
+              <h3 className="font-semibold text-sm text-[var(--ph-text)]">
+                Staged Shipment Batches
+              </h3>
+            </div>
+            <Badge variant="teal">
+              {stockItems.length} Items • {getTotalQuantity()} Units
+            </Badge>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] text-[var(--ph-text-secondary)] font-semibold">
+                <tr>
+                  <th className="px-4 py-2.5 text-left w-10">#</th>
+                  <th className="px-4 py-2.5 text-left">Product Name</th>
+                  <th className="px-4 py-2.5 text-left">Manufacturer</th>
+                  <th className="px-4 py-2.5 text-left">Unit</th>
+                  <th className="px-4 py-2.5 text-left">Supplier</th>
+                  <th className="px-4 py-2.5 text-left">Inv Doc</th>
+                  <th className="px-4 py-2.5 text-right">Qty</th>
+                  {isAdmin && <th className="px-4 py-2.5 text-right">Cost (QR)</th>}
+                  {isAdmin && <th className="px-4 py-2.5 text-right">Sell (QR)</th>}
+                  {isAdmin && <th className="px-4 py-2.5 text-right">Total (QR)</th>}
+                  <th className="px-4 py-2.5 text-left">Expiry</th>
+                  <th className="px-4 py-2.5 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--ph-border)]">
+                {stockItems.map((item, index) => (
+                  <tr key={item.id} className="hover:bg-[var(--ph-surface-2)]/50 transition-colors">
+                    <td className="px-4 py-2.5 font-medium text-[var(--ph-muted)]">{index + 1}</td>
+                    <td className="px-4 py-2.5 font-semibold text-[var(--ph-text)]">{item.productName}</td>
+                    <td className="px-4 py-2.5 text-[var(--ph-text-secondary)]">{item.companyName || '-'}</td>
+                    <td className="px-4 py-2.5">
+                      <Badge variant="outline" className="text-[10px] py-0">{item.unit || '-'}</Badge>
+                    </td>
+                    <td className="px-4 py-2.5 text-[var(--ph-text-secondary)]">{item.supplierName}</td>
+                    <td className="px-4 py-2.5">
+                      <span className="px-1.5 py-0.5 bg-[var(--ph-surface-2)] rounded font-mono text-[11px] border border-[var(--ph-border)]">
+                        {item.supplierDocNo}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-bold text-[var(--ph-text)]">{item.quantity}</td>
+                    {isAdmin && <td className="px-4 py-2.5 text-right font-mono">{item.purchasingPrice.toFixed(2)}</td>}
+                    {isAdmin && (
+                      <td className="px-4 py-2.5 text-right font-mono text-[var(--ph-text-secondary)]">
+                        {item.sellingPrice != null ? item.sellingPrice.toFixed(2) : '—'}
+                      </td>
+                    )}
+                    {isAdmin && (
+                      <td className="px-4 py-2.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                        {item.total.toFixed(2)}
+                      </td>
+                    )}
+                    <td className="px-4 py-2.5">
+                      <span className="text-[11px] font-mono text-[var(--ph-text-secondary)]">
+                        {moment(item.expiry).format('DD/MM/YYYY')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(item)}
+                          className="p-1 text-[var(--ph-text-secondary)] hover:text-[var(--ph-navy)] rounded transition-colors"
+                          title="Edit item"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.id)}
+                          className="p-1 text-rose-500 hover:text-rose-700 rounded transition-colors"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Edit Item Modal */}
       {editingItem && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-xl overflow-hidden">
-            <div className="bg-blue-600 text-white px-5 py-4 flex items-center justify-between">
-              <h3 className="font-semibold text-lg flex items-center gap-2">
-                <Edit className="w-5 h-5" />
-                Edit Stock In Item
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-xl shadow-2xl w-full max-w-xl overflow-visible relative">
+            <div className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] px-5 py-3.5 flex items-center justify-between rounded-t-xl">
+              <h3 className="font-semibold text-sm text-[var(--ph-text)] flex items-center gap-2">
+                <Edit className="w-4 h-4 text-[var(--ph-teal)]" />
+                Edit Staged Item
               </h3>
               <button
                 type="button"
                 onClick={handleCloseEditModal}
-                className="text-white/80 hover:text-white p-1 rounded"
+                className="text-[var(--ph-muted)] hover:text-[var(--ph-text)] p-1 rounded"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
             <form onSubmit={handleUpdateItem} className="p-5 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-3.5">
                 {/* Supplier */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1">
                     Supplier *
                   </label>
                   <select
                     value={editFormData.supplierId}
                     onChange={(e) => setEditFormData(prev => ({ ...prev, supplierId: e.target.value }))}
-                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.supplierId ? 'border-red-500' : 'border-gray-300'}`}
+                    className={`w-full h-9 px-3 text-xs bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)] ${editFormErrors.supplierId ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                   >
                     <option value="">Select Supplier</option>
                     {suppliers.map((s) => (
@@ -843,12 +878,12 @@ const Stockin = () => {
                       </option>
                     ))}
                   </select>
-                  {editFormErrors.supplierId && <p className="text-xs text-red-500 mt-1">{editFormErrors.supplierId}</p>}
+                  {editFormErrors.supplierId && <p className="text-[11px] text-rose-500 mt-1">{editFormErrors.supplierId}</p>}
                 </div>
 
                 {/* Supplier Doc */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1">
                     Supplier Doc *
                   </label>
                   <input
@@ -856,19 +891,19 @@ const Stockin = () => {
                     value={editFormData.supplierDocNo}
                     onChange={(e) => setEditFormData(prev => ({ ...prev, supplierDocNo: e.target.value }))}
                     placeholder="INV-001"
-                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.supplierDocNo ? 'border-red-500' : 'border-gray-300'}`}
+                    className={`w-full h-9 px-3 text-xs bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)] ${editFormErrors.supplierDocNo ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                   />
-                  {editFormErrors.supplierDocNo && <p className="text-xs text-red-500 mt-1">{editFormErrors.supplierDocNo}</p>}
+                  {editFormErrors.supplierDocNo && <p className="text-[11px] text-rose-500 mt-1">{editFormErrors.supplierDocNo}</p>}
                 </div>
               </div>
 
               {/* Product Autocomplete */}
               <div className="relative" ref={editProductAutocompleteRef}>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1">
                   Product *
                 </label>
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--ph-muted)] pointer-events-none" />
                   <input
                     type="text"
                     value={editProductQuery}
@@ -878,7 +913,7 @@ const Stockin = () => {
                     }}
                     onFocus={() => setEditProductDropdownOpen(true)}
                     placeholder="Search product..."
-                    className={`w-full h-10 pl-9 pr-8 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.productId ? 'border-red-500' : 'border-gray-300'}`}
+                    className={`w-full h-9 pl-8 pr-7 text-xs bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)] ${editFormErrors.productId ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                   />
                   {editProductQuery && (
                     <button
@@ -887,18 +922,18 @@ const Stockin = () => {
                         setEditProductQuery('');
                         setEditFormData(prev => ({ ...prev, productId: '' }));
                       }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 text-[var(--ph-muted)] hover:text-[var(--ph-text)]"
                     >
-                      <X className="w-4 h-4" />
+                      <X className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
-                {editFormErrors.productId && <p className="text-xs text-red-500 mt-1">{editFormErrors.productId}</p>}
+                {editFormErrors.productId && <p className="text-[11px] text-rose-500 mt-1">{editFormErrors.productId}</p>}
 
                 {editProductDropdownOpen && editProductSuggestions.length > 0 && (
-                  <ul className="absolute z-50 w-full mt-1 max-h-48 overflow-y-auto bg-white border border-gray-200 rounded-md shadow-lg py-1 text-sm">
+                  <div className="absolute z-[70] left-0 top-[calc(100%+4px)] w-full min-w-full max-h-56 overflow-y-auto bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-xl shadow-2xl py-1 text-xs divide-y divide-[var(--ph-border)]/40">
                     {editProductSuggestions.map((p) => (
-                      <li
+                      <div
                         key={p._id}
                         onClick={() => {
                           setEditFormData(prev => ({ ...prev, productId: p._id }));
@@ -906,23 +941,23 @@ const Stockin = () => {
                           setEditProductDropdownOpen(false);
                           if (editFormErrors.productId) setEditFormErrors(prev => ({ ...prev, productId: '' }));
                         }}
-                        className="px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between"
+                        className="px-3 py-2 hover:bg-[var(--ph-surface-2)] cursor-pointer flex items-center justify-between transition-colors"
                       >
-                        <div>
-                          <span className="font-medium text-gray-900">{p.name}</span>
-                          {p.companyName && <span className="text-xs text-gray-500 ml-2">({p.companyName})</span>}
+                        <div className="min-w-0 flex-1">
+                          <span className="font-medium text-[var(--ph-text)]">{p.name}</span>
+                          {p.companyName && <span className="text-[11px] text-[var(--ph-text-secondary)] ml-1.5">({p.companyName})</span>}
                         </div>
-                        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{p.unit || 'unit'}</span>
-                      </li>
+                        <span className="text-[10px] bg-[var(--ph-surface-2)] text-[var(--ph-text-secondary)] px-1.5 py-0.5 rounded border border-[var(--ph-border)] shrink-0">{p.unit || 'unit'}</span>
+                      </div>
                     ))}
-                  </ul>
+                  </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-3 gap-3.5">
                 {/* Quantity */}
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1">
                     Quantity *
                   </label>
                   <input
@@ -930,30 +965,30 @@ const Stockin = () => {
                     min="1"
                     value={editFormData.quantity}
                     onChange={(e) => setEditFormData(prev => ({ ...prev, quantity: e.target.value }))}
-                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.quantity ? 'border-red-500' : 'border-gray-300'}`}
+                    className={`w-full h-9 px-3 text-xs bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)] ${editFormErrors.quantity ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                   />
-                  {editFormErrors.quantity && <p className="text-xs text-red-500 mt-1">{editFormErrors.quantity}</p>}
+                  {editFormErrors.quantity && <p className="text-[11px] text-rose-500 mt-1">{editFormErrors.quantity}</p>}
                 </div>
 
                 {/* Expiry */}
                 <div className={isAdmin ? "" : "col-span-2"}>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                  <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1">
                     Expiry Date *
                   </label>
                   <input
                     type="date"
                     value={editFormData.expiry}
                     onChange={(e) => setEditFormData(prev => ({ ...prev, expiry: e.target.value }))}
-                    className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.expiry ? 'border-red-500' : 'border-gray-300'}`}
+                    className={`w-full h-9 px-3 text-xs bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)] ${editFormErrors.expiry ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                   />
-                  {editFormErrors.expiry && <p className="text-xs text-red-500 mt-1">{editFormErrors.expiry}</p>}
+                  {editFormErrors.expiry && <p className="text-[11px] text-rose-500 mt-1">{editFormErrors.expiry}</p>}
                 </div>
 
                 {/* Purchasing Price */}
                 {isAdmin && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Purch. Price *
+                    <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1">
+                      Cost (QR) *
                     </label>
                     <input
                       type="number"
@@ -961,18 +996,18 @@ const Stockin = () => {
                       min="0.01"
                       value={editFormData.purchasingPrice}
                       onChange={(e) => setEditFormData(prev => ({ ...prev, purchasingPrice: e.target.value }))}
-                      className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.purchasingPrice ? 'border-red-500' : 'border-gray-300'}`}
+                      className={`w-full h-9 px-3 text-xs bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)] ${editFormErrors.purchasingPrice ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                     />
-                    {editFormErrors.purchasingPrice && <p className="text-xs text-red-500 mt-1">{editFormErrors.purchasingPrice}</p>}
+                    {editFormErrors.purchasingPrice && <p className="text-[11px] text-rose-500 mt-1">{editFormErrors.purchasingPrice}</p>}
                   </div>
                 )}
               </div>
 
               {/* Selling Price & Line Total */}
               {isAdmin && (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3.5">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                    <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1">
                       Selling Price
                     </label>
                     <input
@@ -981,18 +1016,18 @@ const Stockin = () => {
                       min="0"
                       value={editFormData.sellingPrice}
                       onChange={(e) => setEditFormData(prev => ({ ...prev, sellingPrice: e.target.value }))}
-                      className={`w-full h-10 px-3 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 ${editFormErrors.sellingPrice ? 'border-red-500' : 'border-gray-300'}`}
+                      className={`w-full h-9 px-3 text-xs bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)] ${editFormErrors.sellingPrice ? 'border-rose-500' : 'border-[var(--ph-border)]'}`}
                     />
-                    {editFormErrors.sellingPrice && <p className="text-xs text-red-500 mt-1">{editFormErrors.sellingPrice}</p>}
+                    {editFormErrors.sellingPrice && <p className="text-[11px] text-rose-500 mt-1">{editFormErrors.sellingPrice}</p>}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Line Total
+                    <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1">
+                      Batch Total
                     </label>
-                    <div className="h-10 px-3 flex items-center bg-green-50 border border-green-200 rounded-md">
-                      <span className="text-sm font-bold text-green-700">
-                        QR{editFormData.quantity && editFormData.purchasingPrice ? (Number(editFormData.quantity) * Number(editFormData.purchasingPrice)).toFixed(2) : '0.00'}
+                    <div className="h-9 px-3 flex items-center bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 rounded-lg">
+                      <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                        QR {editFormData.quantity && editFormData.purchasingPrice ? (Number(editFormData.quantity) * Number(editFormData.purchasingPrice)).toFixed(2) : '0.00'}
                       </span>
                     </div>
                   </div>
@@ -1000,19 +1035,19 @@ const Stockin = () => {
               )}
 
               {/* Modal Action Buttons */}
-              <div className="pt-3 flex justify-end gap-3 border-t">
+              <div className="pt-3 flex justify-end gap-2 border-t border-[var(--ph-border)]">
                 <button
                   type="button"
                   onClick={handleCloseEditModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
+                  className="px-3 py-1.5 text-xs font-medium text-[var(--ph-text-secondary)] hover:bg-[var(--ph-surface-2)] rounded-lg border border-[var(--ph-border)]"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md shadow-sm"
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] rounded-lg shadow-xs"
                 >
-                  Update
+                  Update Item
                 </button>
               </div>
             </form>

@@ -13,6 +13,9 @@ import { History, ArrowDownCircle, ArrowUpCircle, ArrowLeft, Eye, Download, Tren
 import moment from 'moment';
 import * as XLSX from 'xlsx';
 import { saveAs } from '../../utils/fileDownload';
+import { PageHeader } from '../../components/ui/page-header';
+import { StatCard } from '../../components/ui/stat-card';
+import { Badge } from '../../components/ui/badge';
 
 const Transactionlist = () => {
   const { slug } = useParams();
@@ -354,80 +357,80 @@ const Transactionlist = () => {
   const formatNum = (n) => (n != null ? Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-');
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={() => navigate(-1)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
+    <div className="ph-page space-y-6">
+      <PageHeader
+        title={`Audit Trail: ${productName || slug}`}
+        subtitle={productCompany || productUnit ? `${productCompany || 'N/A'} • Unit: ${productUnit || 'N/A'}` : 'Complete chronological inventory ledger and movements'}
+        badge={
+          <Badge variant="teal" className="ml-2 font-mono">
+            {allTransactions.length} Events
+          </Badge>
+        }
+      >
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(-1)}
+            className="border-[var(--ph-border)] hover:bg-[var(--ph-surface-2)] text-xs"
+          >
+            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
             Back
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <History className="h-6 w-6" />
-              Transaction History
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Product: <span className="font-semibold">
-                {productName || slug}
-                {productCompany || productUnit ? ` | ${productCompany || 'N/A'} | ${productUnit || 'N/A'}` : ''}
-              </span>
-            </p>
-          </div>
+          <Button
+            size="sm"
+            onClick={exportToExcel}
+            className="bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] text-white text-xs font-semibold gap-1.5 shadow-sm"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Export Ledger
+          </Button>
         </div>
-        <Button onClick={exportToExcel} variant="outline">
-          <Download className="mr-2 h-4 w-4" />
-          Export to Excel
-        </Button>
-      </div>
+      </PageHeader>
 
       {alert.show && (
-        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'}>
-          <AlertDescription>{alert.message}</AlertDescription>
+        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="border border-[var(--ph-border)]">
+          <AlertDescription className="font-semibold text-xs">{alert.message}</AlertDescription>
         </Alert>
       )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-green-600" />
-              <div>
-                <div className="text-xl font-bold text-green-600">{getStockInTotal()}</div>
-                <p className="text-xs text-muted-foreground">Stock In</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2">
-              <TrendingDown className="h-5 w-5 text-red-600" />
-              <div>
-                <div className="text-xl font-bold text-red-600">{getStockOutTotal()}</div>
-                <p className="text-xs text-muted-foreground">Stock Out</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-xl font-bold text-blue-600">{getCurrentStock()}</div>
-            <p className="text-xs text-muted-foreground">Balance</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-xl font-bold">{allTransactions.length}</div>
-            <p className="text-xs text-muted-foreground">Transactions</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-xl font-bold">${getTotalValue().toFixed(2)}</div>
-            <p className="text-xs text-muted-foreground">Total Value</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon={TrendingUp}
+          label="Total Receipts"
+          value={getStockInTotal()}
+          subtitle="Cumulative stock in"
+          color="success"
+        />
+        <StatCard
+          icon={TrendingDown}
+          label="Total Issues"
+          value={getStockOutTotal()}
+          subtitle="Cumulative stock out"
+          color="destructive"
+        />
+        <StatCard
+          icon={History}
+          label="Running Balance"
+          value={getCurrentStock()}
+          subtitle="Current available balance"
+          color="primary"
+        />
+        <StatCard
+          icon={Search}
+          label="Events Logged"
+          value={allTransactions.length}
+          subtitle="Total lifecycle operations"
+          color="secondary"
+        />
+        <StatCard
+          icon={History}
+          label="Total Value"
+          value={`QR ${getTotalValue().toFixed(2)}`}
+          subtitle="Gross transaction volume"
+          color="warning"
+        />
       </div>
 
       {/* Filters and Controls */}

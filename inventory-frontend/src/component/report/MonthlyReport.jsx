@@ -341,27 +341,27 @@ const MonthlyReport = ({
                 <table className="reports-table">
                   <thead>
                     <tr>
-                      <th>Date</th>
-                      <th>Doc No</th>
-                      <th>Location</th>
-                      <th>Doctor Name</th>
-                      <th>Trainer Name</th>
-                      <th>Product Name</th>
-                      <th>Company</th>
-                      <th>Unit / Size</th>
-                      <th className="text-right">Qty</th>
-                      <th className="text-right">Rate</th>
-                      <th className="text-right">Total</th>
+                      <th className="col-date">Date</th>
+                      <th className="col-docno">Doc No</th>
+                      <th className="min-w-[150px]">Location</th>
+                      <th className="min-w-[140px]">Doctor Name</th>
+                      <th className="min-w-[140px]">Trainer Name</th>
+                      <th className="col-product">Product Name</th>
+                      <th className="col-company">Company</th>
+                      <th className="col-unit">Unit / Size</th>
+                      <th className="col-qty text-right">Qty</th>
+                      <th className="col-price text-right">Rate</th>
+                      <th className="col-total text-right">Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginated.map((row, idx) => (
                       <tr key={row._id || idx}>
-                        <td>{row.date ? moment(row.date).format('DD/MM/YYYY') : '-'}</td>
-                        <td>{row.docNo ? `#${row.docNo}` : '-'}</td>
-                        <td className="font-medium">{row.locationName || row.location?.name || '-'}</td>
-                        <td>{row.doctorName || row.location?.doctorName || '-'}</td>
-                        <td>
+                        <td className="col-date">{row.date ? moment(row.date).format('DD/MM/YYYY') : '-'}</td>
+                        <td className="col-docno font-mono">{row.docNo ? `#${row.docNo}` : '-'}</td>
+                        <td className="min-w-[150px] font-medium text-[var(--ph-text)]">{row.locationName || row.location?.name || '-'}</td>
+                        <td className="min-w-[140px] text-[var(--ph-text-secondary)]">{row.doctorName || row.location?.doctorName || '-'}</td>
+                        <td className="min-w-[140px]">
                           <span
                             style={{
                               display: 'inline-block',
@@ -377,12 +377,12 @@ const MonthlyReport = ({
                             {row.trainerName || row.location?.trainerName || '-'}
                           </span>
                         </td>
-                        <td className="font-medium text-slate-900">{row.productName || '-'}</td>
-                        <td>{row.companyName || '-'}</td>
-                        <td>{row.size || row.unit || '-'}</td>
-                        <td className="text-right font-medium">{row.quantity ?? 0}</td>
-                        <td className="text-right">{(row.rate ?? 0).toFixed(2)}</td>
-                        <td className="text-right font-bold text-slate-900">
+                        <td className="col-product font-semibold text-[var(--ph-text)]">{row.productName || '-'}</td>
+                        <td className="col-company text-[var(--ph-text-secondary)]">{row.companyName || '-'}</td>
+                        <td className="col-unit text-[var(--ph-text-secondary)]">{row.size || row.unit || '-'}</td>
+                        <td className="col-qty text-right font-mono font-bold text-[var(--ph-text)]">{(row.quantity ?? 0).toLocaleString()}</td>
+                        <td className="col-price text-right font-mono">{(row.rate ?? 0).toFixed(2)}</td>
+                        <td className="col-total text-right font-mono font-bold text-[var(--ph-text)]">
                           {(row.totalAmount ?? 0).toFixed(2)}
                         </td>
                       </tr>

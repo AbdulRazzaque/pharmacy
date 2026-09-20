@@ -3,15 +3,20 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { getToken } from '../../utils/auth';
 import moment from 'moment';
+import {
+  Package, Users, AlertTriangle, Activity,
+  PackagePlus, PackageMinus, BarChart3, RefreshCw,
+  MapPin, User, ArrowRight
+} from 'lucide-react';
 
 /* ─── Activity type config ─────────────────────────────────────── */
 const ACTIVITY_CONFIG = {
   stock_in: {
     label: 'Stock IN',
     icon: '📥',
-    color: '#16a34a',
-    bg: '#dcfce7',
-    badge: '#16a34a',
+    color: '#059669',
+    bg: '#d1fae5',
+    badge: '#059669',
   },
   stock_out: {
     label: 'Stock OUT',
@@ -23,9 +28,9 @@ const ACTIVITY_CONFIG = {
   adj_in: {
     label: 'Adjustment IN',
     icon: '🔧',
-    color: '#2563eb',
-    bg: '#dbeafe',
-    badge: '#2563eb',
+    color: '#0e7490',
+    bg: '#e0f2f9',
+    badge: '#0e7490',
   },
   adj_out: {
     label: 'Adjustment OUT',
@@ -113,10 +118,10 @@ const DashboardHome = () => {
   }, []);
 
   const quickActions = [
-    { title: 'Add Product', description: 'Add new product to inventory', icon: '📦', link: '/dashboard/products', color: '#4CAF50' },
-    { title: 'Stock In', description: 'Record incoming stock', icon: '📥', link: '/dashboard/stockin', color: '#2196F3' },
-    { title: 'Stock Out', description: 'Record outgoing stock', icon: '📤', link: '/dashboard/stockout', color: '#FF9800' },
-    { title: 'Reports', description: 'Stock-In, Stock-Out & reports', icon: '📊', link: '/dashboard/reports', color: '#9C27B0' },
+    { title: 'Add Product', description: 'Register new product', icon: <Package size={20} />, link: '/dashboard/products', color: 'var(--ph-success)', bg: 'var(--ph-success-light)' },
+    { title: 'Stock In', description: 'Record incoming stock', icon: <PackagePlus size={20} />, link: '/dashboard/stockin', color: 'var(--ph-navy)', bg: 'var(--ph-navy-light)' },
+    { title: 'Stock Out', description: 'Record outgoing stock', icon: <PackageMinus size={20} />, link: '/dashboard/stockout', color: 'var(--ph-warning)', bg: 'var(--ph-warning-light)' },
+    { title: 'Reports', description: 'Analytics & reporting', icon: <BarChart3 size={20} />, link: '/dashboard/reports', color: 'var(--ph-teal)', bg: 'var(--ph-teal-light)' },
   ];
 
   return (
@@ -124,48 +129,52 @@ const DashboardHome = () => {
       {/* ─── Header ──────────────────────────────────────────────── */}
       <div className="dashboard-header-section">
         <h1 className="page-title">Dashboard Overview</h1>
-        <p className="page-subtitle">Welcome to your pharmacy inventory management system</p>
+        <p className="page-subtitle">Welcome to PharmaCare — your pharmacy management system</p>
       </div>
 
-      {/* ─── Stats ───────────────────────────────────────────────── */}
+      {/* ─── KPI Stats ───────────────────────────────────────────── */}
       <div className="stats-grid">
-        <div className="stat-card" style={{ borderLeftColor: '#4CAF50' }}>
-          <div className="stat-icon" style={{ backgroundColor: '#4CAF5020' }}>
-            <span style={{ fontSize: '2rem' }}>📦</span>
+        <div className="ph-stat-card">
+          <div className="ph-stat-icon" style={{ background: 'var(--ph-navy-light)', color: 'var(--ph-navy)' }}>
+            <Package size={20} />
           </div>
-          <div className="stat-content">
-            <h3 className="stat-label">Total Products</h3>
-            <p className="stat-value">{stats.totalProducts}</p>
-          </div>
-        </div>
-
-        <div className="stat-card" style={{ borderLeftColor: '#2196F3' }}>
-          <div className="stat-icon" style={{ backgroundColor: '#2196F320' }}>
-            <span style={{ fontSize: '2rem' }}>👥</span>
-          </div>
-          <div className="stat-content">
-            <h3 className="stat-label">Total Users</h3>
-            <p className="stat-value">{stats.totalUsers}</p>
+          <div>
+            <p className="ph-stat-label">Total Products</p>
+            <p className="ph-stat-value">{stats.totalProducts}</p>
+            <p className="ph-stat-sub">In the catalogue</p>
           </div>
         </div>
 
-        <div className="stat-card" style={{ borderLeftColor: '#FF9800' }}>
-          <div className="stat-icon" style={{ backgroundColor: '#FF980020' }}>
-            <span style={{ fontSize: '2rem' }}>⚠️</span>
+        <div className="ph-stat-card">
+          <div className="ph-stat-icon" style={{ background: 'var(--ph-teal-light)', color: 'var(--ph-teal)' }}>
+            <Users size={20} />
           </div>
-          <div className="stat-content">
-            <h3 className="stat-label">Low Stock Items</h3>
-            <p className="stat-value">{stats.lowStock}</p>
+          <div>
+            <p className="ph-stat-label">System Users</p>
+            <p className="ph-stat-value">{stats.totalUsers}</p>
+            <p className="ph-stat-sub">Active accounts</p>
           </div>
         </div>
 
-        <div className="stat-card" style={{ borderLeftColor: '#9C27B0' }}>
-          <div className="stat-icon" style={{ backgroundColor: '#9C27B020' }}>
-            <span style={{ fontSize: '2rem' }}>📊</span>
+        <div className="ph-stat-card">
+          <div className="ph-stat-icon" style={{ background: 'var(--ph-warning-light)', color: 'var(--ph-warning)' }}>
+            <AlertTriangle size={20} />
           </div>
-          <div className="stat-content">
-            <h3 className="stat-label">Recent Activities</h3>
-            <p className="stat-value">{stats.recentTransactions}</p>
+          <div>
+            <p className="ph-stat-label">Low Stock</p>
+            <p className="ph-stat-value">{stats.lowStock}</p>
+            <p className="ph-stat-sub">Items to reorder</p>
+          </div>
+        </div>
+
+        <div className="ph-stat-card">
+          <div className="ph-stat-icon" style={{ background: 'var(--ph-success-light)', color: 'var(--ph-success)' }}>
+            <Activity size={20} />
+          </div>
+          <div>
+            <p className="ph-stat-label">Recent Activities</p>
+            <p className="ph-stat-value">{stats.recentTransactions}</p>
+            <p className="ph-stat-sub">Today's transactions</p>
           </div>
         </div>
       </div>
@@ -176,11 +185,13 @@ const DashboardHome = () => {
         <div className="quick-actions-grid">
           {quickActions.map((action, index) => (
             <Link to={action.link} key={index} className="action-card">
-              <div className="action-icon" style={{ backgroundColor: action.color + '20' }}>
-                <span style={{ fontSize: '2rem' }}>{action.icon}</span>
+              <div className="action-icon" style={{ background: action.bg, color: action.color }}>
+                {action.icon}
               </div>
-              <h3 className="action-title">{action.title}</h3>
-              <p className="action-description">{action.description}</p>
+              <div>
+                <h3 className="action-title">{action.title}</h3>
+                <p className="action-description">{action.description}</p>
+              </div>
             </Link>
           ))}
         </div>
@@ -196,35 +207,37 @@ const DashboardHome = () => {
             disabled={activityLoading}
             title="Refresh"
           >
-            <span className={activityLoading ? 'ra-spin' : ''}>↻</span>
+            <RefreshCw size={13} className={activityLoading ? 'ra-spin' : ''} />
             {activityLoading ? 'Loading…' : 'Refresh'}
           </button>
         </div>
 
         <div className="activity-card ra-card">
           {activityLoading ? (
-            /* skeleton rows */
             <ul className="activity-list">
               {[...Array(6)].map((_, i) => (
-                <li key={i} className="ra-item ra-skeleton">
-                  <div className="ra-skeleton-icon" />
+                <li key={i} className="ra-item">
+                  <div className="ra-skeleton-icon ph-skeleton" />
                   <div className="ra-skeleton-body">
-                    <div className="ra-skeleton-line ra-skeleton-title" />
-                    <div className="ra-skeleton-line ra-skeleton-sub" />
+                    <div className="ra-skeleton-line ra-skeleton-title ph-skeleton" />
+                    <div className="ra-skeleton-line ra-skeleton-sub ph-skeleton" />
                   </div>
                 </li>
               ))}
             </ul>
           ) : activityError ? (
             <div className="ra-error">
-              <span>⚠️</span>
+              <AlertTriangle size={16} />
               <span>{activityError}</span>
               <button className="ra-retry-btn" onClick={fetchActivities}>Retry</button>
             </div>
           ) : activities.length === 0 ? (
             <div className="empty-state">
-              <span style={{ fontSize: '3rem', display: 'block', marginBottom: '0.5rem' }}>📋</span>
-              <p>No recent activities found</p>
+              <div className="ph-empty-icon" style={{ margin: '0 auto 12px' }}>
+                <Activity size={22} />
+              </div>
+              <p className="ph-empty-title">No recent activities</p>
+              <p className="ph-empty-desc">Start recording stock transactions to see activity here</p>
             </div>
           ) : (
             <>
@@ -265,16 +278,16 @@ const DashboardHome = () => {
                         <div className="ra-meta-row">
                           {act.quantity != null && (
                             <span className="ra-meta-chip">
-                              <span>📦</span> Qty: {act.quantity}{act.unit ? ` ${act.unit}` : ''}
+                              <Package size={11} /> Qty: {act.quantity}{act.unit ? ` ${act.unit}` : ''}
                             </span>
                           )}
                           {act.location && (
                             <span className="ra-meta-chip">
-                              <span>📍</span> {act.location}
+                              <MapPin size={11} /> {act.location}
                             </span>
                           )}
                           <span className="ra-meta-chip">
-                            <span>👤</span> {act.userName}
+                            <User size={11} /> {act.userName}
                           </span>
                         </div>
                       </div>
@@ -293,7 +306,7 @@ const DashboardHome = () => {
 
               <div className="ra-footer">
                 <Link to="/dashboard/reports" className="ra-view-all-btn">
-                  View All Reports →
+                  View All Reports <ArrowRight size={13} style={{ display: 'inline', verticalAlign: 'middle' }} />
                 </Link>
               </div>
             </>
@@ -305,3 +318,4 @@ const DashboardHome = () => {
 };
 
 export default DashboardHome;
+

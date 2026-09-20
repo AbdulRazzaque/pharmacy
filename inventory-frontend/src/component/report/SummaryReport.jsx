@@ -202,28 +202,28 @@ const SummaryReport = ({
                 <table className="reports-table">
                   <thead>
                     <tr>
-                      <th>Location</th>
-                      <th className="text-right">Total Quantity</th>
-                      <th className="text-right">Grand Total</th>
+                      <th className="min-w-[280px]">Location</th>
+                      <th className="col-qty text-right min-w-[160px]">Total Quantity</th>
+                      <th className="col-total text-right min-w-[160px]">Grand Total</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.map((row) => (
                       <tr key={row.locationId || row.locationName}>
-                        <td className="font-medium">
+                        <td className="min-w-[280px] font-semibold text-[var(--ph-text)]">
                           {row.locationName || '-'}
-                          {row.doctorName && <span className="text-xs text-muted-foreground ml-2">({row.doctorName})</span>}
+                          {row.doctorName && <span className="text-xs text-[var(--ph-text-secondary)] ml-2 font-normal">({row.doctorName})</span>}
                         </td>
-                        <td className="text-right font-medium">{row.totalQuantity ?? 0}</td>
-                        <td className="text-right font-medium">${(row.grandTotal ?? 0).toFixed(2)}</td>
+                        <td className="col-qty text-right font-mono font-bold min-w-[160px]">{(row.totalQuantity ?? 0).toLocaleString()}</td>
+                        <td className="col-total text-right font-mono font-bold min-w-[160px]">QR {(row.grandTotal ?? 0).toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
-                    <tr style={{ backgroundColor: 'rgba(0,0,0,0.04)', fontWeight: 'bold' }}>
-                      <td>Total</td>
-                      <td className="text-right">{totalQuantitySum}</td>
-                      <td className="text-right">${grandTotalSum.toFixed(2)}</td>
+                    <tr className="bg-[var(--ph-surface-2)] font-bold">
+                      <td className="min-w-[280px] font-bold text-[var(--ph-text)]">Total</td>
+                      <td className="col-qty text-right font-mono font-bold min-w-[160px]">{totalQuantitySum.toLocaleString()}</td>
+                      <td className="col-total text-right font-mono font-bold min-w-[160px]">QR {grandTotalSum.toFixed(2)}</td>
                     </tr>
                   </tfoot>
                 </table>

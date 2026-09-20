@@ -13,6 +13,9 @@ import {
 import moment from 'moment';
 import * as XLSX from 'xlsx';
 import { getToken } from '../../utils/auth';
+import { PageHeader } from '../../components/ui/page-header';
+import { StatCard } from '../../components/ui/stat-card';
+import { Badge } from '../../components/ui/badge';
 
 const API_BASE = process.env.REACT_APP_DEVELOPMENT;
 
@@ -406,42 +409,34 @@ const SellingPriceUpdate = () => {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6 max-w-[1600px]">
+    <div className="ph-page space-y-6">
       {/* Top Header */}
-      <div className="flex items-center justify-between flex-wrap gap-4 bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white p-6 rounded-2xl shadow-xl">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-blue-500/20 border border-blue-400/30 rounded-xl backdrop-blur-md">
-              <Tag className="h-7 w-7 text-blue-400" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-                Selling Price Update &amp; History
-              </h1>
-              <p className="text-xs text-blue-200/80">
-                Bulk price editor with complete date-filtered audit trail history
-              </p>
-            </div>
-          </div>
-        </div>
-
+      <PageHeader
+        title="Selling Price Management & Audit History"
+        subtitle="Bulk tariff configuration, live price adjustments, and timestamped audit logs"
+        badge={
+          <Badge variant="teal" className="ml-2 font-mono">
+            {data.length} Products
+          </Badge>
+        }
+      >
         {/* Tab Selection Navigation */}
-        <div className="flex items-center gap-2 bg-white/10 p-1.5 rounded-xl backdrop-blur-md border border-white/10">
+        <div className="flex items-center gap-1.5 bg-[var(--ph-surface-2)] p-1 rounded-xl border border-[var(--ph-border)]">
           <button
             onClick={() => {
               setActiveTab('update');
               fetchProductsAndPrices();
             }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs transition-all ${
               activeTab === 'update'
-                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
-                : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                ? 'bg-[var(--ph-navy)] text-white shadow-sm'
+                : 'text-[var(--ph-text-secondary)] hover:text-[var(--ph-text)] hover:bg-[var(--ph-surface)]'
             }`}
           >
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="h-3.5 w-3.5" />
             Bulk Price Editor
             {modifiedCount > 0 && (
-              <span className="ml-1 px-2 py-0.5 text-xs bg-amber-400 text-slate-900 font-extrabold rounded-full">
+              <span className="ml-1 px-1.5 py-0.2 text-[10px] bg-amber-500 text-white font-black rounded-full">
                 {modifiedCount}
               </span>
             )}
@@ -452,35 +447,35 @@ const SellingPriceUpdate = () => {
               setActiveTab('history');
               fetchAllPriceHistory();
             }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg font-semibold text-sm transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold text-xs transition-all ${
               activeTab === 'history'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/30'
-                : 'text-purple-100 hover:bg-white/10 hover:text-white'
+                ? 'bg-[var(--ph-teal)] text-white shadow-sm'
+                : 'text-[var(--ph-text-secondary)] hover:text-[var(--ph-text)] hover:bg-[var(--ph-surface)]'
             }`}
           >
-            <History className="h-4 w-4" />
+            <History className="h-3.5 w-3.5" />
             Price History Log
-            <span className="ml-1 px-2 py-0.5 text-xs bg-purple-400/30 text-purple-200 font-bold rounded-full border border-purple-300/30">
+            <span className="ml-1 px-1.5 py-0.2 text-[10px] bg-black/20 text-current font-bold rounded-full">
               {allHistory.length}
             </span>
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Global Alert */}
       {alert.show && (
         <Alert
           variant={alert.type === 'error' ? 'destructive' : 'default'}
-          className={`animate-in fade-in slide-in-from-top duration-200 border-2 ${
+          className={`animate-in fade-in slide-in-from-top duration-200 border ${
             alert.type === 'success'
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
               : alert.type === 'error'
-              ? 'bg-red-50 border-red-300 text-red-900'
-              : 'bg-blue-50 border-blue-300 text-blue-900'
+              ? 'bg-rose-50 border-rose-300 text-rose-900 dark:bg-rose-950/40 dark:text-rose-300'
+              : 'bg-blue-50 border-blue-300 text-blue-900 dark:bg-blue-950/40 dark:text-blue-300'
           }`}
         >
-          <AlertCircle className="h-5 w-5" />
-          <AlertDescription className="font-semibold text-sm ml-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="font-semibold text-xs ml-2">
             {alert.message}
           </AlertDescription>
         </Alert>
@@ -492,64 +487,35 @@ const SellingPriceUpdate = () => {
       {activeTab === 'update' && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Summary Metric Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card className="border-l-4 border-l-blue-600 shadow-sm bg-white hover:shadow-md transition-shadow">
-              <CardContent className="pt-5 pb-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-black text-slate-800">{data.length}</div>
-                    <p className="text-xs font-semibold text-slate-500 mt-1">Total Products</p>
-                  </div>
-                  <div className="p-3 bg-blue-50 text-blue-600 rounded-xl">
-                    <Layers className="h-6 w-6" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-amber-500 shadow-sm bg-white hover:shadow-md transition-shadow">
-              <CardContent className="pt-5 pb-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-black text-amber-600">{modifiedCount}</div>
-                    <p className="text-xs font-semibold text-slate-500 mt-1">Pending Price Edits</p>
-                  </div>
-                  <div className="p-3 bg-amber-50 text-amber-600 rounded-xl">
-                    <Sparkles className="h-6 w-6" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-emerald-600 shadow-sm bg-white hover:shadow-md transition-shadow">
-              <CardContent className="pt-5 pb-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-black text-emerald-600">
-                      {data.filter(p => (p.sellingPrice || 0) > 0).length}
-                    </div>
-                    <p className="text-xs font-semibold text-slate-500 mt-1">Products with Price Set</p>
-                  </div>
-                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
-                    <Tag className="h-6 w-6" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-purple-600 shadow-sm bg-white hover:shadow-md transition-shadow">
-              <CardContent className="pt-5 pb-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-2xl font-black text-purple-700">{allHistory.length}</div>
-                    <p className="text-xs font-semibold text-slate-500 mt-1">Total Price Changes Logged</p>
-                  </div>
-                  <div className="p-3 bg-purple-50 text-purple-600 rounded-xl">
-                    <History className="h-6 w-6" />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <StatCard
+              icon={Layers}
+              label="Total Catalog Products"
+              value={data.length}
+              subtitle="Registered pharmaceutical lines"
+              color="primary"
+            />
+            <StatCard
+              icon={Sparkles}
+              label="Pending Tariff Updates"
+              value={modifiedCount}
+              subtitle="Unsaved modified selling prices"
+              color={modifiedCount > 0 ? "warning" : "primary"}
+            />
+            <StatCard
+              icon={Tag}
+              label="Priced Products"
+              value={data.filter(p => (p.sellingPrice || 0) > 0).length}
+              subtitle="Products with active unit price"
+              color="success"
+            />
+            <StatCard
+              icon={History}
+              label="Total Audited Changes"
+              value={allHistory.length}
+              subtitle="Historical price events recorded"
+              color="secondary"
+            />
           </div>
 
           {/* Action Header & Search Bar */}

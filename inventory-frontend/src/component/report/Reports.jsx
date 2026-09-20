@@ -14,6 +14,8 @@ import MonthlyReport from './MonthlyReport';
 import SummaryReport from './SummaryReport';
 import StockAdjustmentHistoryReport from './StockAdjustmentHistoryReport';
 import AveragePriceReport from './AveragePriceReport';
+import { PageHeader } from '../../components/ui/page-header';
+import { Badge } from '../../components/ui/badge';
 import './Reports.css';
 
 applyPlugin(jsPDF);
@@ -1109,11 +1111,17 @@ const Reports = () => {
   }, []);
 
   return (
-    <div className="reports-page">
-      <div className="container mx-auto p-6">
-        <div className="reports-header">
-          <h1><FileText /> Reports</h1>
-        </div>
+    <div className="reports-page ph-page w-full space-y-6">
+      <div className="reports-content space-y-5 w-full">
+        <PageHeader
+          title="Clinical Intelligence & Reports"
+          subtitle="Audit-ready procurement, dispensing, financial, and inventory analytics"
+          badge={
+            <Badge variant="teal" className="ml-2 font-mono">
+              6 Analytical Views
+            </Badge>
+          }
+        />
 
         {alert.show && (
           <div className={`reports-alert ${alert.type}`}>{alert.message}</div>

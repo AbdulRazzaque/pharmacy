@@ -5,10 +5,12 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { ArrowLeft, Save, Trash2, ShieldAlert, Sparkles, RefreshCw, FileText, Search, Plus } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, ShieldAlert, RefreshCw, FileText, Search, Plus } from 'lucide-react';
 import ProductDropdownCell from '../../components/ui/ProductDropdownCell';
 import moment from 'moment';
 import { getToken, getUserInfo } from '../../utils/auth';
+import { PageHeader } from '../../components/ui/page-header';
+import { Badge } from '../../components/ui/badge';
 
 const StockInDocExcelEdit = () => {
   const { docNo } = useParams();
@@ -461,62 +463,66 @@ const StockInDocExcelEdit = () => {
   const totalValue = activeItems.reduce((sum, item) => sum + (Number(item.quantity || 0) * Number(item.purchasingPrice || 0)), 0);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="ph-page space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={handleBack} className="gap-1">
-            <ArrowLeft className="h-4 w-4" />
+      <PageHeader
+        title={`Stock In Excel Editor — Doc #${docNo}`}
+        subtitle="Spreadsheet style bulk-editing, fast keystrokes, inline validation"
+        badge={
+          <Badge variant="teal" className="ml-2 font-mono">
+            Doc #{docNo}
+          </Badge>
+        }
+      >
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBack}
+            className="border-[var(--ph-border)] hover:bg-[var(--ph-surface-2)] text-xs"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 mr-1" />
             Back
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2 text-gray-800 dark:text-gray-100">
-              <Sparkles className="h-8 w-8 text-emerald-500" />
-              Document Excel Editor: Doc #{docNo}
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">Spreadsheet style bulk-editing, fast keystrokes, inline validation.</p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-4">
           {isAdmin && (
-            <div className="text-right">
-              <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Document Value</div>
-              <div className="text-xl font-black text-emerald-600">QR {totalValue.toFixed(2)}</div>
+            <div className="text-right px-3 py-1 bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-lg">
+              <div className="text-[10px] text-[var(--ph-text-secondary)] uppercase font-semibold">Value</div>
+              <div className="text-sm font-bold text-emerald-600 font-mono">QR {totalValue.toFixed(2)}</div>
             </div>
           )}
-          <div className="text-right border-l pl-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Total Quantity</div>
-            <div className="text-xl font-black text-gray-800">{totalQuantity}</div>
+          <div className="text-right px-3 py-1 bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-lg">
+            <div className="text-[10px] text-[var(--ph-text-secondary)] uppercase font-semibold">Quantity</div>
+            <div className="text-sm font-bold text-[var(--ph-text)] font-mono">{totalQuantity}</div>
           </div>
-          <div className="flex items-center gap-2 border-l pl-4">
-            {hasUnsavedChanges && (
-              <span className="text-sm font-semibold text-orange-600 bg-orange-50 px-3 py-1.5 rounded-full border border-orange-200 animate-pulse">
-                Unsaved Changes ({Object.keys(dirtyRows).length} rows)
-              </span>
-            )}
-            <Button
-              onClick={handleSaveAll}
-              disabled={saving || !hasUnsavedChanges}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 gap-2"
-            >
-              <Save className="h-4 w-4" />
-              {saving ? 'Saving...' : 'Save All Changes'}
-            </Button>
-          </div>
+
+          {hasUnsavedChanges && (
+            <span className="text-xs font-semibold text-amber-700 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-300 animate-pulse">
+              Unsaved ({Object.keys(dirtyRows).length})
+            </span>
+          )}
+          <Button
+            size="sm"
+            onClick={handleSaveAll}
+            disabled={saving || !hasUnsavedChanges}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-sm"
+          >
+            <Save className="h-3.5 w-3.5 mr-1" />
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
         </div>
-      </div>
+      </PageHeader>
 
       {alert.show && (
-        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="border border-blue-200">
-          <AlertDescription className="font-semibold">{alert.message}</AlertDescription>
+        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="border border-[var(--ph-border)]">
+          <AlertDescription className="font-semibold text-xs">{alert.message}</AlertDescription>
         </Alert>
       )}
 
       {/* Local Filter Bar */}
-      <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)]">
+        <CardContent className="p-3">
+          <div className="flex items-center gap-3">
             <div className="flex-1">
               <Input
                 icon={Search}
@@ -526,19 +532,21 @@ const StockInDocExcelEdit = () => {
                   setSearchQuery(e.target.value);
                   setPage(1);
                 }}
+                className="h-8 text-xs bg-[var(--ph-surface)] border-[var(--ph-border)]"
                 clearable
                 onClear={() => setSearchQuery('')}
               />
             </div>
-            <Button variant="outline" onClick={fetchData} className="gap-1.5">
-              <RefreshCw className="h-4 w-4" />
+            <Button variant="outline" size="sm" onClick={fetchData} className="h-8 text-xs gap-1.5 border-[var(--ph-border)]">
+              <RefreshCw className="h-3.5 w-3.5" />
               Reload Grid
             </Button>
             <Button
+              size="sm"
               onClick={handleAddProduct}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5 px-4 shadow"
+              className="h-8 bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] text-white text-xs font-semibold gap-1.5 shadow-sm"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               Add Product
             </Button>
           </div>
@@ -546,7 +554,7 @@ const StockInDocExcelEdit = () => {
       </Card>
 
       {/* Spreadsheet Grid */}
-      <Card className="bg-white dark:bg-gray-800 shadow-lg border border-gray-200 rounded-lg overflow-hidden">
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)] overflow-hidden">
         <CardContent className="p-0">
           {loading ? (
             <div className="text-center py-16 text-gray-500 flex flex-col items-center gap-2">

@@ -8,15 +8,18 @@ import { Label } from '../../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { Trash2, Edit, Plus, Download } from 'lucide-react';
+import { Trash2, Edit, Plus, Download, Building2, Phone, Mail, MapPin, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { saveAs } from '../../utils/fileDownload';
+import { PageHeader } from '../../components/ui/page-header';
+import { Badge } from '../../components/ui/badge';
 
 const Addsuppliers = () => {
   const [data, setData] = useState([]);
   const [alert, setAlert] = useState({ show: false, message: '', type: '' });
   const [editingId, setEditingId] = useState(null);
   const [selectedRows, setSelectedRows] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   
   const accessToken = getToken();
   
@@ -158,87 +161,129 @@ const Addsuppliers = () => {
     saveAs(dataBlob, 'suppliers.xlsx');
   };
 
+  const filteredData = data.filter((s) => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      (s.name || '').toLowerCase().includes(q) ||
+      (s.contact || '').toLowerCase().includes(q) ||
+      (s.email || '').toLowerCase().includes(q) ||
+      (s.address || '').toLowerCase().includes(q)
+    );
+  });
+
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Suppliers Management</h1>
-        <div className="flex gap-2">
-          {selectedRows.length > 0 && (
-            <Button variant="destructive" onClick={handleBulkDelete}>
-              <Trash2 className="mr-2 h-4 w-4" />
-              Delete ({selectedRows.length})
-            </Button>
-          )}
-          <Button variant="outline" onClick={exportToExcel}>
-            <Download className="mr-2 h-4 w-4" />
-            Export
+    <div className="ph-page space-y-6">
+      <PageHeader
+        title="Suppliers Directory"
+        subtitle="Manage pharmaceutical distributors, vendor contacts, and procurement channels"
+        badge={
+          <Badge variant="teal" className="ml-2">
+            {data.length} Vendors
+          </Badge>
+        }
+      >
+        {selectedRows.length > 0 && (
+          <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+            <Trash2 className="mr-1.5 h-4 w-4" />
+            Delete ({selectedRows.length})
           </Button>
-        </div>
-      </div>
+        )}
+        <Button variant="outline" size="sm" onClick={exportToExcel}>
+          <Download className="mr-1.5 h-4 w-4 text-emerald-600" />
+          Export Vendors
+        </Button>
+      </PageHeader>
 
       {alert.show && (
-        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'}>
+        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="animate-in fade-in">
           <AlertDescription>{alert.message}</AlertDescription>
         </Alert>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingId ? 'Edit Supplier' : 'Add New Supplier'}</CardTitle>
+      {/* Supplier Entry Form Card */}
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)]">
+        <CardHeader className="border-b border-[var(--ph-border)] pb-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base font-semibold text-[var(--ph-text)]">
+                {editingId ? 'Edit Supplier Details' : 'Register New Supplier'}
+              </CardTitle>
+              <p className="text-xs text-[var(--ph-text-secondary)] mt-0.5">
+                {editingId ? 'Update vendor credentials and communication details' : 'Add a verified medicine distributor to your supplier network'}
+              </p>
+            </div>
+            {editingId && (
+              <Badge variant="warning">Editing Mode</Badge>
+            )}
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-5">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Supplier Name *</Label>
-                <Input
-                  id="name"
-                  {...register('name', { required: 'Supplier name is required' })}
-                  placeholder="Enter supplier name"
-                />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="name" className="text-xs font-semibold text-[var(--ph-text)]">Supplier / Distributor Name *</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--ph-muted)]" />
+                  <Input
+                    id="name"
+                    {...register('name', { required: 'Supplier name is required' })}
+                    placeholder="e.g. Apex Pharma Dist"
+                    className="pl-8.5 h-9.5 text-sm"
+                  />
+                </div>
                 {errors.name && (
-                  <p className="text-sm text-red-500">{errors.name.message}</p>
+                  <p className="text-xs text-rose-600 font-medium">{errors.name.message}</p>
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="contact">Contact Number</Label>
-                <Input
-                  id="contact"
-                  {...register('contact')}
-                  placeholder="Enter contact number"
-                />
+              <div className="space-y-1.5">
+                <Label htmlFor="contact" className="text-xs font-semibold text-[var(--ph-text)]">Contact Number</Label>
+                <div className="relative">
+                  <Phone className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--ph-muted)]" />
+                  <Input
+                    id="contact"
+                    {...register('contact')}
+                    placeholder="e.g. +1 (555) 019-2834"
+                    className="pl-8.5 h-9.5 text-sm"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  {...register('email')}
-                  placeholder="Enter email address"
-                />
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-xs font-semibold text-[var(--ph-text)]">Email Address</Label>
+                <div className="relative">
+                  <Mail className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--ph-muted)]" />
+                  <Input
+                    id="email"
+                    type="email"
+                    {...register('email')}
+                    placeholder="orders@supplier.com"
+                    className="pl-8.5 h-9.5 text-sm"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  {...register('address')}
-                  placeholder="Enter address"
-                />
+              <div className="space-y-1.5">
+                <Label htmlFor="address" className="text-xs font-semibold text-[var(--ph-text)]">Business Address</Label>
+                <div className="relative">
+                  <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--ph-muted)]" />
+                  <Input
+                    id="address"
+                    {...register('address')}
+                    placeholder="e.g. Warehouse 4, West End"
+                    className="pl-8.5 h-9.5 text-sm"
+                  />
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <Button type="submit">
-                <Plus className="mr-2 h-4 w-4" />
-                {editingId ? 'Update Supplier' : 'Add Supplier'}
-              </Button>
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--ph-border)]">
               {editingId && (
                 <Button
                   type="button"
                   variant="outline"
+                  size="sm"
                   onClick={() => {
                     setEditingId(null);
                     reset();
@@ -247,72 +292,122 @@ const Addsuppliers = () => {
                   Cancel
                 </Button>
               )}
+              <Button type="submit" size="sm" className="bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] text-white">
+                <Plus className="mr-1.5 h-4 w-4" />
+                {editingId ? 'Save Changes' : 'Register Supplier'}
+              </Button>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Suppliers List ({data.length})</CardTitle>
+      {/* Suppliers Registry Table Card */}
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)] overflow-hidden">
+        <CardHeader className="border-b border-[var(--ph-border)] py-3 px-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-semibold text-[var(--ph-text)]">
+                Vendors Registry
+              </CardTitle>
+              <Badge variant="outline" className="text-xs font-mono">
+                {filteredData.length} records
+              </Badge>
+            </div>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--ph-muted)] pointer-events-none" />
+              <Input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search vendors..."
+                className="pl-8 h-8 text-xs bg-[var(--ph-surface)] border-[var(--ph-border)]"
+                aria-label="Search suppliers"
+              />
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)]">
                 <TableRow>
-                  <TableHead className="w-12">
+                  <TableHead className="w-10 pl-4">
                     <input
                       type="checkbox"
-                      checked={selectedRows.length === data.length && data.length > 0}
+                      checked={selectedRows.length === filteredData.length && filteredData.length > 0}
                       onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-gray-300"
+                      className="h-3.5 w-3.5 rounded border-gray-300"
                     />
                   </TableHead>
-                  <TableHead>Supplier Name</TableHead>
-                  <TableHead>Contact</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Supplier Name</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Contact</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Email</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Address</TableHead>
+                  <TableHead className="text-right font-semibold text-xs text-[var(--ph-text)] pr-4">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {data.length === 0 ? (
+                {filteredData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No suppliers found. Add your first supplier above.
+                    <TableCell colSpan={6} className="text-center py-12 text-sm text-[var(--ph-text-secondary)]">
+                      {data.length === 0
+                        ? 'No suppliers logged. Register your first vendor above.'
+                        : 'No suppliers match your search query.'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  data.map((supplier) => (
-                    <TableRow key={supplier._id}>
-                      <TableCell>
+                  filteredData.map((supplier) => (
+                    <TableRow key={supplier._id} className="hover:bg-[var(--ph-surface-2)]/60 transition-colors border-b border-[var(--ph-border)]">
+                      <TableCell className="w-10 pl-4">
                         <input
                           type="checkbox"
                           checked={selectedRows.includes(supplier._id)}
                           onChange={() => toggleSelectRow(supplier._id)}
-                          className="h-4 w-4 rounded border-gray-300"
+                          className="h-3.5 w-3.5 rounded border-gray-300"
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{supplier.name}</TableCell>
-                      <TableCell>{supplier.contact || '-'}</TableCell>
-                      <TableCell>{supplier.email || '-'}</TableCell>
-                      <TableCell>{supplier.address || '-'}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                      <TableCell className="font-medium text-sm text-[var(--ph-text)]">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="h-4 w-4 text-[var(--ph-teal)] shrink-0" />
+                          <span>{supplier.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--ph-text-secondary)]">
+                        {supplier.contact ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Phone className="h-3 w-3 text-[var(--ph-muted)]" />
+                            {supplier.contact}
+                          </span>
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--ph-text-secondary)]">
+                        {supplier.email ? (
+                          <span className="inline-flex items-center gap-1 text-[var(--ph-teal)]">
+                            <Mail className="h-3 w-3" />
+                            {supplier.email}
+                          </span>
+                        ) : '-'}
+                      </TableCell>
+                      <TableCell className="text-xs text-[var(--ph-text-secondary)]">
+                        {supplier.address || '-'}
+                      </TableCell>
+                      <TableCell className="text-right pr-4">
+                        <div className="flex justify-end gap-1">
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-7 w-7 p-0 text-[var(--ph-text-secondary)] hover:text-[var(--ph-navy)]"
                             onClick={() => handleEdit(supplier)}
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-3.5 w-3.5" />
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
+                            className="h-7 w-7 p-0 text-[var(--ph-text-secondary)] hover:text-rose-600"
                             onClick={() => handleDelete(supplier._id)}
                           >
-                            <Trash2 className="h-4 w-4 text-red-500" />
+                            <Trash2 className="h-3.5 w-3.5 text-rose-500" />
                           </Button>
                         </div>
                       </TableCell>

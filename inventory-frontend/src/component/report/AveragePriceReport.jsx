@@ -207,17 +207,17 @@ const AveragePriceReport = ({
                 <>
                   <div className="reports-table-wrap max-h-[70vh] overflow-y-auto">
                     <table className="reports-table">
-                      <thead className="sticky top-0 bg-background z-10 shadow-sm">
+                      <thead className="sticky top-0 bg-[var(--ph-surface-2)] z-10 shadow-sm">
                         <tr>
-                          <th style={{ width: '60px' }}>#</th>
-                          <th>Product Name</th>
-                          <th className="text-right" style={{ width: '180px' }}>
+                          <th className="col-num">#</th>
+                          <th className="col-product">Product Name</th>
+                          <th className="col-qty text-right min-w-[160px]">
                             Total Quantity
                           </th>
-                          <th className="text-right" style={{ width: '220px' }}>
+                          <th className="col-total text-right min-w-[200px]">
                             Average Purchase Price
                           </th>
-                          <th className="text-center" style={{ width: '100px' }}>
+                          <th className="text-center min-w-[100px]">
                             History
                           </th>
                         </tr>
@@ -229,24 +229,24 @@ const AveragePriceReport = ({
 
                           return (
                             <tr key={item._id || index}>
-                              <td>{rowNum}</td>
-                              <td className="font-medium">
+                              <td className="col-num font-mono text-slate-500">{rowNum}</td>
+                              <td className="col-product font-semibold text-[var(--ph-text)]">
                                 <div>{item.productName || 'N/A'}</div>
                                 {(item.companyName || item.unit) && (
-                                  <div className="text-xs text-muted-foreground font-normal">
+                                  <div className="text-xs text-[var(--ph-text-secondary)] font-normal mt-0.5">
                                     {item.companyName && <span>{item.companyName}</span>}
                                     {item.companyName && item.unit && <span> | </span>}
                                     {item.unit && <span>{item.unit}</span>}
                                   </div>
                                 )}
                               </td>
-                              <td className="text-right font-medium">
+                              <td className="col-qty text-right font-mono font-bold min-w-[160px]">
                                 {(item.totalQuantity || 0).toLocaleString()}
                               </td>
-                              <td className="text-right font-bold text-green-700">
+                              <td className="col-total text-right font-mono font-bold text-emerald-700 dark:text-emerald-400 min-w-[200px]">
                                 {formatCurrency(avgPrice)}
                               </td>
-                              <td className="text-center">
+                              <td className="text-center min-w-[100px]">
                                 <button
                                   type="button"
                                   className="reports-btn-secondary py-1 px-2.5 inline-flex items-center gap-1.5 text-xs text-primary hover:bg-primary/10 border border-primary/20 rounded-md transition-colors"

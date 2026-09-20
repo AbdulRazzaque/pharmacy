@@ -1,35 +1,35 @@
 /* ========== Reports – Modern design ========== */
 
 .reports-page {
-  --reports-bg: linear-gradient(145deg, #f8fafc 0%, #f1f5f9 100%);
-  --reports-card: rgba(255, 255, 255, 0.9);
-  --reports-card-border: rgba(226, 232, 240, 0.8);
-  --reports-input-bg: #ffffff;
-  --reports-input-focus: #3b82f6;
-  --reports-tab-active: #2563eb;
-  --reports-tab-inactive: #64748b;
-  --reports-text: #0f172a;
-  --reports-text-muted: #64748b;
-  --reports-hover-bg: #f1f5f9;
-  --reports-hover-text: #334155;
-  --reports-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.06), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
-  --reports-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --reports-bg: var(--ph-bg);
+  --reports-card: var(--ph-surface);
+  --reports-card-border: var(--ph-border);
+  --reports-input-bg: var(--ph-surface);
+  --reports-input-focus: var(--ph-navy);
+  --reports-tab-active: var(--ph-navy);
+  --reports-tab-inactive: var(--ph-text-secondary);
+  --reports-text: var(--ph-text);
+  --reports-text-muted: var(--ph-text-secondary);
+  --reports-hover-bg: var(--ph-surface-2);
+  --reports-hover-text: var(--ph-text);
+  --reports-shadow: var(--ph-shadow-sm);
+  --reports-shadow-lg: var(--ph-shadow);
 }
 
 .dark .reports-page {
-  --reports-bg: linear-gradient(145deg, hsl(222.2 47.4% 6%) 0%, hsl(222.2 47.4% 8%) 100%);
-  --reports-card: hsl(222.2 47.4% 11%);
-  --reports-card-border: hsl(217.2 32.6% 17.5%);
-  --reports-input-bg: hsl(222.2 47.4% 8%);
-  --reports-input-focus: #60a5fa;
-  --reports-tab-active: #3b82f6;
-  --reports-tab-inactive: #94a3b8;
-  --reports-text: hsl(210 40% 98%);
-  --reports-text-muted: hsl(215 20.2% 65.1%);
-  --reports-hover-bg: hsl(217.2 32.6% 17.5%);
-  --reports-hover-text: hsl(210 40% 98%);
-  --reports-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.35), 0 2px 4px -2px rgba(0, 0, 0, 0.25);
-  --reports-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.45), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+  --reports-bg: var(--ph-bg);
+  --reports-card: var(--ph-surface);
+  --reports-card-border: var(--ph-border);
+  --reports-input-bg: var(--ph-surface);
+  --reports-input-focus: var(--ph-teal);
+  --reports-tab-active: var(--ph-teal);
+  --reports-tab-inactive: var(--ph-muted);
+  --reports-text: var(--ph-text);
+  --reports-text-muted: var(--ph-text-secondary);
+  --reports-hover-bg: var(--ph-surface-2);
+  --reports-hover-text: var(--ph-text);
+  --reports-shadow: var(--ph-shadow-sm);
+  --reports-shadow-lg: var(--ph-shadow);
 }
 
 .reports-page {
@@ -48,7 +48,7 @@
 }
 
 .reports-header h1 {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.025em;
   color: var(--reports-text);
@@ -58,7 +58,7 @@
 }
 
 .reports-header h1 svg {
-  color: #3b82f6;
+  color: var(--ph-teal);
 }
 
 /* Tabs – pill style */
@@ -81,8 +81,8 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: 0.8125rem;
+  font-weight: 600;
   border-radius: 8px;
   transition: all 0.2s ease;
   color: var(--reports-tab-inactive);
@@ -106,7 +106,7 @@
 .reports-card {
   background: var(--reports-card);
   border: 1px solid var(--reports-card-border);
-  border-radius: 16px;
+  border-radius: 14px;
   box-shadow: var(--reports-shadow);
   overflow: visible;
   margin-bottom: 1.5rem;
@@ -118,19 +118,19 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 1.25rem 1.5rem;
+  padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--reports-card-border);
-  background: rgba(248, 250, 252, 0.8);
+  background: var(--ph-surface-2);
 }
 
 .reports-card-title {
-  font-size: 1.125rem;
+  font-size: 0.9375rem;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--reports-text);
 }
 
 .reports-card-content {
-  padding: 1.5rem;
+  padding: 1.25rem;
 }
 
 /* Form – modern inputs */
@@ -169,23 +169,23 @@
   grid-column: 1 / -1;
   margin-top: 0.5rem;
   padding: 1.25rem;
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
+  background: var(--ph-surface-2);
+  border: 1px solid var(--ph-border);
+  border-radius: 12px;
 }
 
 .reports-product-section-title {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #334155;
+  color: var(--ph-text);
   margin-bottom: 0.75rem;
 }
 
 .reports-product-section-title svg {
-  color: #2563eb;
+  color: var(--ph-teal);
   flex-shrink: 0;
 }
 
@@ -673,43 +673,86 @@
 
 /* Table – modern */
 .reports-table-wrap {
+  width: 100%;
   overflow-x: auto;
-  border-radius: 12px;
+  border-radius: 10px;
   border: 1px solid var(--reports-card-border);
+  background: var(--reports-card);
 }
 
 .reports-table {
   width: 100%;
+  min-width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
+}
+
+.reports-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+}
+
+.dark .reports-table thead {
+  background: var(--ph-surface-2);
 }
 
 .reports-table th {
   text-align: left;
-  padding: 0.875rem 1rem;
-  font-weight: 600;
-  color: #475569;
+  padding: 10px 14px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.055em;
+  color: var(--ph-text-secondary);
   background: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--ph-border);
   white-space: nowrap;
 }
 
+.dark .reports-table th {
+  background: var(--ph-surface-2);
+  color: var(--ph-text-secondary);
+  border-bottom: 1px solid var(--ph-border);
+}
+
 .reports-table th:first-child {
-  border-radius: 12px 0 0 0;
+  border-radius: 10px 0 0 0;
+  padding-left: 16px;
+}
+
+.reports-table th:last-child {
+  border-radius: 0 10px 0 0;
+  padding-right: 16px;
 }
 
 .reports-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #f1f5f9;
-  color: #0f172a;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--ph-border);
+  color: var(--ph-text);
+  vertical-align: middle;
+}
+
+.reports-table td:first-child {
+  padding-left: 16px;
+}
+
+.reports-table td:last-child {
+  padding-right: 16px;
 }
 
 .reports-table tbody tr {
-  transition: background 0.15s;
+  border-bottom: 1px solid var(--ph-border);
+  transition: background-color 0.1s ease;
 }
 
 .reports-table tbody tr:hover {
   background: #f8fafc;
+}
+
+.dark .reports-table tbody tr:hover {
+  background: var(--ph-surface-2);
 }
 
 .reports-table tbody tr:last-child td {
@@ -718,6 +761,74 @@
 
 .reports-table .text-right {
   text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Explicit Column Proportions Matching Stock List ERP Standard */
+.reports-table th.col-num,
+.reports-table td.col-num {
+  width: 48px;
+  min-width: 48px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.reports-table th.col-product,
+.reports-table td.col-product {
+  min-width: 260px;
+  font-weight: 600;
+}
+
+.reports-table th.col-company,
+.reports-table td.col-company {
+  min-width: 140px;
+}
+
+.reports-table th.col-unit,
+.reports-table td.col-unit {
+  min-width: 75px;
+}
+
+.reports-table th.col-date,
+.reports-table td.col-date {
+  min-width: 120px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.reports-table th.col-docno,
+.reports-table td.col-docno {
+  min-width: 115px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.reports-table th.col-qty,
+.reports-table td.col-qty {
+  min-width: 130px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+}
+
+.reports-table th.col-expiry,
+.reports-table td.col-expiry {
+  min-width: 140px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.reports-table th.col-price,
+.reports-table td.col-price {
+  min-width: 110px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.reports-table th.col-total,
+.reports-table td.col-total {
+  min-width: 125px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
 }
 
 /* Table search */
@@ -928,6 +1039,7 @@
   .sidebar,
   .dashboard-header,
   .reports-page > .container,
+  .reports-page > .reports-content,
   .no-print {
     display: none !important;
   }

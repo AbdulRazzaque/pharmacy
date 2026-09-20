@@ -141,21 +141,21 @@ function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSel
   };
 
   return createPortal(
-    <div style={panelStyle} className="bg-white border border-slate-200 rounded-xl overflow-hidden"
+    <div style={panelStyle} className="bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-xl overflow-hidden shadow-2xl text-[var(--ph-text)]"
          onMouseDown={e => e.preventDefault()}>
 
       {/* mini-header */}
-      <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+      <div className="px-3.5 py-2 bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] flex items-center justify-between">
+        <span className="text-[10px] font-bold text-[var(--ph-text-secondary)] uppercase tracking-wider">
           {suggestions.length} result{suggestions.length !== 1 ? 's' : ''}{query ? ` · "${query}"` : ''}
         </span>
-        <span className="text-[10px] text-slate-300">↑↓ · Enter/Tab select · Esc close</span>
+        <span className="text-[10px] text-[var(--ph-muted)] font-mono">↑↓ · Enter/Tab select · Esc close</span>
       </div>
 
-      <div className="overflow-y-auto" style={{ maxHeight: PANEL_H - 36 }}>
+      <div className="overflow-y-auto divide-y divide-[var(--ph-border)]/40" style={{ maxHeight: PANEL_H - 36 }}>
         {suggestions.length === 0 ? (
-          <div className="flex flex-col items-center py-8 gap-2 text-slate-400">
-            <svg className="w-8 h-8 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="flex flex-col items-center py-8 gap-2 text-[var(--ph-muted)]">
+            <svg className="w-8 h-8 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                     d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -165,17 +165,19 @@ function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSel
           const active   = i === activeSug;
           const stockVal = s._stock ?? 0;
           const stockCls = stockVal > 50
-            ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+            ? 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 border-emerald-200 dark:border-emerald-800'
             : stockVal > 0
-            ? 'text-amber-700 bg-amber-50 border-amber-200'
-            : 'text-red-600 bg-red-50 border-red-200';
+            ? 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border-amber-200 dark:border-amber-800'
+            : 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 border-rose-200 dark:border-rose-800';
           const name        = s.name || s.productName || '';
           const firstExpiry = (s._batches || [])[0]?.expiryLabel || null;
 
           return (
             <div key={s._id} data-suggestion-idx={i}
-              className={`flex items-start gap-3 px-3 py-2.5 cursor-pointer border-l-2 transition-all ${
-                active ? 'bg-amber-50 border-amber-500' : 'border-transparent hover:bg-slate-50 hover:border-slate-300'
+              className={`flex items-start gap-3 px-3.5 py-2.5 cursor-pointer border-l-4 transition-colors ${
+                active
+                  ? 'bg-[var(--ph-navy)]/10 dark:bg-[var(--ph-navy)]/25 border-[var(--ph-navy)]'
+                  : 'border-transparent hover:bg-[var(--ph-surface-2)]'
               }`}
               onMouseEnter={() => onHover && onHover(i)}
               onMouseDown={() => onSelect(s)}>
@@ -183,32 +185,30 @@ function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSel
               {/* avatar */}
               <div className={`mt-0.5 flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center
                 text-xs font-black select-none ${
-                  active ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-500'
+                  active ? 'bg-[var(--ph-navy)] text-white' : 'bg-[var(--ph-surface-2)] text-[var(--ph-text-secondary)] border border-[var(--ph-border)]'
                 }`}>
                 {name.charAt(0).toUpperCase()}
               </div>
 
               {/* info */}
               <div className="flex-1 min-w-0">
-                <p className={`text-sm font-bold leading-tight truncate ${
-                  active ? 'text-amber-900' : 'text-slate-800'
-                }`}>
+                <p className="text-xs sm:text-sm font-semibold leading-tight text-[var(--ph-text)] whitespace-normal">
                   <Highlight text={name} query={query} />
                 </p>
-                <p className="text-[11px] text-slate-500 mt-0.5 leading-tight">
+                <p className="text-[11px] text-[var(--ph-text-secondary)] mt-0.5 leading-tight">
                   <Highlight text={s.companyName || '—'} query={query} />
-                  {s.type && <><span className="mx-1 text-slate-300">·</span><span>{s.type}</span></>}
-                  {s.unit && <><span className="mx-1 text-slate-300">·</span><span>{s.unit}</span></>}
+                  {s.type && <><span className="mx-1 text-[var(--ph-muted)]">·</span><span>{s.type}</span></>}
+                  {s.unit && <><span className="mx-1 text-[var(--ph-muted)]">·</span><span>{s.unit}</span></>}
                 </p>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   {s.barcode && (
-                    <span className="text-[9px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                    <span className="text-[9px] font-mono text-[var(--ph-text-secondary)] bg-[var(--ph-surface-2)] px-1.5 py-0.5 rounded border border-[var(--ph-border)]">
                       {s.barcode}
                     </span>
                   )}
                   {firstExpiry && (
-                    <span className="text-[10px] text-slate-500">
-                      Exp: <span className="font-semibold">{firstExpiry}</span>
+                    <span className="text-[10px] text-[var(--ph-text-secondary)]">
+                      Exp: <span className="font-semibold text-amber-600 dark:text-amber-400">{firstExpiry}</span>
                     </span>
                   )}
                 </div>
@@ -220,8 +220,8 @@ function ProductDropdownPortal({ anchorRef, suggestions, activeSug, query, onSel
                   Stk {stockVal}
                 </span>
                 {(s.sellingPrice || s.purchasingPrice) ? (
-                  <span className="text-[10px] text-slate-500 font-semibold">
-                    {(s.sellingPrice || s.purchasingPrice || 0).toFixed(2)}
+                  <span className="text-[10px] font-mono text-[var(--ph-text)] font-semibold">
+                    QR {(s.sellingPrice || s.purchasingPrice || 0).toFixed(2)}
                   </span>
                 ) : null}
               </div>
@@ -255,10 +255,10 @@ const ExpiryInputCell = React.memo(({ row, cellCls, onCellFocus, onCellChange, o
   }, [row.expiry, isFocused]);
 
   if (!row.productId) {
-    return <div className="px-2 py-1 text-slate-300 text-xs text-center">—</div>;
+    return <div className="px-2 py-1 text-[var(--ph-muted)] text-xs text-center">—</div>;
   }
   if (!row._requiresExpiry) {
-    return <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 text-center bg-slate-50 rounded mx-1">Not Required</div>;
+    return <div className="px-2 py-1 text-[10px] font-semibold text-[var(--ph-text-secondary)] text-center bg-[var(--ph-surface-2)] rounded mx-1">Not Required</div>;
   }
 
   const handleChange = (e) => {
@@ -310,7 +310,7 @@ const ExpiryInputCell = React.memo(({ row, cellCls, onCellFocus, onCellChange, o
         onBlur={handleBlur}
         onChange={handleChange}
         onKeyDown={(e) => onCellKeyDown(e, row.id, 'expiry')}
-        className={`${cellCls('expiry')} text-xs font-medium tracking-tight pr-6 placeholder:text-slate-300 placeholder:font-normal`}
+        className={`${cellCls('expiry')} text-xs font-medium tracking-tight pr-6 placeholder:text-[var(--ph-muted)] placeholder:font-normal text-[var(--ph-text)]`}
       />
       <input
         type="date"
@@ -350,53 +350,53 @@ const GridRow = React.memo(({
   const hasAdjust = inQty > 0 || outQty > 0;
 
   const cellCls = (field) =>
-    `w-full h-7 px-1.5 text-xs bg-transparent focus:outline-none focus:bg-amber-50 border-0 focus:ring-1 focus:ring-amber-400 rounded transition-colors ${
-      activeCell === field && isFocused ? 'ring-1 ring-amber-400 bg-amber-50' : ''
+    `w-full h-8 px-2 text-xs bg-transparent focus:outline-none focus:bg-[var(--ph-teal)]/10 border-0 focus:ring-1 focus:ring-[var(--ph-teal)] rounded transition-colors ${
+      activeCell === field && isFocused ? 'ring-1 ring-[var(--ph-teal)] bg-[var(--ph-teal)]/10' : ''
     }`;
 
   return (
-    <tr className={`border-b border-slate-100 ${hasAdjust ? 'bg-amber-50/20' : rowIdx % 2 === 0 ? 'bg-white' : 'bg-slate-50/40'} hover:bg-amber-50/30 transition-colors`}>
+    <tr className={`border-b border-[var(--ph-border)]/70 ${hasAdjust ? 'bg-amber-50/20 dark:bg-amber-950/20' : rowIdx % 2 === 0 ? 'bg-[var(--ph-surface)]' : 'bg-[var(--ph-surface-2)]/40'} hover:bg-[var(--ph-surface-2)] transition-colors`}>
 
       {/* # */}
-      <td className="w-9 px-1 text-center text-[10px] text-slate-400 font-mono select-none border-r border-slate-100">
+      <td className="w-10 px-1 text-center text-[10px] text-[var(--ph-text-secondary)] font-mono select-none border-r border-[var(--ph-border)]/70">
         {rowIdx + 1}
       </td>
 
       {/* PRODUCT */}
-      <td className="border-r border-slate-100 min-w-[220px]">
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[280px]">
         <input
           ref={isFocused ? inputRef : null}
           type="text"
           value={row._query}
           data-row-id={row.id} data-field="product"
-          placeholder={row.productId ? '' : 'Search product…'}
+          placeholder={row.productId ? '' : 'Search medication…'}
           autoComplete="off"
           onFocus={()    => { onCellFocus(row.id, 'product'); onQueryChange(row.id, row._query, true); }}
           onChange={(e)  => onQueryChange(row.id, e.target.value, false)}
           onKeyDown={(e) => onKeyDownProduct(e, row.id)}
-          className="w-full h-7 px-2 text-xs font-medium bg-transparent focus:outline-none
-                     focus:bg-amber-50 focus:ring-1 focus:ring-amber-400 rounded transition-colors
-                     text-slate-800 placeholder:text-slate-300"
+          className="w-full h-8 px-2.5 text-xs font-semibold bg-transparent focus:outline-none
+                     focus:bg-[var(--ph-teal)]/10 focus:ring-1 focus:ring-[var(--ph-teal)] rounded transition-colors
+                     text-[var(--ph-text)] placeholder:text-[var(--ph-muted)] placeholder:font-normal"
         />
       </td>
 
       {/* COMPANY */}
-      <td className="border-r border-slate-100 min-w-[130px]">
-        <div className="px-2 py-1 text-xs text-slate-600 truncate">{row.companyName || <span className="text-slate-300">—</span>}</div>
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[140px]">
+        <div className="px-2.5 py-1 text-xs text-[var(--ph-text-secondary)] truncate">{row.companyName || <span className="text-[var(--ph-muted)]">—</span>}</div>
       </td>
 
       {/* TYPE */}
-      <td className="border-r border-slate-100 min-w-[90px]">
-        <div className="px-2 py-1 text-xs text-slate-500 truncate">{row.type || <span className="text-slate-300">—</span>}</div>
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[95px]">
+        <div className="px-2 py-1 text-xs text-[var(--ph-text-secondary)] truncate">{row.type || <span className="text-[var(--ph-muted)]">—</span>}</div>
       </td>
 
       {/* UNIT */}
-      <td className="border-r border-slate-100 min-w-[65px]">
-        <div className="px-2 py-1 text-xs text-center text-slate-600 font-medium">{row.unit || <span className="text-slate-300">—</span>}</div>
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[65px]">
+        <div className="px-2 py-1 text-xs text-center text-[var(--ph-text)] font-medium">{row.unit || <span className="text-[var(--ph-muted)]">—</span>}</div>
       </td>
 
       {/* EXPIRY */}
-      <td className="border-r border-slate-100 min-w-[150px]">
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[145px]">
         <ExpiryInputCell
           row={row}
           cellCls={cellCls}
@@ -407,14 +407,14 @@ const GridRow = React.memo(({
       </td>
 
       {/* CURRENT QTY (read-only display) */}
-      <td className="border-r border-slate-100 min-w-[80px]">
-        <div className="px-2 py-1 text-xs text-right font-semibold text-slate-600">
-          {row.productId ? (baseStock || 0) : <span className="text-slate-300">—</span>}
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[90px]">
+        <div className="px-2.5 py-1 text-xs text-right font-semibold font-mono text-[var(--ph-text)]">
+          {row.productId ? (baseStock || 0) : <span className="text-[var(--ph-muted)]">—</span>}
         </div>
       </td>
 
       {/* QTY IN */}
-      <td className="border-r border-slate-100 min-w-[90px]">
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[95px]">
         <input
           type="number" min="0" placeholder="0"
           value={row.qtyIn}
@@ -423,12 +423,12 @@ const GridRow = React.memo(({
           onFocus={(e) => { onCellFocus(row.id, 'qtyIn'); e.target.select(); }}
           onChange={(e) => onCellChange(row.id, 'qtyIn', e.target.value)}
           onKeyDown={(e) => onCellKeyDown(e, row.id, 'qtyIn')}
-          className={`${cellCls('qtyIn')} text-right font-bold text-green-700 disabled:text-slate-300`}
+          className={`${cellCls('qtyIn')} text-right font-bold font-mono text-emerald-600 dark:text-emerald-400 disabled:text-[var(--ph-muted)]`}
         />
       </td>
 
       {/* QTY OUT */}
-      <td className="border-r border-slate-100 min-w-[90px]">
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[95px]">
         <input
           type="number" min="0" placeholder="0"
           value={row.qtyOut}
@@ -437,23 +437,31 @@ const GridRow = React.memo(({
           onFocus={(e) => { onCellFocus(row.id, 'qtyOut'); e.target.select(); }}
           onChange={(e) => onCellChange(row.id, 'qtyOut', e.target.value)}
           onKeyDown={(e) => onCellKeyDown(e, row.id, 'qtyOut')}
-          className={`${cellCls('qtyOut')} text-right font-bold text-red-600 disabled:text-slate-300`}
+          className={`${cellCls('qtyOut')} text-right font-bold font-mono text-rose-600 dark:text-rose-400 disabled:text-[var(--ph-muted)]`}
         />
       </td>
 
       {/* FINAL QTY (computed) */}
-      <td className="border-r border-slate-100 min-w-[80px]">
-        <div className={`px-2 py-1 text-xs text-right font-bold ${
-          !hasAdjust ? 'text-slate-400' : finalQty < 0 ? 'text-red-600' : 'text-slate-700'
-        }`}>
-          {row.productId ? (hasAdjust ? (
-            <span className={`px-1.5 rounded ${finalQty < 0 ? 'bg-red-50' : 'bg-slate-100'}`}>{finalQty}</span>
-          ) : baseStock) : '—'}
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[95px]">
+        <div className="px-2 py-1 text-xs text-right font-bold font-mono">
+          {row.productId ? (
+            <span className={`px-2 py-0.5 rounded font-mono font-bold text-xs inline-block ${
+              finalQty < 0
+                ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                : hasAdjust
+                ? 'bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                : 'text-[var(--ph-text)]'
+            }`}>
+              {hasAdjust ? finalQty : baseStock}
+            </span>
+          ) : (
+            <span className="text-[var(--ph-muted)]">—</span>
+          )}
         </div>
       </td>
 
       {/* UNIT PRICE */}
-      <td className="border-r border-slate-100 min-w-[90px]">
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[95px]">
         <input
           type="number" min="0" step="0.01"
           placeholder={row.price ? Number(row.price).toFixed(2) : '0.00'}
@@ -463,12 +471,12 @@ const GridRow = React.memo(({
           onFocus={(e) => { onCellFocus(row.id, 'price'); e.target.select(); }}
           onChange={(e) => onCellChange(row.id, 'price', e.target.value)}
           onKeyDown={(e) => onCellKeyDown(e, row.id, 'price')}
-          className={`${cellCls('price')} text-right text-slate-700 disabled:text-slate-300`}
+          className={`${cellCls('price')} text-right font-mono text-[var(--ph-text)] disabled:text-[var(--ph-muted)]`}
         />
       </td>
 
       {/* REMARKS */}
-      <td className="border-r border-slate-100 min-w-[120px]">
+      <td className="border-r border-[var(--ph-border)]/70 min-w-[150px]">
         <input
           type="text"
           placeholder="Optional…"
@@ -478,16 +486,16 @@ const GridRow = React.memo(({
           onFocus={() => onCellFocus(row.id, 'remarks')}
           onChange={(e) => onCellChange(row.id, 'remarks', e.target.value)}
           onKeyDown={(e) => onCellKeyDown(e, row.id, 'remarks')}
-          className={`${cellCls('remarks')} text-slate-600 disabled:text-slate-300`}
+          className={`${cellCls('remarks')} text-[var(--ph-text-secondary)] disabled:text-[var(--ph-muted)]`}
         />
       </td>
 
       {/* DELETE */}
-      <td className="text-center min-w-[40px]">
+      <td className="text-center w-10">
         <button
           type="button"
           onClick={() => onRemove(row.id)}
-          className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-colors"
+          className="p-1 text-[var(--ph-muted)] hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded transition-colors"
           title="Delete row"
         >
           <X className="w-3.5 h-3.5" />
@@ -1668,42 +1676,41 @@ const StockAdjustment = () => {
         <div className="max-w-[1600px] mx-auto space-y-5">
 
           {/* ── HEADER ─────────────────────────────────────────────────── */}
-          <div className="bg-gradient-to-r from-amber-600 to-amber-700 rounded-2xl text-white shadow-lg p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="p-3 bg-white/15 rounded-xl shadow-inner backdrop-blur-sm">
-                  <FileSpreadsheet className="w-8 h-8 text-white" />
+          <div className="bg-[var(--ph-surface)] rounded-xl border border-[var(--ph-border)] shadow-sm p-4 sm:p-5">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              {/* Left Title & Status */}
+              <div className="flex items-start sm:items-center gap-3.5">
+                <div className="p-2.5 bg-[var(--ph-teal)]/10 text-[var(--ph-teal)] rounded-xl border border-[var(--ph-teal)]/20 shrink-0">
+                  <FileSpreadsheet className="w-6 h-6" />
                 </div>
                 <div>
-                  <div className="flex items-center gap-3">
-                    <h1 className="text-2xl md:text-3xl font-black tracking-tight">Stock Adjustment</h1>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <h1 className="text-xl sm:text-2xl font-bold text-[var(--ph-text)] tracking-tight">
+                      Stock Reconciliation & Adjustment
+                    </h1>
                     {isEditing ? (
-                      <span className="bg-blue-500/30 text-blue-100 border border-blue-300/40 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm">
-                        <FolderOpen className="w-3.5 h-3.5" /> Editing Document #{loadedDocNo}
+                      <span className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 px-2.5 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1.5 font-mono">
+                        <FolderOpen className="w-3.5 h-3.5" /> Editing Doc #{loadedDocNo}
                       </span>
                     ) : (
-                      <span className="bg-amber-500/30 text-amber-100 border border-amber-300/40 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                      <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 px-2.5 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1.5 font-mono">
                         <PlusCircle className="w-3.5 h-3.5" /> New Adjustment (#{docNo})
                       </span>
                     )}
                   </div>
-                  <p className="text-amber-100 text-xs mt-1 max-w-md">
-                    Excel-style bulk entry — search products, fill quantities, edit existing documents, or press Enter to jump rows.
+                  <p className="text-xs text-[var(--ph-text-secondary)] mt-1">
+                    Live reconciliation ledger — fuzzy search products, adjust physical counts, and reconcile inventory variances.
                   </p>
                 </div>
               </div>
 
-              {/* Header Buttons */}
+              {/* Right Toolbar Actions */}
               <div className="flex flex-wrap items-center gap-2">
                 {/* New Adjustment Button */}
                 <button
                   type="button"
                   onClick={startNewDocument}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
-                    !isEditing
-                      ? 'bg-white text-amber-800 border border-white'
-                      : 'bg-white/15 hover:bg-white/25 text-white border border-white/30'
-                  }`}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] text-white rounded-lg text-xs font-semibold transition-colors shadow-sm"
                 >
                   <PlusCircle className="w-3.5 h-3.5" />
                   New Adjustment
@@ -1713,21 +1720,17 @@ const StockAdjustment = () => {
                 <button
                   type="button"
                   onClick={() => setShowDocSelectorModal(true)}
-                  className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all shadow-sm ${
-                    isEditing
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white border border-blue-400'
-                      : 'bg-white/15 hover:bg-white/25 text-white border border-white/30'
-                  }`}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--ph-surface)] hover:bg-[var(--ph-surface-2)] text-[var(--ph-text)] border border-[var(--ph-border)] rounded-lg text-xs font-semibold transition-colors shadow-xs"
                 >
-                  <FolderOpen className="w-3.5 h-3.5" />
-                  Open Existing Document
+                  <FolderOpen className="w-3.5 h-3.5 text-[var(--ph-teal)]" />
+                  Open Document
                 </button>
 
                 {/* Download Sample */}
                 <button
                   type="button"
                   onClick={downloadSample}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/20 border border-white/25 rounded-xl text-xs font-semibold text-white transition-all"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--ph-surface)] hover:bg-[var(--ph-surface-2)] text-[var(--ph-text-secondary)] hover:text-[var(--ph-text)] border border-[var(--ph-border)] rounded-lg text-xs font-medium transition-colors"
                 >
                   <Download className="w-3.5 h-3.5" />
                   Sample Excel
@@ -1737,7 +1740,7 @@ const StockAdjustment = () => {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white/10 hover:bg-white/20 border border-white/25 rounded-xl text-xs font-semibold text-white transition-all"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-[var(--ph-surface)] hover:bg-[var(--ph-surface-2)] text-[var(--ph-text-secondary)] hover:text-[var(--ph-text)] border border-[var(--ph-border)] rounded-lg text-xs font-medium transition-colors"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   Import Excel
@@ -1749,33 +1752,27 @@ const StockAdjustment = () => {
                   className="hidden"
                   onChange={handleImportFile}
                 />
-
-                {/* Keyboard hint */}
-                <div className="flex items-center gap-1.5 px-3 py-2 bg-white/10 border border-white/20 rounded-xl text-[10px] text-amber-100">
-                  <Keyboard className="w-3.5 h-3.5" />
-                  Enter/Tab moves cells · ↑↓ navigates rows
-                </div>
               </div>
             </div>
           </div>
 
           {/* ── STACKED VALIDATION ERRORS ALERT ───────────────────────── */}
           {validationErrors.length > 0 && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-900 shadow-md">
-              <div className="flex items-center justify-between pb-2 mb-2 border-b border-red-200">
-                <div className="font-bold flex items-center gap-2 text-sm text-red-800">
-                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+            <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 rounded-xl p-4 text-rose-900 dark:text-rose-200 shadow-sm">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-rose-200 dark:border-rose-900/40">
+                <div className="font-bold flex items-center gap-2 text-sm text-rose-800 dark:text-rose-300">
+                  <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0" />
                   <span>Stock Adjustment Validation Errors ({validationErrors.length})</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setValidationErrors([])}
-                  className="text-red-500 hover:text-red-700 p-1 rounded-lg hover:bg-red-100 transition-colors"
+                  className="text-rose-500 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-200 p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
-              <ul className="list-disc list-inside space-y-1 text-xs font-semibold text-red-700 max-h-48 overflow-y-auto">
+              <ul className="list-disc list-inside space-y-1 text-xs font-semibold text-rose-700 dark:text-rose-300 max-h-48 overflow-y-auto">
                 {validationErrors.map((err, i) => (
                   <li key={i}>{err}</li>
                 ))}
@@ -1784,48 +1781,61 @@ const StockAdjustment = () => {
           )}
 
           {/* ── DOC META + STATS ────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-            {/* Doc meta */}
-            <div className="md:col-span-8 bg-white rounded-xl border border-slate-100 shadow-sm p-5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Doc No</label>
-                  <div className={`h-10 px-3.5 border rounded-lg flex items-center font-black text-base ${
-                    isEditing ? 'border-blue-200 bg-blue-50/50 text-blue-900' : 'border-amber-100 bg-amber-50/40 text-amber-800'
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            {/* Doc Information */}
+            <div className="lg:col-span-8 bg-[var(--ph-surface)] rounded-xl border border-[var(--ph-border)] shadow-sm p-4 sm:p-5">
+              <div className="text-xs font-bold text-[var(--ph-text-secondary)] uppercase tracking-wider mb-3 flex items-center gap-2">
+                <Info className="w-3.5 h-3.5 text-[var(--ph-teal)]" />
+                Document Information
+              </div>
+              <div className="grid grid-cols-12 gap-3.5">
+                {/* Doc No: 3 columns */}
+                <div className="col-span-12 sm:col-span-3">
+                  <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">Doc No</label>
+                  <div className={`h-10 px-3.5 border rounded-lg flex items-center font-bold text-sm sm:text-base font-mono ${
+                    isEditing
+                      ? 'border-blue-200 bg-blue-50/50 text-blue-900 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900'
+                      : 'border-[var(--ph-border)] bg-[var(--ph-surface-2)] text-[var(--ph-text)]'
                   }`}>
                     #{docNo}
                   </div>
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Date</label>
+
+                {/* Date: 4 columns */}
+                <div className="col-span-12 sm:col-span-4">
+                  <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">Date</label>
                   <input
-                    type="date" value={docDate}
+                    type="date"
+                    value={docDate}
                     onChange={e => setDocDate(e.target.value)}
-                    className="w-full h-10 px-3.5 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white"
+                    className="w-full h-10 px-3 text-xs sm:text-sm font-medium bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] text-[var(--ph-text)]"
                   />
                 </div>
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Note / Reason</label>
+
+                {/* Note / Reason: 5 columns */}
+                <div className="col-span-12 sm:col-span-5">
+                  <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">Note / Reason</label>
                   <input
-                    type="text" value={docNote}
+                    type="text"
+                    value={docNote}
                     onChange={e => setDocNote(e.target.value)}
                     placeholder="Audit correction, damages, etc."
-                    className="w-full h-10 px-3.5 text-sm font-medium text-slate-700 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 bg-white placeholder:text-slate-400"
+                    className="w-full h-10 px-3 text-xs sm:text-sm font-medium bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] text-[var(--ph-text)] placeholder:text-[var(--ph-muted)]"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Stats + Save */}
-            <div className="md:col-span-4 bg-white rounded-xl border border-slate-100 shadow-sm p-5 flex flex-col justify-between gap-4">
+            {/* Summary Stats & Save Action */}
+            <div className="lg:col-span-4 bg-[var(--ph-surface)] rounded-xl border border-[var(--ph-border)] shadow-sm p-4 sm:p-5 flex flex-col justify-between gap-3.5">
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-blue-50 p-3 text-center">
-                  <div className="text-2xl font-black text-blue-700">{filledCount}</div>
-                  <div className="text-[9px] font-bold text-blue-500 uppercase tracking-wider mt-0.5">Products</div>
+                <div className="rounded-lg bg-[var(--ph-surface-2)] border border-[var(--ph-border)] p-3 text-center">
+                  <div className="text-2xl font-bold font-mono text-[var(--ph-text)]">{filledCount}</div>
+                  <div className="text-[10px] font-bold text-[var(--ph-text-secondary)] uppercase tracking-wider mt-0.5">Products</div>
                 </div>
-                <div className="rounded-lg bg-emerald-50 p-3 text-center">
-                  <div className="text-2xl font-black text-emerald-700">{activeCount}</div>
-                  <div className="text-[9px] font-bold text-emerald-500 uppercase tracking-wider mt-0.5">With Qty</div>
+                <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-3 text-center">
+                  <div className="text-2xl font-bold font-mono text-emerald-700 dark:text-emerald-300">{activeCount}</div>
+                  <div className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mt-0.5">With Qty</div>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -1833,23 +1843,23 @@ const StockAdjustment = () => {
                   type="button"
                   onClick={saveDocument}
                   disabled={loading || activeCount === 0}
-                  className={`flex-1 h-10 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2 transition-all shadow-sm ${
+                  className={`flex-1 h-10 text-white text-xs sm:text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-all shadow-sm ${
                     isEditing
-                      ? 'bg-blue-600 hover:bg-blue-700 disabled:bg-slate-100 disabled:text-slate-400'
-                      : 'bg-amber-600 hover:bg-amber-700 disabled:bg-slate-100 disabled:text-slate-400'
+                      ? 'bg-blue-600 hover:bg-blue-700 disabled:opacity-50'
+                      : 'bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] disabled:opacity-50'
                   }`}
                 >
                   {loading ? (
                     <><RefreshCw className="w-4 h-4 animate-spin" /> {isEditing ? 'Updating…' : 'Saving…'}</>
                   ) : (
-                    <><Save className="w-4 h-4" /> {isEditing ? `Update Document #${docNo}` : `Save Document #${docNo}`}</>
+                    <><Save className="w-4 h-4" /> {isEditing ? `Update Doc #${docNo}` : `Save Doc #${docNo}`}</>
                   )}
                 </button>
                 <button
                   type="button"
                   onClick={startNewDocument}
                   title="Clear / New document"
-                  className="px-3 h-10 border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-400 rounded-lg transition-colors"
+                  className="px-3 h-10 border border-[var(--ph-border)] hover:bg-rose-50 hover:border-rose-300 hover:text-rose-600 text-[var(--ph-text-secondary)] rounded-lg transition-colors flex items-center justify-center"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -1861,8 +1871,8 @@ const StockAdjustment = () => {
           {alert.show && (
             <div className={`p-4 rounded-xl flex items-start gap-3 border shadow-sm ${
               alert.type === 'success'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : 'bg-rose-50 text-rose-800 border-rose-200'
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                : 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800'
             }`}>
               {alert.type === 'success'
                 ? <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" />
@@ -1872,38 +1882,40 @@ const StockAdjustment = () => {
           )}
 
           {/* ── EXCEL GRID ───────────────────────────────────────────────── */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="bg-[var(--ph-surface)] rounded-xl border border-[var(--ph-border)] shadow-sm overflow-hidden">
             {/* Grid header bar */}
-            <div className="px-4 py-3 bg-slate-800 text-white text-sm font-bold flex items-center justify-between">
+            <div className="px-4 py-3 bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)] text-sm font-semibold flex flex-wrap items-center justify-between gap-2 text-[var(--ph-text)]">
               <div className="flex items-center gap-2">
-                <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+                <FileSpreadsheet className="w-4 h-4 text-[var(--ph-teal)]" />
                 <span>Excel-Style Entry Grid</span>
-                <span className="ml-2 text-xs font-normal text-slate-400">{gridRows.length} rows loaded</span>
+                <span className="text-xs font-normal text-[var(--ph-text-secondary)] bg-[var(--ph-surface)] px-2 py-0.5 rounded border border-[var(--ph-border)]">
+                  {gridRows.length} rows
+                </span>
               </div>
-              <div className="flex items-center gap-1 text-[10px] text-slate-400">
-                <Info className="w-3.5 h-3.5 text-amber-300" />
-                <span>Arrow keys navigate · Esc returns to Product · Enter advances · Tab moves right</span>
+              <div className="flex items-center gap-1.5 text-xs text-[var(--ph-text-secondary)]">
+                <Keyboard className="w-3.5 h-3.5 text-[var(--ph-teal)]" />
+                <span className="text-[11px] font-mono">Arrow keys · Enter/Tab advances · Esc exits</span>
               </div>
             </div>
 
             {/* Scrollable grid */}
             <div className="overflow-auto max-h-[62vh]" style={{ scrollbarWidth: 'thin' }}>
-              <table className="w-full border-collapse table-fixed text-sm" style={{ minWidth: '1300px' }}>
-                <thead className="sticky top-0 z-20 bg-slate-700 text-white shadow-md">
+              <table className="w-full border-collapse table-fixed text-sm" style={{ minWidth: '1380px' }}>
+                <thead className="sticky top-0 z-20 bg-[var(--ph-surface-2)] text-[var(--ph-text)] border-b border-[var(--ph-border)] shadow-xs">
                   <tr>
-                    <th className="w-9  px-1 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider border-r border-slate-600">#</th>
-                    <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[220px]">Product Name</th>
-                    <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[130px]">Company</th>
-                    <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[90px]">Type</th>
-                    <th className="px-2 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[65px]">Unit</th>
-                    <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[140px]">Expiry Date (DD/MM/YYYY)</th>
-                    <th className="px-2 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[80px]">Current Qty</th>
-                    <th className="px-2 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[90px] text-green-300">Qty IN ▲</th>
-                    <th className="px-2 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[90px] text-red-300">Qty OUT ▼</th>
-                    <th className="px-2 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[80px] text-amber-300">Final Qty</th>
-                    <th className="px-2 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[90px]">Unit Price</th>
-                    <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-slate-600 min-w-[120px]">Remarks</th>
-                    <th className="w-10 px-1 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider">✕</th>
+                    <th className="w-10 px-1 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 text-[var(--ph-text-secondary)]">#</th>
+                    <th className="px-2.5 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[280px] text-[var(--ph-text)]">Product Name</th>
+                    <th className="px-2.5 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[140px] text-[var(--ph-text-secondary)]">Company</th>
+                    <th className="px-2 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[95px] text-[var(--ph-text-secondary)]">Type</th>
+                    <th className="px-2 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[65px] text-[var(--ph-text-secondary)]">Unit</th>
+                    <th className="px-2.5 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[145px] text-[var(--ph-text-secondary)]">Expiry Date (DD/MM/YYYY)</th>
+                    <th className="px-2.5 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[90px] text-[var(--ph-text-secondary)]">Current Qty</th>
+                    <th className="px-2.5 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[95px] text-emerald-600 dark:text-emerald-400">Qty IN ▲</th>
+                    <th className="px-2.5 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[95px] text-rose-600 dark:text-rose-400">Qty OUT ▼</th>
+                    <th className="px-2.5 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[95px] text-amber-600 dark:text-amber-400">Final Qty</th>
+                    <th className="px-2.5 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[95px] text-[var(--ph-text-secondary)]">Unit Price</th>
+                    <th className="px-2.5 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider border-r border-[var(--ph-border)]/70 min-w-[150px] text-[var(--ph-text-secondary)]">Remarks</th>
+                    <th className="w-10 px-1 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-[var(--ph-text-secondary)]">✕</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1928,15 +1940,15 @@ const StockAdjustment = () => {
             </div>
 
             {/* Footer */}
-            <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
+            <div className="px-4 py-3 bg-[var(--ph-surface-2)] border-t border-[var(--ph-border)] flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => setGridRows(prev => [...prev, emptyRow()])}
-                className="text-xs font-semibold text-amber-700 hover:text-amber-800 hover:bg-amber-50 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1.5"
+                className="text-xs font-semibold text-[var(--ph-teal)] hover:bg-[var(--ph-teal)]/10 px-3.5 py-1.5 rounded-lg border border-[var(--ph-teal)]/30 transition-colors flex items-center gap-1.5"
               >
                 + Add Row
               </button>
-              <div className="text-[10px] text-slate-400">
+              <div className="text-xs text-[var(--ph-text-secondary)]">
                 {gridRows.filter(r => r.productId).length} products · {activeCount} with adjustments
               </div>
             </div>

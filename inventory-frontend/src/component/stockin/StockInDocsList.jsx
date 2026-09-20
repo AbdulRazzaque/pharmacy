@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '../../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { Search, FileText, Calendar, User, Package, Hash, Eye, Building2 } from 'lucide-react';
+import { Search, FileText, Calendar, User, Package, Hash, Eye, Building2, Plus, ArrowRight } from 'lucide-react';
 import moment from 'moment';
 import { getToken } from '../../utils/auth';
+import { PageHeader } from '../../components/ui/page-header';
+import { StatCard } from '../../components/ui/stat-card';
+import { Badge } from '../../components/ui/badge';
+import { EmptyState } from '../../components/ui/empty-state';
 
 const StockInDocsList = () => {
   const navigate = useNavigate();
@@ -69,137 +73,154 @@ const StockInDocsList = () => {
   const totalQty = docs.reduce((sum, d) => sum + (d.totalQuantity || 0), 0);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2 text-gray-800 dark:text-gray-100">
-            <FileText className="h-8 w-8 text-blue-600" />
-            Stock In Documents
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Manage and edit your Stock In entries by document number.</p>
-        </div>
-      </div>
+    <div className="ph-page space-y-6">
+      <PageHeader
+        title="Stock In Documents"
+        subtitle="Manage and audit historical supplier receipt documents, lot logs, and invoice entries"
+        badge={
+          <Badge variant="teal" className="ml-2">
+            {totalDocs} Documents
+          </Badge>
+        }
+      >
+        <Button
+          size="sm"
+          className="bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] text-white"
+          onClick={() => navigate('/dashboard/stockin')}
+        >
+          <Plus className="mr-1.5 h-4 w-4" />
+          New Stock In Receipt
+        </Button>
+      </PageHeader>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">{totalDocs}</div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mt-1">Total Documents</p>
-              </div>
-              <Hash className="h-10 w-10 text-blue-500 opacity-20" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">{totalProducts}</div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mt-1">Total Items Logged</p>
-              </div>
-              <Package className="h-10 w-10 text-emerald-500 opacity-20" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">{totalQty}</div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mt-1">Total Quantity In</p>
-              </div>
-              <Eye className="h-10 w-10 text-orange-500 opacity-20" />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard
+          icon={Hash}
+          label="Total Receipts"
+          value={totalDocs}
+          subtitle="All recorded inbound documents"
+          color="primary"
+        />
+        <StatCard
+          icon={Package}
+          label="Distinct Line Items"
+          value={totalProducts}
+          subtitle="Individual medicine types logged"
+          color="secondary"
+        />
+        <StatCard
+          icon={Eye}
+          label="Total Units Received"
+          value={totalQty.toLocaleString()}
+          subtitle="Cumulative inventory received"
+          color="success"
+        />
       </div>
 
-      {/* Filters */}
-      <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Input
-              icon={Search}
-              placeholder="Search by Document Number, Supplier Name, or Creator..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              clearable
-              onClear={() => setSearchQuery('')}
-            />
+      {/* Documents Table Card */}
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)] overflow-hidden">
+        <CardHeader className="border-b border-[var(--ph-border)] py-3 px-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-semibold text-[var(--ph-text)]">
+                Inbound Document Registry
+              </CardTitle>
+              <Badge variant="outline" className="text-xs font-mono">
+                {filteredDocs.length} records
+              </Badge>
+            </div>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--ph-muted)] pointer-events-none" />
+              <Input
+                placeholder="Search Doc #, Supplier, Creator..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-8 text-xs bg-[var(--ph-surface)] border-[var(--ph-border)]"
+                clearable
+                onClear={() => setSearchQuery('')}
+              />
+            </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Documents Table */}
-      <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-4 border-b border-gray-200 bg-gray-50 dark:bg-gray-900/50">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Document Registry</h2>
-        </div>
+        </CardHeader>
         <CardContent className="p-0">
           {loading ? (
-            <div className="text-center py-12 text-gray-500">Loading documents list...</div>
+            <div className="text-center py-16 text-sm text-[var(--ph-muted)]">
+              Loading document registry...
+            </div>
           ) : error ? (
-            <div className="text-center py-12 text-red-500">{error}</div>
+            <div className="text-center py-12 text-sm text-rose-600">{error}</div>
           ) : filteredDocs.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No documents found.</div>
+            <EmptyState
+              icon={FileText}
+              title="No documents found"
+              description="No stock-in delivery records matched your search criteria."
+              action={
+                searchQuery && (
+                  <Button variant="outline" size="sm" onClick={() => setSearchQuery('')}>
+                    Clear Filter
+                  </Button>
+                )
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
+                <TableHeader className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)]">
                   <TableRow>
-                    <TableHead className="font-semibold">Document Number</TableHead>
-                    <TableHead className="font-semibold">Supplier Name</TableHead>
-                    <TableHead className="font-semibold">Date Created</TableHead>
-                    <TableHead className="font-semibold">Created By</TableHead>
-                    <TableHead className="font-semibold text-right">Distinct Products</TableHead>
-                    <TableHead className="font-semibold text-right">Total Quantity</TableHead>
-                    <TableHead className="text-center font-semibold">Actions</TableHead>
+                    <TableHead className="font-semibold text-xs text-[var(--ph-text)] pl-4">Document #</TableHead>
+                    <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Supplier / Distributor</TableHead>
+                    <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Date & Time</TableHead>
+                    <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Received By</TableHead>
+                    <TableHead className="font-semibold text-xs text-[var(--ph-text)] text-right">Items Count</TableHead>
+                    <TableHead className="font-semibold text-xs text-[var(--ph-text)] text-right">Total Qty</TableHead>
+                    <TableHead className="text-right font-semibold text-xs text-[var(--ph-text)] pr-4">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredDocs.map((doc) => {
                     const suppName = doc.supplier?.name || (typeof doc.supplier === 'string' ? doc.supplier : '') || doc.items?.[0]?.supplier?.name || '-';
                     return (
-                      <TableRow key={doc.docNo} className="hover:bg-slate-50/50">
-                        <TableCell className="font-medium text-blue-600">
-                          Doc #{doc.docNo}
+                      <TableRow key={doc.docNo} className="hover:bg-[var(--ph-surface-2)]/60 transition-colors border-b border-[var(--ph-border)]">
+                        <TableCell className="pl-4">
+                          <Badge variant="teal" className="font-mono text-xs">
+                            Doc #{doc.docNo}
+                          </Badge>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5 text-gray-700 font-medium">
-                            <Building2 className="h-4 w-4 text-blue-500" />
-                            {suppName}
+                          <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--ph-text)]">
+                            <Building2 className="h-3.5 w-3.5 text-[var(--ph-teal)] shrink-0" />
+                            <span>{suppName}</span>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5 text-gray-600">
-                            <Calendar className="h-4 w-4 text-gray-400" />
+                        <TableCell className="text-xs text-[var(--ph-text-secondary)]">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="h-3 w-3 text-[var(--ph-muted)]" />
                             {moment(doc.createdAt).format('DD/MM/YYYY hh:mm A')}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5 text-gray-600">
-                            <User className="h-4 w-4 text-gray-400" />
+                        <TableCell className="text-xs text-[var(--ph-text-secondary)]">
+                          <div className="flex items-center gap-1.5">
+                            <User className="h-3 w-3 text-[var(--ph-muted)]" />
                             {doc.createdBy?.userName || 'System'}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-medium">
+                        <TableCell className="text-right font-medium text-xs text-[var(--ph-text)]">
                           {doc.totalProducts}
                         </TableCell>
-                        <TableCell className="text-right font-semibold text-emerald-600">
+                        <TableCell className="text-right font-bold text-xs text-emerald-600 dark:text-emerald-400">
                           {doc.totalQuantity}
                         </TableCell>
-                        <TableCell className="text-center">
+                        <TableCell className="text-right pr-4">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => navigate(`/dashboard/stockin-docs/${doc.docNo}`)}
-                            className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                            className="h-7 text-xs border-[var(--ph-border)] hover:bg-[var(--ph-navy-light)] hover:text-[var(--ph-navy)]"
                           >
-                            <Eye className="mr-1 h-3.5 w-3.5" />
+                            <Eye className="mr-1 h-3.5 w-3.5 text-[var(--ph-teal)]" />
                             Excel Edit
+                            <ArrowRight className="ml-1 h-3 w-3 text-[var(--ph-muted)]" />
                           </Button>
                         </TableCell>
                       </TableRow>

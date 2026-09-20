@@ -5,10 +5,12 @@ import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { ArrowLeft, Save, Trash2, ShieldAlert, Sparkles, RefreshCw, FileText, Search, Printer, Plus, Calendar } from 'lucide-react';
+import { ArrowLeft, Save, Trash2, ShieldAlert, RefreshCw, FileText, Search, Printer, Plus, Calendar } from 'lucide-react';
 import StockOutProductDropdownCell from '../../components/ui/StockOutProductDropdownCell';
 import moment from 'moment';
 import { getToken, getUserInfo } from '../../utils/auth';
+import { PageHeader } from '../../components/ui/page-header';
+import { Badge } from '../../components/ui/badge';
 
 const StockOutDocExcelEdit = () => {
   const { docNo } = useParams();
@@ -670,77 +672,82 @@ const StockOutDocExcelEdit = () => {
   const grandTotal = totalSubTotal - totalDiscount;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="ph-page space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" onClick={handleBack} className="gap-1">
-            <ArrowLeft className="h-4 w-4" />
+      <PageHeader
+        title={`Stock Out Excel Editor — Doc #${docNo}`}
+        subtitle="Spreadsheet style outbound bulk-editing, fast keystrokes, inline validation"
+        badge={
+          <Badge variant="teal" className="ml-2 font-mono">
+            Doc #{docNo}
+          </Badge>
+        }
+      >
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleBack}
+            className="border-[var(--ph-border)] hover:bg-[var(--ph-surface-2)] text-xs"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 mr-1" />
             Back
           </Button>
-          <div>
-            <h1 className="text-3xl font-bold flex items-center gap-2 text-gray-800 dark:text-gray-100">
-              <Sparkles className="h-8 w-8 text-blue-500" />
-              Document Excel Editor (Out): Doc #{docNo}
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">Spreadsheet style bulk-editing, fast keystrokes, inline validation.</p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-4 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg border">
+          <div className="flex items-center gap-3 bg-[var(--ph-surface)] px-3 py-1 rounded-lg border border-[var(--ph-border)] text-xs">
             <div className="text-right">
-              <div className="text-xs text-gray-500 uppercase font-semibold">Subtotal</div>
-              <div className="text-sm font-bold text-gray-800 dark:text-gray-200">QR {totalSubTotal.toFixed(2)}</div>
+              <div className="text-[10px] text-[var(--ph-text-secondary)] uppercase font-semibold">Subtotal</div>
+              <div className="text-xs font-bold text-[var(--ph-text)] font-mono">QR {totalSubTotal.toFixed(2)}</div>
             </div>
-            <div className="text-right border-l pl-3">
-              <div className="text-xs text-orange-600 uppercase font-semibold">Discount</div>
-              <div className="text-sm font-bold text-orange-600">QR {totalDiscount.toFixed(2)}</div>
+            <div className="text-right border-l border-[var(--ph-border)] pl-3">
+              <div className="text-[10px] text-amber-600 uppercase font-semibold">Discount</div>
+              <div className="text-xs font-bold text-amber-600 font-mono">QR {totalDiscount.toFixed(2)}</div>
             </div>
-            <div className="text-right border-l pl-3">
-              <div className="text-xs text-red-600 uppercase font-bold">Grand Total</div>
-              <div className="text-lg font-black text-red-600">QR {grandTotal.toFixed(2)}</div>
+            <div className="text-right border-l border-[var(--ph-border)] pl-3">
+              <div className="text-[10px] text-rose-600 uppercase font-bold">Grand Total</div>
+              <div className="text-sm font-black text-rose-600 font-mono">QR {grandTotal.toFixed(2)}</div>
+            </div>
+            <div className="text-right border-l border-[var(--ph-border)] pl-3">
+              <div className="text-[10px] text-[var(--ph-text-secondary)] uppercase font-semibold">Total Qty</div>
+              <div className="text-xs font-bold text-[var(--ph-text)] font-mono">{totalQuantity}</div>
             </div>
           </div>
-          <div className="text-right border-l pl-4">
-            <div className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Total Quantity</div>
-            <div className="text-xl font-black text-gray-800">{totalQuantity}</div>
-          </div>
-          <div className="flex items-center gap-2 border-l pl-4">
-            {hasUnsavedChanges && (
-              <span className="text-sm font-semibold text-orange-600 bg-orange-50 px-3 py-1.5 rounded-full border border-orange-200 animate-pulse">
-                Unsaved Changes ({Object.keys(dirtyRows).length} rows)
-              </span>
-            )}
-            <Button
-              onClick={handlePrintPDF}
-              disabled={loading || saving}
-              variant="outline"
-              className="border-blue-600 text-blue-600 hover:bg-blue-50 font-bold px-6 gap-2"
-            >
-              <Printer className="h-4 w-4" />
-              Print PDF
-            </Button>
-            <Button
-              onClick={handleSaveAll}
-              disabled={saving || !hasUnsavedChanges}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 gap-2"
-            >
-              <Save className="h-4 w-4" />
-              {saving ? 'Saving...' : 'Save All Changes'}
-            </Button>
-          </div>
+
+          {hasUnsavedChanges && (
+            <span className="text-xs font-semibold text-amber-700 bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-300 animate-pulse">
+              Unsaved ({Object.keys(dirtyRows).length + (docDateChanged ? 1 : 0)})
+            </span>
+          )}
+          <Button
+            onClick={handlePrintPDF}
+            disabled={loading || saving}
+            variant="outline"
+            size="sm"
+            className="border-[var(--ph-navy)] text-[var(--ph-navy)] hover:bg-[var(--ph-surface-2)] text-xs font-semibold gap-1.5"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Print PDF
+          </Button>
+          <Button
+            onClick={handleSaveAll}
+            disabled={saving || !hasUnsavedChanges}
+            size="sm"
+            className="bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] text-white text-xs font-semibold gap-1.5 shadow-sm"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saving ? 'Saving...' : 'Save All Changes'}
+          </Button>
         </div>
-      </div>
+      </PageHeader>
 
       {alert.show && (
-        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="border border-blue-200">
-          <AlertDescription className="font-semibold">{alert.message}</AlertDescription>
+        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="border border-[var(--ph-border)]">
+          <AlertDescription className="font-semibold text-xs">{alert.message}</AlertDescription>
         </Alert>
       )}
 
       {/* Document Information & Header Settings */}
-      <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)]">
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Date Created / Document Date */}

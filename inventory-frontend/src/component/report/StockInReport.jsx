@@ -282,7 +282,17 @@ const StockInReport = ({
                 <table className="reports-table">
                   <thead>
                     <tr>
-                      <th>No</th><th>Date</th><th>Doc No</th><th>Product Name</th><th>Company</th><th>Supplier</th><th className="text-right">Qty</th><th>Unit</th>{isAdmin && <th className="text-right">Price</th>}{isAdmin && <th className="text-right">Total</th>}{isAdmin && <th className="text-center">Actions</th>}
+                      <th className="col-num">#</th>
+                      <th className="col-date">Date</th>
+                      <th className="col-docno">Doc No</th>
+                      <th className="col-product">Product Name</th>
+                      <th className="col-company">Company</th>
+                      <th className="min-w-[140px]">Supplier</th>
+                      <th className="col-qty text-right">Qty</th>
+                      <th className="col-unit">Unit</th>
+                      {isAdmin && <th className="col-price text-right">Price</th>}
+                      {isAdmin && <th className="col-total text-right">Total</th>}
+                      {isAdmin && <th className="text-center min-w-[70px]">Actions</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -291,22 +301,24 @@ const StockInReport = ({
                       const idx = (page - 1) * pageSize + i + 1;
                       return (
                         <tr key={row._id || i}>
-                          <td>{idx}</td>
-                          <td>{row.createdAt ? moment(row.createdAt).format('DD/MM/YYYY') : '-'}</td>
-                          <td>{row.docNo ?? '-'}</td>
-                          <td>{row.name || row.productId?.name || '-'}</td>
-                          <td>{row.productId?.companyName || '-'}</td>
-                          <td>{row.supplier?.name || '-'}</td>
-                          <td className="text-right">{row.quantity ?? 0}</td>
-                          <td>{row.unit || row.productId?.unit || '-'}</td>
-                          {isAdmin && <td className="text-right">{(row.purchasingPrice ?? 0).toFixed(2)}</td>}
-                          {isAdmin && <td className="text-right">{total.toFixed(2)}</td>}
+                          <td className="col-num font-mono text-slate-500">{idx}</td>
+                          <td className="col-date">{row.createdAt ? moment(row.createdAt).format('DD/MM/YYYY') : '-'}</td>
+                          <td className="col-docno font-mono">{row.docNo ?? '-'}</td>
+                          <td className="col-product font-semibold text-[var(--ph-text)]">{row.name || row.productId?.name || '-'}</td>
+                          <td className="col-company text-[var(--ph-text-secondary)]">{row.productId?.companyName || '-'}</td>
+                          <td className="min-w-[140px] text-[var(--ph-text-secondary)]">{row.supplier?.name || '-'}</td>
+                          <td className="col-qty text-right font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                            {(row.quantity ?? 0).toLocaleString()}
+                          </td>
+                          <td className="col-unit text-[var(--ph-text-secondary)]">{row.unit || row.productId?.unit || '-'}</td>
+                          {isAdmin && <td className="col-price text-right font-mono">{(row.purchasingPrice ?? 0).toFixed(2)}</td>}
+                          {isAdmin && <td className="col-total text-right font-mono font-bold">{total.toFixed(2)}</td>}
                           {isAdmin && (
-                            <td className="text-center">
+                            <td className="text-center min-w-[70px]">
                               <button
                                 type="button"
                                 onClick={() => handleEditClick(row)}
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 rounded transition-colors"
                                 title="Edit record"
                               >
                                 <Edit className="w-4 h-4" />

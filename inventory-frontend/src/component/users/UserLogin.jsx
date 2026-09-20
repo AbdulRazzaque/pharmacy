@@ -1,101 +1,179 @@
-import React, { useState } from 'react'
-import axios from 'axios'
-import { useNavigate } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-
-import logo from '../../images/inventory.jpg'
-import { storeUserInfo } from '../../store/user/userActions'
-import { connect } from 'react-redux'
+import React, { useState } from 'react';
+import axios from 'axios';
+import { useNavigate, Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { storeUserInfo } from '../../store/user/userActions';
+import { connect } from 'react-redux';
 import { setToken, setUserInfo } from '../../utils/auth';
 import ThemeToggle from '../../components/ThemeToggle';
+import { 
+  Users, 
+  Package, 
+  ShoppingBag, 
+  LineChart, 
+  Activity, 
+  Eye, 
+  EyeOff, 
+  AlertCircle 
+} from 'lucide-react';
+import imstharbLogo from '../../images/imstharb.png';
 
 const UserLogin = (props) => {
-    const [isValid, setIsValid] = useState(false);
-    const navigate = useNavigate();
-     
-    const { register, handleSubmit, formState: { errors } } = useForm();
-    const onSubmit = async(data) => {
-     try {
-      console.log(data, 'data');
-  
-      
-      const res= await axios.post(`${process.env.REACT_APP_DEVELOPMENT}/api/user/loginUser`, data)
-      .then(response=>{
-       
-          console.log(response, 'res')
-          // Save token and user info to localStorage
+  const [isValid, setIsValid] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { register, handleSubmit } = useForm();
+
+  const onSubmit = async (data) => {
+    setLoading(true);
+    try {
+      await axios.post(`${process.env.REACT_APP_DEVELOPMENT}/api/user/loginUser`, data)
+        .then(response => {
           setToken(response.data.result.token);
           setUserInfo(response.data.result.userInfo);
-          navigate('/dashboard/StockList')
-          props.storeUserInfo(response.data.result.userInfo)
-    })
+          navigate('/dashboard/StockList');
+          props.storeUserInfo(response.data.result.userInfo);
+        });
+    } catch (error) {
+      setIsValid(true);
+      setTimeout(() => { setIsValid(false); }, 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-     } catch (error) {
-     
-        setIsValid(true);
-        setTimeout(() => {
-            setIsValid(false);
-        }, 3000);
-       }
-  
-  }
-  
   return (
-    <div className="relative min-h-screen bg-background">
-      <div className="absolute top-4 right-4 z-10">
-        <ThemeToggle />
+    <div className="ph-auth-screen">
+      {/* Top right theme toggle */}
+      <div className="ph-auth-topbar">
+        <ThemeToggle className="ph-brand-theme-btn" />
       </div>
-        <section className="bg-muted/30 min-h-screen">
-  <div className="flex flex-col items-center justify-center px-6 py-8 mx-auto md:h-screen lg:py-0">
-  {isValid  &&
-  <div role="alert">
-  <div className="bg-red-500 text-white font-bold rounded-t px-4 py-2 text-center">
-    Error
-  </div>
-  <div className="border border-t-0 border-red-400 rounded-b bg-red-100 px-4 py-3 text-red-700">
-    <p>Cheack Username and password.</p>
-  </div>
-</div>
-      
-}
-      <a href="/" className="flex items-center mb-6 text-2xl font-semibold text-foreground">
-      <img className="w-60 h-36 mr-6" src={logo} alt="logo"/>
-      </a>
-      <div className="w-full rounded-lg shadow border border-border md:mt-0 sm:max-w-md xl:p-0 bg-card">
-          <div className="p-6 space-y-4 md:space-y-6 sm:p-8">
-              <h1 className="text-xl text-center font-bold leading-tight tracking-tight text-foreground md:text-2xl">
-                  User Login
-              </h1>
-              <form className="space-y-4 md:space-y-6"  onSubmit={handleSubmit(onSubmit)}>
-                  <div>
-                      <label htmlFor="text" className="block mb-2 text-sm font-medium text-foreground">User Name</label>
-                      <input type="text" id="email" className="bg-background border border-input text-foreground sm:text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5" placeholder="Enter Your User Name" required {...register("userName", { required: true })} />
-                  </div>
-                  <div>
-                      <label htmlFor="password" className="block mb-2 text-sm font-medium text-foreground">Password</label>
-                      <input type="password" id="password" placeholder="••••••••" className="bg-background border border-input text-foreground sm:text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5" required {...register("password", { required: true })} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                      <div className="flex items-start">
-                      </div>
 
-                  </div>
-                   
-                    <button type="submit" className="w-full text-white bg-blue-600 hover:bg-primary-700 focus:ring-4 focus:outline-none focus:ring-primary-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-primary-600 dark:hover:bg-primary-700 dark:focus:ring-primary-800">Login</button>
-                      
-            
-               
-              </form>
+      <main className="ph-auth-container">
+        {/* 1. Prominent Central imstharb.png Branding */}
+        <div className="ph-auth-brand-hero">
+          <img
+            src={imstharbLogo}
+            alt="Tharb Pharmacy & Inventory Management System"
+            className="ph-auth-brand-logo"
+          />
+        </div>
+
+        {/* 2. Staff User Heading & Subtitle */}
+        <div className="ph-auth-header">
+          <div className="ph-auth-badge staff">
+            <Users size={16} />
+            <span>Staff Portal</span>
           </div>
-      </div>
-  </div>
-</section>
+          <h1 className="ph-auth-title">Staff User</h1>
+          <p className="ph-auth-subtitle">Inventory &amp; Stock Operations Access</p>
+        </div>
+
+        {/* 3. Four Feature Highlights */}
+        <div className="ph-auth-features staff-grid">
+          <div className="ph-auth-feature-pill">
+            <Package size={15} className="ph-auth-pill-icon" />
+            <span>Manage Stock</span>
+          </div>
+          <div className="ph-auth-feature-pill">
+            <ShoppingBag size={15} className="ph-auth-pill-icon" />
+            <span>Process Orders</span>
+          </div>
+          <div className="ph-auth-feature-pill">
+            <LineChart size={15} className="ph-auth-pill-icon" />
+            <span>Stock Tracking</span>
+          </div>
+          <div className="ph-auth-feature-pill">
+            <Activity size={15} className="ph-auth-pill-icon" />
+            <span>Daily Operations</span>
+          </div>
+        </div>
+
+        {/* 4. Enterprise Login Card */}
+        <div className="ph-auth-card">
+          {isValid && (
+            <div className="ph-alert ph-alert-error" style={{ marginBottom: 18, width: '100%' }}>
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <span>Invalid username or password. Please check your credentials.</span>
+            </div>
+          )}
+
+          <form className="ph-auth-form" onSubmit={handleSubmit(onSubmit)}>
+            <div className="ph-field">
+              <label className="ph-label" htmlFor="user-username">Username</label>
+              <input
+                id="user-username"
+                type="text"
+                className="ph-input"
+                placeholder="Enter your username"
+                {...register("userName", { required: true })}
+                required
+                autoComplete="username"
+              />
+            </div>
+
+            <div className="ph-field">
+              <label className="ph-label" htmlFor="user-password">Password</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="user-password"
+                  type={showPwd ? 'text' : 'password'}
+                  className="ph-input"
+                  placeholder="••••••••"
+                  style={{ paddingRight: 42 }}
+                  {...register("password", { required: true })}
+                  required
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(!showPwd)}
+                  aria-label={showPwd ? "Hide password" : "Show password"}
+                  className="ph-auth-eye-btn"
+                >
+                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="ph-auth-submit-btn staff"
+              disabled={loading}
+            >
+              {loading ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Signing in…
+                </span>
+              ) : (
+                'Sign In'
+              )}
+            </button>
+          </form>
+
+          <div className="ph-auth-links">
+            <Link to="/" className="ph-auth-back-link">
+              &larr; Back to Login Options
+            </Link>
+          </div>
+        </div>
+
+        {/* 5. Small Secondary Copyright */}
+        <footer className="ph-auth-footer">
+          &copy; 2025 PharmaCare ERP. Secure healthcare data platform.
+        </footer>
+      </main>
     </div>
-  )
-}
-const mapDispatchToProps = (dispatch)=>{
+  );
+};
+
+const mapDispatchToProps = (dispatch) => {
   return {
-    storeUserInfo:value=>dispatch(storeUserInfo(value))
-  }
-}
-export default connect(null,mapDispatchToProps)(UserLogin)
+    storeUserInfo: value => dispatch(storeUserInfo(value))
+  };
+};
+
+export default connect(null, mapDispatchToProps)(UserLogin);
+

@@ -6,11 +6,15 @@ import { Input } from '../../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
 import { Alert, AlertDescription } from '../../components/ui/alert';
-import { Search, Download, Package, AlertCircle, History, Eye, EyeOff } from 'lucide-react';
+import { Search, Download, Package, AlertCircle, History, Eye, EyeOff, Layers, AlertTriangle, ShieldCheck } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { saveAs } from '../../utils/fileDownload';
 import moment from 'moment';
 import { getToken, getUserInfo } from '../../utils/auth';
+import { PageHeader } from '../../components/ui/page-header';
+import { StatCard } from '../../components/ui/stat-card';
+import { Badge } from '../../components/ui/badge';
+import { EmptyState } from '../../components/ui/empty-state';
 
 const StockList = () => {
   const navigate = useNavigate();
@@ -37,28 +41,57 @@ const StockList = () => {
     axios.get(`${process.env.REACT_APP_DEVELOPMENT}/api/stock/getAllStocks`, {
       headers: { token: accessToken }
     })
-    .then((res) => {
-      const expiryMap = new Map();
+      .then((res) => {
+        const expiryMap = new Map();
 
-      (res.data.result || []).forEach(stock => {
-        const product = stock.product || {};
-        const baseName = stock.name || product.name || '';
-        const baseType = product.type || stock.type || '';
-        const baseUnit = product.unit || stock.unit || '';
-        const baseCompanyName = product.companyName || stock.companyName || '';
-        const batchPurchasing = (item) => item?.purchasingPrice ?? 0;
-        const batchSelling = (item) => item?.sellingPrice ?? 0;
-        const baseSlug = product.slug;
-        const baseProductId = product._id || stock.productId || stock.product || null;
+        (res.data.result || []).forEach(stock => {
+          const product = stock.product || {};
+          const baseName = stock.name || product.name || '';
+          const baseType = product.type || stock.type || '';
+          const baseUnit = product.unit || stock.unit || '';
+          const baseCompanyName = product.companyName || stock.companyName || '';
+          const batchPurchasing = (item) => item?.purchasingPrice ?? 0;
+          const batchSelling = (item) => item?.sellingPrice ?? 0;
+          const baseSlug = product.slug;
+          const baseProductId = product._id || stock.productId || stock.product || null;
 
-        if (stock.expiryArray && stock.expiryArray.length > 0) {
-          stock.expiryArray.forEach((expiryItem) => {
-            const expiryDate = expiryItem.expiry ? moment(expiryItem.expiry).format('YYYY-MM-DD') : 'no-expiry';
-            const mapKey = `${baseName}_${expiryDate}`;
+          if (stock.expiryArray && stock.expiryArray.length > 0) {
+            stock.expiryArray.forEach((expiryItem) => {
+              const expiryDate = expiryItem.expiry ? moment(expiryItem.expiry).format('YYYY-MM-DD') : 'no-expiry';
+              const mapKey = `${baseName}_${expiryDate}`;
 
+              if (expiryMap.has(mapKey)) {
+                const existing = expiryMap.get(mapKey);
+                existing.quantity += expiryItem.quantity || 0;
+                existing.stockIds.push(stock._id);
+              } else {
+                expiryMap.set(mapKey, {
+                  _id: mapKey,
+                  originalStockId: stock._id,
+                  stockIds: [stock._id],
+                  name: baseName,
+                  productName: baseName,
+                  slug: baseSlug,
+                  productId: baseProductId,
+                  type: baseType,
+                  unit: baseUnit,
+                  companyName: baseCompanyName,
+                  quantity: expiryItem.quantity || 0,
+                  purchasingPrice: batchPurchasing(expiryItem),
+                  sellingPrice: batchSelling(expiryItem),
+                  expiry: expiryItem.expiry || '',
+                  expiryArray: stock.expiryArray,
+                  location: stock.location || '',
+                  supplier: stock.supplier || '',
+                  supplierName: stock.supplierName || ''
+                });
+              }
+            });
+          } else {
+            const mapKey = `${baseName}_no-expiry`;
             if (expiryMap.has(mapKey)) {
               const existing = expiryMap.get(mapKey);
-              existing.quantity += expiryItem.quantity || 0;
+              existing.quantity += stock.totalQuantity || stock.quantity || 0;
               existing.stockIds.push(stock._id);
             } else {
               expiryMap.set(mapKey, {
@@ -72,57 +105,28 @@ const StockList = () => {
                 type: baseType,
                 unit: baseUnit,
                 companyName: baseCompanyName,
-                quantity: expiryItem.quantity || 0,
-                purchasingPrice: batchPurchasing(expiryItem),
-                sellingPrice: batchSelling(expiryItem),
-                expiry: expiryItem.expiry || '',
-                expiryArray: stock.expiryArray,
+                quantity: stock.totalQuantity || stock.quantity || 0,
+                purchasingPrice: 0,
+                sellingPrice: 0,
+                expiry: stock.expiry || '',
+                expiryArray: stock.expiryArray || [],
                 location: stock.location || '',
                 supplier: stock.supplier || '',
                 supplierName: stock.supplierName || ''
               });
             }
-          });
-        } else {
-          const mapKey = `${baseName}_no-expiry`;
-          if (expiryMap.has(mapKey)) {
-            const existing = expiryMap.get(mapKey);
-            existing.quantity += stock.totalQuantity || stock.quantity || 0;
-            existing.stockIds.push(stock._id);
-          } else {
-            expiryMap.set(mapKey, {
-              _id: mapKey,
-              originalStockId: stock._id,
-              stockIds: [stock._id],
-              name: baseName,
-              productName: baseName,
-              slug: baseSlug,
-              productId: baseProductId,
-              type: baseType,
-              unit: baseUnit,
-              companyName: baseCompanyName,
-              quantity: stock.totalQuantity || stock.quantity || 0,
-              purchasingPrice: 0,
-              sellingPrice: 0,
-              expiry: stock.expiry || '',
-              expiryArray: stock.expiryArray || [],
-              location: stock.location || '',
-              supplier: stock.supplier || '',
-              supplierName: stock.supplierName || ''
-            });
           }
-        }
-      });
+        });
 
-      const processedData = Array.from(expiryMap.values());
-      setData(processedData);
-      setLoading(false);
-    })
-    .catch((err) => {
-      console.error('Error fetching stock:', err);
-      showAlert('Failed to fetch stock list', 'error');
-      setLoading(false);
-    });
+        const processedData = Array.from(expiryMap.values());
+        setData(processedData);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Error fetching stock:', err);
+        showAlert('Failed to fetch stock list', 'error');
+        setLoading(false);
+      });
   };
 
   // Derived filtered data — computed from data, searchQuery and hideZeroExpired toggle
@@ -219,135 +223,160 @@ const StockList = () => {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="ph-page space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-3xl font-bold">
-          <Package className="inline mr-2" />
-          Stock List
-        </h1>
+      <PageHeader
+        title="Inventory Stock Registry"
+        subtitle="Live batch ledger, real-time balances, lot expiry tracking, and transaction history"
+        badge={
+          <Badge variant="teal" className="ml-2 font-mono">
+            {filteredData.length} Batches
+          </Badge>
+        }
+      >
         <div className="flex items-center gap-2">
           {/* Toggle: Hide Zero Stock & Expired */}
           <button
             id="toggle-hide-zero-expired"
             onClick={() => setHideZeroExpired(prev => !prev)}
             className={`
-              flex items-center gap-2 px-4 py-2 rounded-lg border text-sm font-medium
+              flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-semibold
               transition-all duration-200 cursor-pointer
               ${hideZeroExpired
-                ? 'bg-blue-600 text-white border-blue-700 shadow-md'
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                ? 'bg-[var(--ph-navy)] text-white border-[var(--ph-navy)] shadow-sm'
+                : 'bg-[var(--ph-surface)] text-[var(--ph-text)] border-[var(--ph-border)] hover:bg-[var(--ph-surface-2)]'
               }
             `}
             title={hideZeroExpired ? 'Click to show all products' : 'Click to hide zero-stock & expired products'}
           >
             {hideZeroExpired
-              ? <><EyeOff className="h-4 w-4" /> Hiding Zero &amp; Expired</>
-              : <><Eye className="h-4 w-4" /> Hide Zero &amp; Expired</>
+              ? <><EyeOff className="h-3.5 w-3.5" /> Hiding Zero &amp; Expired</>
+              : <><Eye className="h-3.5 w-3.5" /> Hide Zero &amp; Expired</>
             }
           </button>
 
-          <Button variant="outline" onClick={exportToExcel} id="export-stock-excel">
-            <Download className="mr-2 h-4 w-4" />
-            Export to Excel
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToExcel}
+            id="export-stock-excel"
+            className="border-[var(--ph-border)] hover:bg-[var(--ph-surface-2)] text-xs font-semibold gap-1.5"
+          >
+            <Download className="h-3.5 w-3.5 text-[var(--ph-teal)]" />
+            Export Excel
           </Button>
         </div>
-      </div>
+      </PageHeader>
 
       {alert.show && (
-        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'}>
-          <AlertDescription>{alert.message}</AlertDescription>
+        <Alert variant={alert.type === 'error' ? 'destructive' : 'default'} className="border border-[var(--ph-border)]">
+          <AlertDescription className="font-semibold text-xs">{alert.message}</AlertDescription>
         </Alert>
       )}
 
-      {/* Summary Cards */}
-      <div className={`grid grid-cols-1 ${isAdmin ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">{filteredData.length}</div>
-            <p className="text-xs text-muted-foreground">
-              {hideZeroExpired ? 'Active Stock Items' : 'Total Stock Items'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold">
-              {filteredData.reduce((sum, item) => sum + (item.quantity || 0), 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">Total Quantity</p>
-          </CardContent>
-        </Card>
+      {/* Summary KPI Cards */}
+      <div className={`grid grid-cols-1 ${isAdmin ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-4`}>
+        <StatCard
+          icon={Layers}
+          label={hideZeroExpired ? 'Active Stock Batches' : 'Total Stock Batches'}
+          value={filteredData.length}
+          subtitle="Unique batch lots in ledger"
+          color="primary"
+        />
+        <StatCard
+          icon={Package}
+          label="Total Units in Stock"
+          value={filteredData.reduce((sum, item) => sum + (item.quantity || 0), 0).toLocaleString()}
+          subtitle="Cumulative units available"
+          color="secondary"
+        />
         {isAdmin && (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-2xl font-bold">${getTotalValue()}</div>
-              <p className="text-xs text-muted-foreground">Total Value</p>
-            </CardContent>
-          </Card>
+          <StatCard
+            icon={ShieldCheck}
+            label="Total Inventory Value"
+            value={`QR ${Number(getTotalValue()).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+            subtitle="Based on current selling price"
+            color="success"
+          />
         )}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-2xl font-bold text-red-600">{getLowStockItems()}</div>
-            <p className="text-xs text-muted-foreground">Low Stock Items</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          icon={AlertTriangle}
+          label="Low Stock Batches"
+          value={getLowStockItems()}
+          subtitle="Less than 10 units remaining"
+          color={getLowStockItems() > 0 ? 'warning' : 'primary'}
+        />
       </div>
 
-      {/* Search */}
-      <Card>
-        <CardContent className="pt-6">
-          <Input
-            icon={Search}
-            placeholder="Search by product name, type, or location..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            clearable
-            onClear={() => setSearchQuery('')}
-          />
+      {/* Filter / Search Bar */}
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)]">
+        <CardContent className="p-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--ph-muted)] pointer-events-none" />
+            <Input
+              placeholder="Search by product name, dosage type, or location..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 h-9 text-xs bg-[var(--ph-surface)] border-[var(--ph-border)]"
+              clearable
+              onClear={() => setSearchQuery('')}
+            />
+          </div>
         </CardContent>
       </Card>
 
       {/* Stock Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>
-              Stock List ({filteredData.length})
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)] overflow-hidden">
+        <CardHeader className="border-b border-[var(--ph-border)] py-3 px-4">
+          <CardTitle className="text-sm font-semibold text-[var(--ph-text)] flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span>Inventory Balances</span>
+              <Badge variant="outline" className="text-xs font-mono font-normal">
+                {filteredData.length} records
+              </Badge>
               {hideZeroExpired && (
-                <span className="ml-2 text-xs font-normal text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
-                  Active only
-                </span>
+                <Badge variant="teal" className="text-xs font-normal">
+                  Active Only
+                </Badge>
               )}
-            </span>
+            </div>
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            <div className="py-12 flex flex-col items-center justify-center gap-2 text-[var(--ph-muted)] text-sm">
+              <div className="w-6 h-6 border-2 border-[var(--ph-teal)] border-t-transparent rounded-full animate-spin" />
+              <span>Loading inventory ledger...</span>
+            </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="ph-table text-xs">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Product Name</TableHead>
-                    <TableHead>Company</TableHead>
-                    <TableHead>Unit</TableHead>
-                    <TableHead className="text-right">Quantity</TableHead>
-                    <TableHead>Expiry Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-center">Actions</TableHead>
+                  <TableRow className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)]">
+                    <TableHead className="font-semibold text-[var(--ph-text)] min-w-[260px] pl-4">Product Name</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)] min-w-[150px]">Company</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)] min-w-[80px]">Unit</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)] text-center min-w-[130px] w-[140px] px-4">Available Qty</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)] min-w-[140px] w-[150px] px-4">Expiry Date</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)] min-w-[125px]">Batch Health</TableHead>
+                    <TableHead className="text-center font-semibold text-[var(--ph-text)] min-w-[95px] pr-4">History</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredData.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        {searchQuery
-                          ? 'No stock items found matching your search.'
-                          : hideZeroExpired
-                            ? 'No active stock items. Toggle off the filter to see all products.'
-                            : 'No stock items available.'}
+                      <TableCell colSpan={7} className="p-0">
+                        <EmptyState
+                          icon={Package}
+                          title="No Stock Items Found"
+                          description={
+                            searchQuery
+                              ? 'No inventory lots matched your filter.'
+                              : hideZeroExpired
+                                ? 'No active stock items. Toggle off the filter to view all products.'
+                                : 'No stock lots available.'
+                          }
+                        />
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -358,68 +387,65 @@ const StockList = () => {
                       const productName = product.name || product.productName || '-';
                       const productUnit = product.unit || '-';
 
-                      const statusStyles = {
-                        expired: 'bg-red-100 text-red-800 border border-red-200',
-                        warning: 'bg-yellow-100 text-yellow-800 border border-yellow-200',
-                        valid: 'bg-green-100 text-green-800 border border-green-200',
-                        unknown: 'bg-gray-100 text-gray-600 border border-gray-200'
-                      };
-                      const statusLabels = {
-                        expired: 'Expired',
-                        warning: 'Expiring Soon',
-                        valid: 'Valid',
-                        unknown: 'No Date'
-                      };
-
                       return (
                         <TableRow
                           key={product._id || index}
-                          className={`
-                            ${isZeroStock ? 'opacity-60 bg-gray-50' : ''}
-                            ${expiryStatus === 'expired' ? 'bg-red-50' : ''}
-                          `}
+                          className={`hover:bg-[var(--ph-surface-2)]/60 transition-colors ${isZeroStock ? 'opacity-60 bg-gray-50/50 dark:bg-gray-900/20' : ''
+                            } ${expiryStatus === 'expired' ? 'bg-rose-50/40 dark:bg-rose-950/20' : ''}`}
                         >
-                          <TableCell className="font-medium">
-                            {productName}
-                            {isLowStock && (
-                              <AlertCircle className="inline ml-2 h-4 w-4 text-yellow-500" title="Low stock" />
-                            )}
-                            {isZeroStock && (
-                              <span className="ml-2 text-xs text-gray-400 font-normal">(Out of stock)</span>
-                            )}
+                          <TableCell className="font-medium text-[var(--ph-text)] min-w-[260px] pl-4">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold">{productName}</span>
+                              {isLowStock && (
+                                <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" title="Low stock (<10 units)" />
+                              )}
+                              {isZeroStock && (
+                                <span className="text-[10px] text-rose-500 font-semibold uppercase tracking-wider">(Out of Stock)</span>
+                              )}
+                            </div>
                           </TableCell>
-                          <TableCell>{product.companyName || '-'}</TableCell>
-                          <TableCell>{productUnit}</TableCell>
-                          <TableCell className="text-right">
-                            <span className={
+                          <TableCell className="text-[var(--ph-text-secondary)] min-w-[150px]">{product.companyName || '-'}</TableCell>
+                          <TableCell className="text-[var(--ph-text-secondary)] min-w-[80px]">{productUnit}</TableCell>
+                          <TableCell className="text-center font-mono min-w-[130px] w-[140px] px-4">
+                            <span className={`text-sm sm:text-base font-bold ${
                               isZeroStock
                                 ? 'text-gray-400 font-semibold'
                                 : isLowStock
-                                  ? 'text-yellow-600 font-semibold'
-                                  : 'text-green-700 font-semibold'
-                            }>
-                              {product.quantity || 0}
+                                  ? 'text-amber-600 dark:text-amber-400'
+                                  : 'text-emerald-700 dark:text-emerald-400'
+                            }`}>
+                              {(product.quantity || 0).toLocaleString()}
                             </span>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="font-mono text-sm font-medium text-[var(--ph-text)] min-w-[140px] w-[150px] px-4">
                             {product.expiry ? moment(product.expiry).format('DD/MM/YYYY') : '-'}
                           </TableCell>
-                          <TableCell>
-                            <span className={`px-2 py-1 rounded text-xs font-medium ${statusStyles[expiryStatus]}`}>
-                              {statusLabels[expiryStatus]}
-                            </span>
+                          <TableCell className="min-w-[125px]">
+                            {expiryStatus === 'expired' && (
+                              <Badge variant="destructive" className="text-[10px]">Expired</Badge>
+                            )}
+                            {expiryStatus === 'warning' && (
+                              <Badge variant="warning" className="text-[10px]">Expiring Soon</Badge>
+                            )}
+                            {expiryStatus === 'valid' && (
+                              <Badge variant="success" className="text-[10px]">Valid Lot</Badge>
+                            )}
+                            {expiryStatus === 'unknown' && (
+                              <Badge variant="outline" className="text-[10px]">No Expiry</Badge>
+                            )}
                           </TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex items-center justify-center gap-2">
+                          <TableCell className="text-center min-w-[95px] pr-4">
+                            <div className="flex items-center justify-center">
                               <Button
                                 size="sm"
                                 variant="outline"
                                 onClick={() => handleViewHistory(product)}
-                                className="gap-1"
-                                title="View History"
+                                className="h-7 px-2 text-xs border-[var(--ph-border)] hover:bg-[var(--ph-navy)] hover:text-white transition-colors"
+                                title="Audit Ledger History"
                                 id={`view-history-${product._id || index}`}
                               >
-                                <History className="h-4 w-4" />
+                                <History className="h-3.5 w-3.5 mr-1" />
+                                Audit
                               </Button>
                             </div>
                           </TableCell>

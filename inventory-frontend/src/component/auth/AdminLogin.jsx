@@ -1,113 +1,177 @@
-import axios from 'axios'
-import React, { useState } from 'react'
-
-import { useNavigate } from 'react-router-dom'
-
-// import logo from '../../images/inventory.jpg'
-import { useForm } from 'react-hook-form'
-import { storeUserInfo } from '../../store/user/userActions'
-import { connect } from 'react-redux'
+import React, { useState } from 'react';
+import axios from 'axios';
+import { useNavigate, Link } from 'react-router-dom';
+import { useForm } from 'react-hook-form';
+import { storeUserInfo } from '../../store/user/userActions';
+import { connect } from 'react-redux';
 import { setToken, setUserInfo } from '../../utils/auth';
 import ThemeToggle from '../../components/ThemeToggle';
-
+import { 
+  ShieldCheck, 
+  Users, 
+  Settings, 
+  BarChart3, 
+  Eye, 
+  EyeOff, 
+  AlertCircle 
+} from 'lucide-react';
+import imstharbLogo from '../../images/imstharb.png';
 
 const AdminLogin = (props) => {
   const navigate = useNavigate();
   const [isValid, setIsValid] = useState(false);
+  const [showPwd, setShowPwd] = useState(false);
+  const [loading, setLoading] = useState(false);
   const { register, handleSubmit } = useForm();
-  const onSubmit = async(data) => {
-   try {
-    await axios.post(`${process.env.REACT_APP_DEVELOPMENT}/api/user/loginUser`, data)
-    .then(response=>{
-    // console.log(response, 'Heer i cheack adming login')
-    if(response.data.result.userInfo.role === "admin"){
-      // Save token and user info to localStorage
-      setToken(response.data.result.token);
-      setUserInfo(response.data.result.userInfo);
-      navigate('/dashboard')
-      props.storeUserInfo(response.data.result.userInfo)
-    }else{
-      alert("Only for admin")
-    }
-  })
-  // navigate('/dashboard')
-   } catch (error) {
-    setIsValid(true);
-    setTimeout(() => {
-        setIsValid(false);
-    }, 3000);
-   }
 
-}
+  const onSubmit = async (data) => {
+    setLoading(true);
+    try {
+      await axios.post(`${process.env.REACT_APP_DEVELOPMENT}/api/user/loginUser`, data)
+        .then(response => {
+          if (response.data.result.userInfo.role === "admin") {
+            setToken(response.data.result.token);
+            setUserInfo(response.data.result.userInfo);
+            navigate('/dashboard');
+            props.storeUserInfo(response.data.result.userInfo);
+          } else {
+            alert("Only for admin");
+          }
+        });
+    } catch (error) {
+      setIsValid(true);
+      setTimeout(() => { setIsValid(false); }, 3000);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="relative min-h-screen bg-background">
-      <div className="absolute top-4 right-4 z-10">
-        <ThemeToggle />
+    <div className="ph-auth-screen">
+      {/* Top right theme toggle */}
+      <div className="ph-auth-topbar">
+        <ThemeToggle className="ph-brand-theme-btn" />
       </div>
 
-  <section className="bg-muted/30 min-h-screen">
+      <main className="ph-auth-container">
+        {/* 1. Prominent Central imstharb.png Branding */}
+        <div className="ph-auth-brand-hero">
+          <img
+            src={imstharbLogo}
+            alt="Tharb Pharmacy & Inventory Management System"
+            className="ph-auth-brand-logo"
+          />
+        </div>
 
-  <div className="flex flex-col items-center justify-center px-6 py-8 mx-auto md:h-screen lg:py-0">
-  {isValid  &&
-  <div role="alert">
-  <div className="bg-red-500 text-white font-bold rounded-t px-4 py-2 text-center">
-    Error
-  </div>
-  <div className="border border-t-0 border-red-400 rounded-b bg-red-100 px-4 py-3 text-red-700">
-    <p>Cheack Username and password.</p>
-  </div>
-</div>
-      
-}
-  {/* <div className="flex items-center mb-6 text-2xl font-semibold text-gray-900 dark:text-gray-900 ">
-  <img className="w-56 h-32 mr-6 mt-2" src={logo} alt="logo"/>
-  </div> */}
-  <div className="w-full rounded-lg shadow border border-border md:mt-0 sm:max-w-md xl:p-0 bg-card">
-          <div className="p-6 space-y-4 md:space-y-6 sm:p-8">
-              <h1 className="text-xl text-center font-bold leading-tight tracking-tight text-foreground md:text-2xl">
-                 Admin Login
-              </h1>
-              <form className="space-y-4 md:space-y-6"  onSubmit={handleSubmit(onSubmit)} >
-                  <div>
-                      <label htmlFor="email" className="block mb-2 text-sm font-medium text-foreground">User Name</label>
-                      <input type="text" {...register("userName", { required: true })} id="email" className="bg-background border border-input text-foreground sm:text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5" placeholder="name@company.com" required />
-                  </div>
-                  <div>
-                      <label htmlFor="password" className="block mb-2 text-sm font-medium text-foreground">Password</label>
-                      <input type="password" {...register("password", { required: true })} id="password" placeholder="••••••••" className="bg-background border border-input text-foreground sm:text-sm rounded-lg focus:ring-primary focus:border-primary block w-full p-2.5" required />
-                  </div>
-                  <div className="flex items-center justify-between">
-                      <div className="flex items-start">
-                       
-                         
-                      </div>
-
-                  </div>
-                    
-                    <button type="submit" className="w-full text-white bg-blue-600 hover:bg-primary-700 focus:ring-4 focus:outline-none focus:ring-primary-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-primary-600 dark:hover:bg-primary-700 dark:focus:ring-primary-800" >Sign in</button>
-                    
-            
-               
-              </form>
+        {/* 2. Administrator Heading & Subtitle */}
+        <div className="ph-auth-header">
+          <div className="ph-auth-badge admin">
+            <ShieldCheck size={16} />
+            <span>Administrator Portal</span>
           </div>
-      </div>
-  </div>
-</section>
+          <h1 className="ph-auth-title">Administrator</h1>
+          <p className="ph-auth-subtitle">Full System Access &amp; User Management</p>
+        </div>
+
+        {/* 3. Three Feature Highlights */}
+        <div className="ph-auth-features admin-grid">
+          <div className="ph-auth-feature-pill">
+            <Users size={15} className="ph-auth-pill-icon" />
+            <span>Manage Users</span>
+          </div>
+          <div className="ph-auth-feature-pill">
+            <Settings size={15} className="ph-auth-pill-icon" />
+            <span>System Settings</span>
+          </div>
+          <div className="ph-auth-feature-pill">
+            <BarChart3 size={15} className="ph-auth-pill-icon" />
+            <span>Reports &amp; Analytics</span>
+          </div>
+        </div>
+
+        {/* 4. Enterprise Login Card */}
+        <div className="ph-auth-card">
+          {isValid && (
+            <div className="ph-alert ph-alert-error" style={{ marginBottom: 18, width: '100%' }}>
+              <AlertCircle size={16} style={{ flexShrink: 0 }} />
+              <span>Invalid username or password. Please check your credentials.</span>
+            </div>
+          )}
+
+          <form className="ph-auth-form" onSubmit={handleSubmit(onSubmit)}>
+            <div className="ph-field">
+              <label className="ph-label" htmlFor="admin-username">Username</label>
+              <input
+                id="admin-username"
+                type="text"
+                className="ph-input"
+                placeholder="Enter admin username"
+                {...register("userName", { required: true })}
+                required
+                autoComplete="username"
+              />
+            </div>
+
+            <div className="ph-field">
+              <label className="ph-label" htmlFor="admin-password">Password</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="admin-password"
+                  type={showPwd ? 'text' : 'password'}
+                  className="ph-input"
+                  placeholder="••••••••"
+                  style={{ paddingRight: 42 }}
+                  {...register("password", { required: true })}
+                  required
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPwd(!showPwd)}
+                  aria-label={showPwd ? "Hide password" : "Show password"}
+                  className="ph-auth-eye-btn"
+                >
+                  {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="ph-auth-submit-btn admin"
+              disabled={loading}
+            >
+              {loading ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Signing in…
+                </span>
+              ) : (
+                'Sign In as Administrator'
+              )}
+            </button>
+          </form>
+
+          <div className="ph-auth-links">
+            <Link to="/" className="ph-auth-back-link">
+              &larr; Back to Login Options
+            </Link>
+          </div>
+        </div>
+
+        {/* 5. Small Secondary Copyright */}
+        <footer className="ph-auth-footer">
+          &copy; 2025 PharmaCare ERP. Secure healthcare data platform.
+        </footer>
+      </main>
     </div>
   );
-}
+};
 
-// const mapStateToProps = ({loading})=>{
-//   return {
-//       loading
-//   }
-// }
-
-const mapDispatchToProps = (dispatch)=>{
+const mapDispatchToProps = (dispatch) => {
   return {
-    storeUserInfo:value=>dispatch(storeUserInfo(value))
-  }
-}
-export default connect(null,mapDispatchToProps)(AdminLogin)
+    storeUserInfo: value => dispatch(storeUserInfo(value))
+  };
+};
 
+export default connect(null, mapDispatchToProps)(AdminLogin);

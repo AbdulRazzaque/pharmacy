@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent } from '../../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
-import { Search, FileText, Calendar, User, Package, Hash, Eye, Edit, X, CheckCircle2, AlertCircle, MapPin } from 'lucide-react';
+import { Search, FileText, Calendar, User, Package, Hash, Eye, Edit, X, CheckCircle2, AlertCircle, MapPin, Plus } from 'lucide-react';
 import moment from 'moment';
 import { getToken } from '../../utils/auth';
+import { PageHeader } from '../../components/ui/page-header';
+import { StatCard } from '../../components/ui/stat-card';
+import { Badge } from '../../components/ui/badge';
+import { EmptyState } from '../../components/ui/empty-state';
 
 const StockOutDocsList = () => {
   const navigate = useNavigate();
@@ -132,97 +136,109 @@ const StockOutDocsList = () => {
   const totalQty = docs.reduce((sum, d) => sum + (d.totalQuantity || 0), 0);
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2 text-gray-800 dark:text-gray-100">
-            <FileText className="h-8 w-8 text-blue-600" />
-            Stock Out Documents
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">Manage and edit your Stock Out entries by document number.</p>
-        </div>
-      </div>
+    <div className="ph-page space-y-6">
+      <PageHeader
+        title="Stock Out Documents"
+        subtitle="Manage, verify, and audit outbound medication dispatches by document number"
+        badge={
+          <Badge variant="teal" className="ml-2">
+            {totalDocs} Documents
+          </Badge>
+        }
+      >
+        <Button
+          size="sm"
+          className="bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] text-white shadow-sm"
+          onClick={() => navigate('/dashboard/stockout')}
+        >
+          <Plus className="mr-1.5 h-4 w-4" />
+          New Stock Out Dispatch
+        </Button>
+      </PageHeader>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">{totalDocs}</div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mt-1">Total Documents</p>
-              </div>
-              <Hash className="h-10 w-10 text-blue-500 opacity-20" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">{totalProducts}</div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mt-1">Total Items Logged</p>
-              </div>
-              <Package className="h-10 w-10 text-emerald-500 opacity-20" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-2xl font-bold text-gray-800 dark:text-gray-100">{totalQty}</div>
-                <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold mt-1">Total Quantity Out</p>
-              </div>
-              <Eye className="h-10 w-10 text-orange-500 opacity-20" />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard
+          icon={Hash}
+          label="Total Dispatches"
+          value={totalDocs}
+          subtitle="All recorded outbound documents"
+          color="primary"
+        />
+        <StatCard
+          icon={Package}
+          label="Total Items Dispatched"
+          value={totalProducts}
+          subtitle="Unique medicine lines sent"
+          color="secondary"
+        />
+        <StatCard
+          icon={Eye}
+          label="Total Units Out"
+          value={totalQty.toLocaleString()}
+          subtitle="Cumulative inventory dispersed"
+          color="warning"
+        />
       </div>
 
-      {/* Filters */}
-      <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200">
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Input
-              icon={Search}
-              placeholder="Search by Document Number, Location, or Creator..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              clearable
-              onClear={() => setSearchQuery('')}
-            />
+      {/* Documents Table Card */}
+      <Card className="ph-card shadow-sm border border-[var(--ph-border)] overflow-hidden">
+        <CardHeader className="border-b border-[var(--ph-border)] py-3 px-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-sm font-semibold text-[var(--ph-text)]">
+                Outbound Document Registry
+              </CardTitle>
+              <Badge variant="outline" className="text-xs font-mono">
+                {filteredDocs.length} records
+              </Badge>
+            </div>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[var(--ph-muted)] pointer-events-none" />
+              <Input
+                placeholder="Search Doc #, Location, Creator..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-8 text-xs bg-[var(--ph-surface)] border-[var(--ph-border)]"
+                clearable
+                onClear={() => setSearchQuery('')}
+              />
+            </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Documents Table */}
-      <Card className="bg-white dark:bg-gray-800 shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-4 border-b border-gray-200 bg-gray-50 dark:bg-gray-900/50">
-          <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100">Document Registry</h2>
-        </div>
+        </CardHeader>
         <CardContent className="p-0">
           {loading ? (
-            <div className="text-center py-12 text-gray-500">Loading documents list...</div>
+            <div className="py-12 flex flex-col items-center justify-center gap-2 text-[var(--ph-muted)] text-sm">
+              <div className="w-6 h-6 border-2 border-[var(--ph-teal)] border-t-transparent rounded-full animate-spin" />
+              <span>Loading documents list...</span>
+            </div>
           ) : error ? (
-            <div className="text-center py-12 text-red-500">{error}</div>
+            <div className="py-12 text-center text-xs font-medium text-rose-600 bg-rose-50/50">
+              {error}
+            </div>
           ) : filteredDocs.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No documents found.</div>
+            <EmptyState
+              icon={FileText}
+              title="No Stock Out Documents Found"
+              description={searchQuery ? 'No documents matched your search filter.' : 'Begin dispensing to create outbound records.'}
+              actionLabel="New Stock Out"
+              onAction={() => navigate('/dashboard/stockout')}
+            />
           ) : (
             <div className="overflow-x-auto">
-              <Table>
+              <Table className="ph-table text-xs">
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="font-semibold">Document Number</TableHead>
-                    <TableHead className="font-semibold">Location</TableHead>
-                    <TableHead className="font-semibold">Date Created</TableHead>
-                    <TableHead className="font-semibold">Created By</TableHead>
-                    <TableHead className="font-semibold text-right">Distinct Products</TableHead>
-                    <TableHead className="font-semibold text-right">Total Quantity</TableHead>
-                    <TableHead className="font-semibold text-right">Subtotal</TableHead>
-                    <TableHead className="font-semibold text-right text-orange-700">Total Discount</TableHead>
-                    <TableHead className="font-semibold text-right text-red-700">Grand Total</TableHead>
-                    <TableHead className="text-center font-semibold">Actions</TableHead>
+                  <TableRow className="bg-[var(--ph-surface-2)] border-b border-[var(--ph-border)]">
+                    <TableHead className="font-semibold text-[var(--ph-text)]">Doc #</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)]">Destination Facility</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)]">Date Created</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)]">Created By</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)] text-right">Items</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)] text-right">Qty</TableHead>
+                    <TableHead className="font-semibold text-[var(--ph-text)] text-right">Subtotal</TableHead>
+                    <TableHead className="font-semibold text-amber-700 dark:text-amber-400 text-right">Discount</TableHead>
+                    <TableHead className="font-semibold text-rose-700 dark:text-rose-400 text-right">Grand Total</TableHead>
+                    <TableHead className="text-center font-semibold text-[var(--ph-text)]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -233,60 +249,62 @@ const StockOutDocsList = () => {
                     const grandTotal = doc.grandTotal !== undefined ? doc.grandTotal : (subTotal - totalDisc);
 
                     return (
-                      <TableRow key={doc.docNo} className="hover:bg-slate-50/50">
-                        <TableCell className="font-medium text-blue-600">
-                          Doc #{doc.docNo}
+                      <TableRow key={doc.docNo} className="hover:bg-[var(--ph-surface-2)]/60 transition-colors">
+                        <TableCell className="font-medium text-[var(--ph-navy)] dark:text-[var(--ph-teal)]">
+                          <span className="font-mono font-semibold">#{doc.docNo}</span>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5 text-gray-700 font-medium">
-                            <MapPin className="h-4 w-4 text-blue-500" />
-                            {locName}
+                          <div className="flex items-center gap-1.5 font-medium text-[var(--ph-text)]">
+                            <MapPin className="h-3.5 w-3.5 text-[var(--ph-teal)] shrink-0" />
+                            <span className="truncate max-w-[180px]">{locName}</span>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5 text-gray-700 font-medium">
-                            <Calendar className="h-4 w-4 text-blue-500" />
+                          <div className="flex items-center gap-1.5 text-[var(--ph-text-secondary)] font-mono text-[11px]">
+                            <Calendar className="h-3.5 w-3.5 text-[var(--ph-muted)] shrink-0" />
                             {moment(doc.date || doc.createdAt).format('DD/MM/YYYY hh:mm A')}
                           </div>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-1.5 text-gray-600">
-                            <User className="h-4 w-4 text-gray-400" />
-                            {doc.createdBy?.userName || 'System'}
+                          <div className="flex items-center gap-1.5 text-[var(--ph-text-secondary)]">
+                            <User className="h-3.5 w-3.5 text-[var(--ph-muted)] shrink-0" />
+                            <span>{doc.createdBy?.userName || 'System'}</span>
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-medium">
+                        <TableCell className="text-right font-medium text-[var(--ph-text)]">
                           {doc.totalProducts}
                         </TableCell>
-                        <TableCell className="text-right font-semibold text-gray-900">
+                        <TableCell className="text-right font-semibold text-[var(--ph-text)]">
                           {doc.totalQuantity}
                         </TableCell>
-                        <TableCell className="text-right font-medium text-gray-700">QR{subTotal.toFixed(2)}</TableCell>
-                        <TableCell className="text-right font-medium text-orange-600">
+                        <TableCell className="text-right font-mono font-medium text-[var(--ph-text)]">
+                          QR{subTotal.toFixed(2)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono font-medium text-amber-600 dark:text-amber-400">
                           {totalDisc > 0 ? `QR${totalDisc.toFixed(2)}` : 'QR0.00'}
                         </TableCell>
-                        <TableCell className="text-right font-black text-red-600">
+                        <TableCell className="text-right font-mono font-bold text-rose-600 dark:text-rose-400">
                           QR{grandTotal.toFixed(2)}
                         </TableCell>
                         <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-2">
+                          <div className="flex items-center justify-center gap-1.5">
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => handleOpenEditDateModal(doc)}
-                              className="hover:bg-amber-50 hover:text-amber-700 border-amber-200 transition-colors"
+                              className="h-7 px-2 text-xs hover:bg-amber-50 hover:text-amber-700 border-[var(--ph-border)] transition-colors"
                               title="Edit Date Created"
                             >
-                              <Edit className="mr-1 h-3.5 w-3.5" />
+                              <Edit className="mr-1 h-3 w-3" />
                               Edit Date
                             </Button>
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => navigate(`/dashboard/stockout-docs/${doc.docNo}`)}
-                              className="hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                              className="h-7 px-2 text-xs hover:bg-[var(--ph-navy)] hover:text-white border-[var(--ph-border)] transition-colors"
                             >
-                              <Eye className="mr-1 h-3.5 w-3.5" />
+                              <Eye className="mr-1 h-3 w-3" />
                               Excel Edit
                             </Button>
                           </div>
@@ -304,10 +322,10 @@ const StockOutDocsList = () => {
       {/* Edit Date Modal */}
       {editingDoc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-md w-full overflow-hidden animate-in fade-in duration-200">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex items-center justify-between text-white">
-              <div className="flex items-center gap-2 font-semibold text-lg">
-                <Calendar className="w-5 h-5" />
+          <div className="bg-[var(--ph-surface)] rounded-xl shadow-2xl border border-[var(--ph-border)] max-w-md w-full overflow-hidden animate-in fade-in duration-200">
+            <div className="bg-[var(--ph-navy)] px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2 font-semibold text-sm">
+                <Calendar className="w-4 h-4 text-[var(--ph-teal)]" />
                 Edit Date Created (Doc #{editingDoc.docNo})
               </div>
               <button
@@ -315,13 +333,13 @@ const StockOutDocsList = () => {
                 onClick={handleCloseEditDateModal}
                 className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
             <form onSubmit={handleSaveDocDate} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
+                <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
                   Date Created / Document Date *
                 </label>
                 <input
@@ -331,10 +349,10 @@ const StockOutDocsList = () => {
                     setEditDateValue(e.target.value);
                     if (editDateError) setEditDateError('');
                   }}
-                  className={`w-full h-10 px-3 text-sm border rounded-lg shadow-sm bg-white dark:bg-gray-900 focus:ring-2 focus:ring-blue-500 focus:outline-none ${editDateError ? 'border-red-500 bg-red-50' : 'border-gray-300 dark:border-gray-600'}`}
+                  className={`w-full h-10 px-3 text-xs border rounded-lg shadow-sm bg-[var(--ph-surface)] text-[var(--ph-text)] focus:ring-2 focus:ring-[var(--ph-navy)] focus:outline-none ${editDateError ? 'border-rose-500 bg-rose-50/50' : 'border-[var(--ph-border)]'}`}
                 />
                 {editDateError && (
-                  <div className="mt-1.5 text-xs text-red-600 flex items-center gap-1">
+                  <div className="mt-1.5 text-xs text-rose-600 flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5" />
                     {editDateError}
                   </div>
@@ -342,28 +360,29 @@ const StockOutDocsList = () => {
               </div>
 
               {/* Current Date Preview */}
-              <div className="bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg border text-xs space-y-1">
-                <div className="text-gray-500">Document Date Preview:</div>
-                <div className="font-bold text-blue-600 dark:text-blue-400">
+              <div className="bg-[var(--ph-surface-2)] p-3 rounded-lg border border-[var(--ph-border)] text-xs space-y-1">
+                <div className="text-[var(--ph-text-secondary)]">Document Date Preview:</div>
+                <div className="font-bold text-[var(--ph-navy)] dark:text-[var(--ph-teal)] font-mono">
                   {editDateValue && !isNaN(new Date(editDateValue).getTime())
                     ? moment(editDateValue).format('DD/MM/YYYY hh:mm A')
                     : 'Invalid Date'}
                 </div>
               </div>
 
-              <div className="pt-3 flex justify-end gap-3 border-t border-gray-200 dark:border-gray-700">
+              <div className="pt-3 flex justify-end gap-3 border-t border-[var(--ph-border)]">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleCloseEditDateModal}
                   disabled={savingDate}
+                  className="text-xs"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
                   disabled={savingDate}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                  className="bg-[var(--ph-navy)] hover:bg-[var(--ph-navy-hover)] text-white text-xs font-semibold"
                 >
                   {savingDate ? 'Updating...' : 'Update Date'}
                 </Button>
@@ -375,9 +394,9 @@ const StockOutDocsList = () => {
 
       {/* Toast Notification */}
       {toast.show && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-xl animate-in slide-in-from-bottom duration-200">
-          <CheckCircle2 className="w-5 h-5" />
-          <span className="text-sm font-semibold">{toast.message}</span>
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-xl animate-in slide-in-from-bottom duration-200 text-xs font-semibold">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>{toast.message}</span>
         </div>
       )}
     </div>
