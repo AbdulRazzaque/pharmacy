@@ -698,7 +698,11 @@ const Reports = () => {
       const headerStyle = {
         font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: "000000" } },
         alignment: { horizontal: 'center', vertical: 'center' },
-        fill: { fgColor: { rgb: "FFFFFF" } },
+        fill: {
+          patternType: 'solid',
+          fgColor: { rgb: 'F2F2F2' }, // Very Light Gray
+          bgColor: { rgb: 'FFFFFF' }
+        },
         border: {
           top: { style: 'thin', color: { rgb: '000000' } },
           bottom: { style: 'thin', color: { rgb: '000000' } },
@@ -733,12 +737,14 @@ const Reports = () => {
       };
 
       const totalStyle = {
+        fill: { fgColor: { rgb: "FFFF00" } }, // Yellow
         font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: "000000" } },
         alignment: { horizontal: 'right', vertical: 'center' },
         border: borderStyle
       };
 
       const footerLabelStyle = {
+
         font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: "000000" } },
         alignment: { horizontal: 'left', vertical: 'center' }
       };
@@ -784,12 +790,34 @@ const Reports = () => {
 
       // Total Row
       setCell(`A${curRow}`, '', 's', totalStyle);
-      setCell(`B${curRow}`, 'Total', 's', { ...totalStyle, alignment: { horizontal: 'left', vertical: 'center' } });
-      setCell(`C${curRow}`, '', 's', totalStyle);
-      setCell(`D${curRow}`, '', 's', totalStyle);
 
-      const grandTotal = locItems.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
-      setCell(`E${curRow}`, grandTotal, 'n', totalStyle);
+      setCell(`B${curRow}`, '', 's', totalStyle);
+
+      setCell(`C${curRow}`, '', 's', totalStyle);
+
+      // Total label inside Unit Price column (D)
+      setCell(`D${curRow}`, 'Total', 's', {
+        ...totalStyle,
+        alignment: {
+          horizontal: 'right',
+          vertical: 'center'
+        }
+      });
+
+      // Grand Total inside Total Price column (E)
+      const grandTotal = locItems.reduce(
+        (s, r) => s + (r.totalAmount ?? 0),
+        0
+      );
+
+      setCell(`E${curRow}`, grandTotal, 'n', {
+        ...totalStyle,
+        alignment: {
+          horizontal: 'right',
+          vertical: 'center'
+        }
+      });
+
       ws[`E${curRow}`].z = '#,##0.00';
 
       curRow++; // Leave a blank row after Total
@@ -1320,7 +1348,7 @@ const Reports = () => {
             const locName = sample.locationName || 'Monthly Report';
             const trainerName = sample.trainerName || '';
             const doctorName = sample.doctorName || '';
-            const personInfo = (doctorName || trainerName || '').toUpperCase();
+            const personInfo = (trainerName || '').toUpperCase();
 
             const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `(MR. ${personInfo}) ` : ''}from 1 ${monthName} ${monthlyYear} to ${lastDayInMonth} ${monthName} ${monthlyYear}`;
 
@@ -1361,14 +1389,14 @@ const Reports = () => {
                   </tbody>
                 </table>
                 <div className="print-report-footer">
-                  <div className="print-note-line">Note: {uniqueRemarks}</div>
+                  <div className="print-note-line">Note: We removed Collecting needle and Tubes</div>
                   <div className="print-signatures-grid">
                     <div className="print-sig-col">
                       <div className="print-sig-label">Trainer Name: {trainerName}</div>
                       <div className="print-sig-line">Signature :</div>
                     </div>
                     <div className="print-sig-col">
-                      <div className="print-sig-label">Veterinarian name: {doctorName}</div>
+                      <div className="print-sig-label">Veterinarian name: </div>
                       <div className="print-sig-line">Signature :</div>
                     </div>
                   </div>
