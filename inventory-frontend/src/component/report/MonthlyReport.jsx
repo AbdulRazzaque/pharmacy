@@ -41,9 +41,9 @@ const MonthlyReport = ({
   trainerOptions = [],
   doctor = '',
   setDoctor,
-  month,
+  month = moment().month() + 1,
   setMonth,
-  year,
+  year = moment().year(),
   setYear,
   yearOptions = [],
   loading,
@@ -127,8 +127,10 @@ const MonthlyReport = ({
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
               >
-                <option value="">Select year</option>
-                {yearOptions.map((y) => (
+                {(yearOptions && yearOptions.length > 0
+                  ? yearOptions
+                  : Array.from({ length: 11 }, (_, i) => moment().year() - 5 + i)
+                ).map((y) => (
                   <option key={y} value={y}>
                     {y}
                   </option>
@@ -212,11 +214,7 @@ const MonthlyReport = ({
                     />
                     <span>
                       <strong className="text-slate-800">{loc.name}</strong>
-                      {loc.doctorName && (
-                        <span className="text-slate-500 text-xs ml-2">
-                          (Dr: {loc.doctorName})
-                        </span>
-                      )}
+
                       {loc.trainerName && (
                         <span className="text-blue-600 text-xs ml-2 font-medium">
                           (Trainer: {loc.trainerName})

@@ -998,11 +998,18 @@
 }
 
 /* Print */
-.monthly-report-print-area {
+.monthly-report-print-area,
+.stockout-report-print-area {
   display: none;
 }
 
 @media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
   @page {
     size: A4 portrait;
     margin: 30mm 25mm 20mm 25mm !important;
@@ -1017,6 +1024,7 @@
   .dashboard-main,
   .reports-page,
   .monthly-report-print-area,
+  .stockout-report-print-area,
   .print-location-page {
     background: #ffffff !important;
     color: #000000 !important;
@@ -1038,13 +1046,14 @@
   /* Hide standard screen wrappers & widgets */
   .sidebar,
   .dashboard-header,
-  .reports-page > .container,
-  .reports-page > .reports-content,
+  .reports-page>.container,
+  .reports-page>.reports-content,
   .no-print {
     display: none !important;
   }
 
-  .monthly-report-print-area {
+  .monthly-report-print-area,
+  .stockout-report-print-area {
     display: block !important;
     position: relative !important;
     width: 100% !important;
@@ -1077,8 +1086,9 @@
   /* Title Style */
   .print-report-title {
     background-color: #FFFF00 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
     font-weight: bold;
     text-align: center;
     border: 1px solid #000000 !important;
@@ -1109,9 +1119,17 @@
     box-sizing: border-box;
   }
 
-  .print-report-table th {
+  .print-report-table thead,
+  .print-report-table thead tr,
+  .print-report-table thead th,
+  .print-report-table th,
+  .print-table-head,
+  .print-table-head th {
     font-weight: bold;
-    background-color: #FFFFFF !important;
+    background-color: #F2F2F2 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
     text-align: center;
   }
 
@@ -1137,7 +1155,12 @@
   }
 
   /* Total Row */
-  .print-total-row {
+  .print-total-row,
+  .print-total-row td {
+    background-color: #FFFF00 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
     font-weight: bold;
   }
 

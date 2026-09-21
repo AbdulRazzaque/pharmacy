@@ -79,8 +79,8 @@ const Reports = () => {
   const [monthlyLocationIds, setMonthlyLocationIds] = useState([]);
   const [monthlyTrainer, setMonthlyTrainer] = useState('');
   const [monthlyDoctor, setMonthlyDoctor] = useState('');
-  const [monthlyMonth, setMonthlyMonth] = useState('');
-  const [monthlyYear, setMonthlyYear] = useState('');
+  const [monthlyMonth, setMonthlyMonth] = useState(moment().month() + 1);
+  const [monthlyYear, setMonthlyYear] = useState(moment().year());
   const [monthlyHasFetched, setMonthlyHasFetched] = useState(false);
   const [monthlySearch, setMonthlySearch] = useState('');
   const [monthlyPage, setMonthlyPage] = useState(1);
@@ -182,8 +182,8 @@ const Reports = () => {
     setMonthlyLocationIds([]);
     setMonthlyTrainer('');
     setMonthlyDoctor('');
-    setMonthlyMonth('');
-    setMonthlyYear('');
+    setMonthlyMonth(moment().month() + 1);
+    setMonthlyYear(moment().year());
     setMonthlyData([]);
     setMonthlyHasFetched(false);
     setMonthlySearch('');
@@ -543,7 +543,8 @@ const Reports = () => {
 
   const exportStockOutExcel = () => {
     if (stockOutData.length === 0) { showAlert('No data to export', 'error'); return; }
-    const rows = stockOutData.map((row, i) => {
+    const exportData = [...stockOutData].reverse();
+    const rows = exportData.map((row, i) => {
       const dataRow = {
         'No': i + 1, 'Date': row.date ? moment(row.date).format('DD/MM/YYYY') : '', 'Doc No': row.docNo ?? '',
         'Product': row.productId?.name || '', 'Location': row.location?.name || '', 'Doctor': row.location?.doctorName || '',
@@ -564,10 +565,11 @@ const Reports = () => {
 
   const exportStockOutPdf = () => {
     if (stockOutData.length === 0) { showAlert('No data to export', 'error'); return; }
+    const exportData = [...stockOutData].reverse();
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(14);
     doc.text('Stock-Out Report', 14, 15);
-    const tableData = stockOutData.map((row, i) => {
+    const tableData = exportData.map((row, i) => {
       const dataRow = [
         i + 1, row.date ? moment(row.date).format('DD/MM/YYYY') : '', row.docNo ?? '', row.productId?.name || '',
         row.location?.name || '', row.location?.doctorName || '', row.quantity ?? 0,
@@ -679,7 +681,7 @@ const Reports = () => {
       const ws = {};
 
       // Title Text
-      const personInfo = (doctorName || trainerName || '').toUpperCase();
+      const personInfo = (trainerName || '').toUpperCase();
       const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `(MR. ${personInfo}) ` : ''}${dateRangeStr}`;
 
       // Styles
@@ -770,7 +772,8 @@ const Reports = () => {
 
       // Data Rows
       let curRow = 3;
-      locItems.forEach((item) => {
+      const exportLocItems = [...locItems].reverse();
+      exportLocItems.forEach((item) => {
         const formattedDate = item.date ? moment(item.date).format('DD-MM-YYYY') : '';
         const descText = item.productName || '';
         const qty = item.quantity ?? 0;
@@ -825,14 +828,14 @@ const Reports = () => {
 
       // Footer - Notes
       const uniqueNotes = Array.from(new Set(locItems.map(item => item.remarks).filter(Boolean))).join(', ');
-      setCell(`A${curRow}`, `Note: ${uniqueNotes || ''}`, 's', footerLabelStyle);
+      setCell(`A${curRow}`, `Note: ${`We removed Collecting needle and Tubes.` || ''}`, 's', footerLabelStyle);
 
       curRow++; // Leave blank row before signature labels
       curRow++;
 
       // Footer - Labels
       setCell(`A${curRow}`, `Trainer Name: ${trainerName}`, 's', footerLabelStyle);
-      setCell(`D${curRow}`, `Veterinarian name: ${doctorName}`, 's', footerLabelStyle);
+      setCell(`D${curRow}`, `Veterinarian name: `, 's', footerLabelStyle);
 
       curRow++; // Gap for signature
       curRow++;
@@ -892,7 +895,8 @@ const Reports = () => {
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(14);
     doc.text(`Monthly Report — ${monthlyMonth}/${monthlyYear}`, 14, 15);
-    const tableData = monthlyData.map((row) => [
+    const exportData = [...monthlyData].reverse();
+    const tableData = exportData.map((row) => [
       row.date ? moment(row.date).format('DD/MM/YYYY') : '',
       row.docNo ? `#${row.docNo}` : '-',
       row.locationName || row.location?.name || '-',
@@ -1361,7 +1365,7 @@ const Reports = () => {
                 <div className="print-report-title">{titleText}</div>
                 <table className="print-report-table">
                   <thead>
-                    <tr>
+                    <tr className='print-table-head'>
                       <th style={{ width: '15%' }}>Date</th>
                       <th style={{ width: '45%' }}>Description of Items</th>
                       <th style={{ width: '10%' }}>Qty</th>
@@ -1370,7 +1374,7 @@ const Reports = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {locItems.map((item, idx) => (
+                    {[...locItems].reverse().map((item, idx) => (
                       <tr key={item._id || idx}>
                         <td className="col-center">{item.date ? moment(item.date).format('DD-MM-YYYY') : ''}</td>
                         <td className="col-left">{item.productName || ''}</td>
@@ -1381,9 +1385,9 @@ const Reports = () => {
                     ))}
                     <tr className="print-total-row">
                       <td className="col-center"></td>
-                      <td className="col-left">Total</td>
+                      <td className="col-left"></td>
                       <td className="col-center"></td>
-                      <td className="col-right"></td>
+                      <td className="col-right">Total</td>
                       <td className="col-right">{grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     </tr>
                   </tbody>
@@ -1404,6 +1408,57 @@ const Reports = () => {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Stock-Out (Issued Products) Report Custom Print Area */}
+      {activeTab === TAB_STOCK_OUT && stockOutData.length > 0 && (
+        <div className="stockout-report-print-area">
+          <div className="print-location-page">
+            <div className="print-report-title">Issued Products Report (Stock-Out)</div>
+            <table className="print-report-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '5%' }}>#</th>
+                  <th style={{ width: '12%' }}>Date</th>
+                  <th style={{ width: '12%' }}>Doc No</th>
+                  <th style={{ width: '26%' }}>Product Name</th>
+                  <th style={{ width: '15%' }}>Location</th>
+                  <th style={{ width: '15%' }}>Doctor</th>
+                  <th style={{ width: '7%' }}>Qty</th>
+                  {isAdmin && <th style={{ width: '8%' }}>Total</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {[...stockOutData].reverse().map((row, i) => {
+                  const total = (row.quantity ?? 0) * (row.sellingPrice ?? 0);
+                  return (
+                    <tr key={row._id || i}>
+                      <td className="col-center">{i + 1}</td>
+                      <td className="col-center">{row.date ? moment(row.date).format('DD/MM/YYYY') : (row.createdAt ? moment(row.createdAt).format('DD/MM/YYYY') : '-')}</td>
+                      <td className="col-center">{row.docNo ?? '-'}</td>
+                      <td className="col-left">{row.productId?.name || '-'}</td>
+                      <td className="col-left">{row.location?.name || '-'}</td>
+                      <td className="col-left">{row.location?.doctorName || '-'}</td>
+                      <td className="col-center">{(row.quantity ?? 0).toLocaleString()}</td>
+                      {isAdmin && <td className="col-right">{total.toFixed(2)}</td>}
+                    </tr>
+                  );
+                })}
+                {isAdmin && (
+                  <tr className="print-total-row">
+                    <td colSpan="6" className="col-right">Total:</td>
+                    <td className="col-center">
+                      {stockOutData.reduce((s, r) => s + (r.quantity ?? 0), 0).toLocaleString()}
+                    </td>
+                    <td className="col-right">
+                      {stockOutData.reduce((s, r) => s + ((r.quantity ?? 0) * (r.sellingPrice ?? 0)), 0).toFixed(2)}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>
