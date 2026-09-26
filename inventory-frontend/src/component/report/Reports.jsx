@@ -1351,7 +1351,6 @@ const Reports = () => {
             const sample = locItems[0];
             const locName = sample.locationName || 'Monthly Report';
             const trainerName = sample.trainerName || '';
-            const doctorName = sample.doctorName || '';
             const personInfo = (trainerName || '').toUpperCase();
 
             const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `(MR. ${personInfo}) ` : ''}from 1 ${monthName} ${monthlyYear} to ${lastDayInMonth} ${monthName} ${monthlyYear}`;

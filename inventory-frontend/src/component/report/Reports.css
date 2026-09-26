@@ -1095,10 +1095,17 @@
     padding: 10px 8px !important;
     margin-top: 0 !important;
     margin-bottom: 20px !important;
-    font-size: 12pt;
+    font-size: 8pt;
     text-transform: uppercase;
     box-sizing: border-box;
     width: 100% !important;
+    /* Keep title in one line */
+    white-space: nowrap !important;
+    overflow: hidden;
+    text-overflow: clip;
+
+    /* Automatically fit long text */
+    /* font-size: clamp(7pt, 1.5vw, 50pt); */
   }
 
   /* Table Style */

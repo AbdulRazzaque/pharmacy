@@ -132,7 +132,7 @@ const Stockout = () => {
     if (savedDraft) {
       try {
         const draft = JSON.parse(savedDraft);
-        if (draft.date) setDate(draft.date);
+        // if (draft.date) setDate(draft.date);
         if (draft.docLocationId) setDocLocationId(draft.docLocationId);
         if (draft.docTrainerName) setDocTrainerName(draft.docTrainerName);
         if (draft.stockOutItems) setStockOutItems(draft.stockOutItems);
@@ -684,9 +684,8 @@ const Stockout = () => {
               id="docLocationId"
               value={docLocationId}
               onChange={(e) => setDocLocationId(e.target.value)}
-              className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] focus:outline-none transition-colors ${
-                formErrors.locationId && !docLocationId ? 'border-rose-500' : 'border-[var(--ph-border)]'
-              }`}
+              className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] focus:outline-none transition-colors ${formErrors.locationId && !docLocationId ? 'border-rose-500' : 'border-[var(--ph-border)]'
+                }`}
             >
               <option value="">Select Target Location</option>
               {locations.map((location) => (
@@ -807,9 +806,8 @@ const Stockout = () => {
                   }}
                   placeholder="Search medication by name, brand, batch..."
                   autoComplete="off"
-                  className={`w-full h-10 pl-9.5 pr-8 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] transition-colors ${
-                    formErrors.stockId ? 'border-rose-500' : 'border-[var(--ph-border)]'
-                  }`}
+                  className={`w-full h-10 pl-9.5 pr-8 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] transition-colors ${formErrors.stockId ? 'border-rose-500' : 'border-[var(--ph-border)]'
+                    }`}
                 />
                 {selectedStock && (
                   <button
@@ -837,11 +835,10 @@ const Stockout = () => {
                             key={s._id || s.originalStockId || idx}
                             data-stockout-sug-idx={idx}
                             onClick={() => handleSelectStock(s)}
-                            className={`px-3.5 py-2.5 cursor-pointer flex items-center justify-between gap-3 border-l-4 transition-colors ${
-                              active
+                            className={`px-3.5 py-2.5 cursor-pointer flex items-center justify-between gap-3 border-l-4 transition-colors ${active
                                 ? 'bg-[var(--ph-navy)]/10 dark:bg-[var(--ph-navy)]/25 border-[var(--ph-navy)]'
                                 : 'border-transparent hover:bg-[var(--ph-surface-2)]'
-                            }`}
+                              }`}
                           >
                             <div className="min-w-0 flex-1">
                               <div className="font-semibold text-xs sm:text-sm text-[var(--ph-text)] whitespace-normal leading-snug">
@@ -888,9 +885,8 @@ const Stockout = () => {
                 placeholder="0"
                 min="1"
                 max={selectedStock?.quantity || 999999}
-                className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] font-semibold ${
-                  formErrors.quantity ? 'border-rose-500' : 'border-[var(--ph-border)]'
-                }`}
+                className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] font-semibold ${formErrors.quantity ? 'border-rose-500' : 'border-[var(--ph-border)]'
+                  }`}
               />
             </div>
 
@@ -936,13 +932,13 @@ const Stockout = () => {
                 <span className="text-xs sm:text-sm font-bold text-emerald-600 dark:text-emerald-400">
                   {selectedStock && formData.quantity
                     ? (() => {
-                        const qty = parseFloat(formData.quantity) || 0;
-                        const price = parseFloat(formData.sellingPrice) || selectedStock.sellingPrice || 0;
-                        const discPct = parseFloat(formData.discountPercentage) || 0;
-                        const itemTotal = qty * price;
-                        const discAmt = (itemTotal * discPct) / 100;
-                        return (itemTotal - discAmt).toFixed(2);
-                      })()
+                      const qty = parseFloat(formData.quantity) || 0;
+                      const price = parseFloat(formData.sellingPrice) || selectedStock.sellingPrice || 0;
+                      const discPct = parseFloat(formData.discountPercentage) || 0;
+                      const itemTotal = qty * price;
+                      const discAmt = (itemTotal * discPct) / 100;
+                      return (itemTotal - discAmt).toFixed(2);
+                    })()
                     : '0.00'}
                 </span>
               </div>
@@ -1049,337 +1045,337 @@ const Stockout = () => {
                 </tr>
               </thead>
               <tbody>
-                  {stockOutItems.map((item, index) => {
-                    const itemTotal = item.itemTotal !== undefined ? item.itemTotal : (item.quantity * (item.sellingPrice || 0));
-                    const discPct = item.discountPercentage || 0;
-                    const discAmt = item.discountAmount !== undefined ? item.discountAmount : ((itemTotal * discPct) / 100);
-                    const netTotal = item.netTotal !== undefined ? item.netTotal : (itemTotal - discAmt);
+                {stockOutItems.map((item, index) => {
+                  const itemTotal = item.itemTotal !== undefined ? item.itemTotal : (item.quantity * (item.sellingPrice || 0));
+                  const discPct = item.discountPercentage || 0;
+                  const discAmt = item.discountAmount !== undefined ? item.discountAmount : ((itemTotal * discPct) / 100);
+                  const netTotal = item.netTotal !== undefined ? item.netTotal : (itemTotal - discAmt);
 
-                    return (
-                      <tr key={item.id} className="border-b hover:bg-gray-50">
-                        <td className="px-3 py-3 font-medium text-gray-600">{index + 1}</td>
-                        <td className="px-3 py-3 font-medium text-gray-900">{item.productName}</td>
-                        <td className="px-3 py-3 text-gray-700">{item.companyName || '-'}</td>
-                        <td className="px-3 py-3 text-gray-700">{item.unit || '-'}</td>
-                        <td className="px-3 py-3">{item.location}</td>
-                        <td className="px-3 py-3">{item.doctorName || '-'}</td>
-                        <td className="px-3 py-3">{item.trainerName || '-'}</td>
-                        <td className="px-3 py-3 text-right font-semibold text-gray-900">{item.quantity}</td>
-                        <td className="px-3 py-3 text-right">QR{(item.sellingPrice ?? 0).toFixed(2)}</td>
-                        <td className="px-3 py-3 text-right text-gray-700 font-medium">QR{itemTotal.toFixed(2)}</td>
-                        <td className="px-3 py-3 text-right text-orange-700 font-medium">{discPct > 0 ? `${discPct}%` : '0%'}</td>
-                        <td className="px-3 py-3 text-right text-orange-700 font-medium">QR{discAmt.toFixed(2)}</td>
-                        <td className="px-3 py-3 text-right font-bold text-red-600">
-                          QR{netTotal.toFixed(2)}
-                        </td>
-                        <td className="px-3 py-3">
-                          {item.expiry ? moment(item.expiry).format('DD/MM/YYYY') : '-'}
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => handleOpenEditModal(item)}
-                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                              title="Edit item"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setStockOutItems(stockOutItems.filter(i => i.id !== item.id));
-                                showAlert('Item removed', 'success');
-                              }}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Remove item"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot className="bg-gray-50 font-semibold border-t-2 border-gray-300">
-                  <tr>
-                    <td colSpan="9" className="px-4 py-2.5 text-right text-gray-700">Total:</td>
-                    <td colSpan="6" className="px-4 py-2.5 text-right text-gray-900 font-bold">QR{getSubTotal().toFixed(2)}</td>
-                  </tr>
-                  {getTotalDiscount() > 0 && (
-                    <tr>
-                      <td colSpan="9" className="px-4 py-2 text-right text-orange-700">Total Discount:</td>
-                      <td colSpan="6" className="px-4 py-2 text-right text-orange-700 font-bold">-QR{getTotalDiscount().toFixed(2)}</td>
+                  return (
+                    <tr key={item.id} className="border-b hover:bg-gray-50">
+                      <td className="px-3 py-3 font-medium text-gray-600">{index + 1}</td>
+                      <td className="px-3 py-3 font-medium text-gray-900">{item.productName}</td>
+                      <td className="px-3 py-3 text-gray-700">{item.companyName || '-'}</td>
+                      <td className="px-3 py-3 text-gray-700">{item.unit || '-'}</td>
+                      <td className="px-3 py-3">{item.location}</td>
+                      <td className="px-3 py-3">{item.doctorName || '-'}</td>
+                      <td className="px-3 py-3">{item.trainerName || '-'}</td>
+                      <td className="px-3 py-3 text-right font-semibold text-gray-900">{item.quantity}</td>
+                      <td className="px-3 py-3 text-right">QR{(item.sellingPrice ?? 0).toFixed(2)}</td>
+                      <td className="px-3 py-3 text-right text-gray-700 font-medium">QR{itemTotal.toFixed(2)}</td>
+                      <td className="px-3 py-3 text-right text-orange-700 font-medium">{discPct > 0 ? `${discPct}%` : '0%'}</td>
+                      <td className="px-3 py-3 text-right text-orange-700 font-medium">QR{discAmt.toFixed(2)}</td>
+                      <td className="px-3 py-3 text-right font-bold text-red-600">
+                        QR{netTotal.toFixed(2)}
+                      </td>
+                      <td className="px-3 py-3">
+                        {item.expiry ? moment(item.expiry).format('DD/MM/YYYY') : '-'}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditModal(item)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Edit item"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStockOutItems(stockOutItems.filter(i => i.id !== item.id));
+                              showAlert('Item removed', 'success');
+                            }}
+                            className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Remove item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
-                  )}
-                  <tr className="bg-red-50 text-red-800 text-base">
-                    <td colSpan="9" className="px-4 py-3 text-right font-bold">Grand Total:</td>
-                    <td colSpan="6" className="px-4 py-3 text-right font-black text-red-700">QR{getGrandTotal().toFixed(2)}</td>
+                  );
+                })}
+              </tbody>
+              <tfoot className="bg-gray-50 font-semibold border-t-2 border-gray-300">
+                <tr>
+                  <td colSpan="9" className="px-4 py-2.5 text-right text-gray-700">Total:</td>
+                  <td colSpan="6" className="px-4 py-2.5 text-right text-gray-900 font-bold">QR{getSubTotal().toFixed(2)}</td>
+                </tr>
+                {getTotalDiscount() > 0 && (
+                  <tr>
+                    <td colSpan="9" className="px-4 py-2 text-right text-orange-700">Total Discount:</td>
+                    <td colSpan="6" className="px-4 py-2 text-right text-orange-700 font-bold">-QR{getTotalDiscount().toFixed(2)}</td>
                   </tr>
-                </tfoot>
-              </table>
-            </div>
+                )}
+                <tr className="bg-red-50 text-red-800 text-base">
+                  <td colSpan="9" className="px-4 py-3 text-right font-bold">Grand Total:</td>
+                  <td colSpan="6" className="px-4 py-3 text-right font-black text-red-700">QR{getGrandTotal().toFixed(2)}</td>
+                </tr>
+              </tfoot>
+            </table>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Edit Item Modal */}
-        {editingItem && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in duration-200">
-              <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-4 flex items-center justify-between text-white">
-                <div className="flex items-center gap-2 font-semibold text-lg">
-                  <Edit className="w-5 h-5" />
-                  Edit Stock Out Item
+      {/* Edit Item Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in duration-200">
+            <div className="bg-gradient-to-r from-red-600 to-red-700 px-6 py-4 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2 font-semibold text-lg">
+                <Edit className="w-5 h-5" />
+                Edit Stock Out Item
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseEditModal}
+                className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateItem} className="p-6 space-y-4">
+              {/* Product Autocomplete */}
+              <div className="relative" ref={editStockAutocompleteRef}>
+                <label className="block text-xs font-semibold text-gray-800 mb-1">
+                  Product *
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={editStockQuery}
+                    onChange={(e) => {
+                      setEditStockQuery(e.target.value);
+                      setEditStockDropdownOpen(true);
+                    }}
+                    onFocus={() => setEditStockDropdownOpen(true)}
+                    placeholder="Search product..."
+                    className={`w-full h-10 pl-9 pr-8 text-sm border-2 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ${editFormErrors.stockId ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                  />
+                  {editStockQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditStockQuery('');
+                        setEditFormData(prev => ({ ...prev, stockId: '' }));
+                        setEditSelectedStock(null);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleCloseEditModal}
-                  className="text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                {editFormErrors.stockId && <p className="text-xs text-red-500 mt-1">{editFormErrors.stockId}</p>}
+
+                {editStockDropdownOpen && editStockSuggestions.length > 0 && (
+                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {editStockSuggestions.map((s) => (
+                      <button
+                        key={s._id}
+                        type="button"
+                        onClick={() => handleSelectEditStock(s)}
+                        className="w-full px-3 py-2 text-left text-sm hover:bg-red-50 flex flex-col gap-0.5 border-b border-gray-50 last:border-0"
+                      >
+                        <span className="font-medium text-gray-900">{s.productName} | {s.companyName || 'N/A'}</span>
+                        <span className="text-xs text-gray-500">
+                          {s.expiry ? `Exp: ${moment(s.expiry).format('DD/MM/YY')}` : 'No expiry'} • Available: {s.quantity}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <form onSubmit={handleUpdateItem} className="p-6 space-y-4">
-                {/* Product Autocomplete */}
-                <div className="relative" ref={editStockAutocompleteRef}>
-                  <label className="block text-xs font-semibold text-gray-800 mb-1">
-                    Product *
-                  </label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={editStockQuery}
-                      onChange={(e) => {
-                        setEditStockQuery(e.target.value);
-                        setEditStockDropdownOpen(true);
-                      }}
-                      onFocus={() => setEditStockDropdownOpen(true)}
-                      placeholder="Search product..."
-                      className={`w-full h-10 pl-9 pr-8 text-sm border-2 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-red-500 ${editFormErrors.stockId ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                    />
-                    {editStockQuery && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditStockQuery('');
-                          setEditFormData(prev => ({ ...prev, stockId: '' }));
-                          setEditSelectedStock(null);
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                  {editFormErrors.stockId && <p className="text-xs text-red-500 mt-1">{editFormErrors.stockId}</p>}
-
-                  {editStockDropdownOpen && editStockSuggestions.length > 0 && (
-                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {editStockSuggestions.map((s) => (
-                        <button
-                          key={s._id}
-                          type="button"
-                          onClick={() => handleSelectEditStock(s)}
-                          className="w-full px-3 py-2 text-left text-sm hover:bg-red-50 flex flex-col gap-0.5 border-b border-gray-50 last:border-0"
-                        >
-                          <span className="font-medium text-gray-900">{s.productName} | {s.companyName || 'N/A'}</span>
-                          <span className="text-xs text-gray-500">
-                            {s.expiry ? `Exp: ${moment(s.expiry).format('DD/MM/YY')}` : 'No expiry'} • Available: {s.quantity}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Sell Price */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-800 mb-1">
-                      Sell. Price
-                    </label>
-                    <input
-                      type="number"
-                      value={editFormData.sellingPrice}
-                      readOnly
-                      tabIndex={-1}
-                      placeholder="0.00"
-                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-default font-medium text-right"
-                    />
-                  </div>
-
-                  {/* Available Stock */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-800 mb-1">
-                      Available Stock
-                    </label>
-                    <div className="h-10 px-3 flex items-center justify-center bg-blue-50 border-2 border-blue-300 rounded-lg">
-                      <span className="text-sm font-bold text-blue-700">
-                        {editSelectedStock?.quantity ?? 'N/A'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Issue Qty */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-800 mb-1">
-                      Issue Qty *
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={editFormData.quantity}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, quantity: e.target.value }))}
-                      className={`w-full h-10 px-3 text-sm border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 font-semibold ${editFormErrors.quantity ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                    />
-                    {editFormErrors.quantity && <p className="text-xs text-red-500 mt-1">{editFormErrors.quantity}</p>}
-                  </div>
-
-                  {/* Discount (%) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-800 mb-1">
-                      Discount (%)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="any"
-                        value={editFormData.discountPercentage}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 100)) {
-                            setEditFormData(prev => ({ ...prev, discountPercentage: val }));
-                          }
-                        }}
-                        placeholder="0%"
-                        className="w-full h-10 pl-3 pr-7 text-sm border-2 border-orange-300 rounded-lg bg-orange-50/50 focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold text-orange-900"
-                      />
-                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-orange-500 pointer-events-none">%</span>
-                    </div>
-                    {editFormErrors.discountPercentage && <p className="text-xs text-red-500 mt-1">{editFormErrors.discountPercentage}</p>}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Location */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-800 mb-1">
-                      Location
-                    </label>
-                    <select
-                      value={editFormData.locationId}
-                      onChange={(e) => {
-                        const locId = e.target.value;
-                        const selectedLoc = locations.find(l => l._id === locId);
-                        setEditFormData(prev => ({
-                          ...prev,
-                          locationId: locId,
-                          doctorName: selectedLoc?.doctorName || prev.doctorName,
-                          trainerName: selectedLoc?.trainerName || prev.trainerName
-                        }));
-                      }}
-                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
-                    >
-                      <option value="">Select Location</option>
-                      {locations.map((loc) => (
-                        <option key={loc._id} value={loc._id}>{loc.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Expiry Date (Auto) */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-800 mb-1">
-                      Expiry (Auto)
-                    </label>
-                    <input
-                      type="text"
-                      value={editSelectedStock?.expiry ? moment(editSelectedStock.expiry).format('DD/MM/YYYY') : (editingItem.expiry ? moment(editingItem.expiry).format('DD/MM/YYYY') : 'N/A')}
-                      readOnly
-                      tabIndex={-1}
-                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-default"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Doctor Name */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-800 mb-1">
-                      Doctor Name
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.doctorName}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, doctorName: e.target.value }))}
-                      placeholder="Doctor Name"
-                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
-                    />
-                  </div>
-
-                  {/* Trainer Name */}
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-800 mb-1">
-                      Trainer Name
-                    </label>
-                    <input
-                      type="text"
-                      value={editFormData.trainerName}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, trainerName: e.target.value }))}
-                      placeholder="Trainer Name"
-                      className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                {/* Recalculated Net Total Preview */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Sell Price */}
                 <div>
                   <label className="block text-xs font-semibold text-gray-800 mb-1">
-                    Net Total Preview
+                    Sell. Price
                   </label>
-                  <div className="h-10 px-3 flex items-center justify-between bg-red-50 border-2 border-red-300 rounded-lg">
-                    <span className="text-xs text-red-600 font-semibold">QR</span>
-                    <span className="text-sm font-bold text-red-700">
-                      {(() => {
-                        const q = parseFloat(editFormData.quantity) || 0;
-                        const p = parseFloat(editFormData.sellingPrice) || editSelectedStock?.sellingPrice || editingItem.sellingPrice || 0;
-                        const d = parseFloat(editFormData.discountPercentage) || 0;
-                        const tot = q * p;
-                        const disc = (tot * d) / 100;
-                        return (tot - disc).toFixed(2);
-                      })()}
+                  <input
+                    type="number"
+                    value={editFormData.sellingPrice}
+                    readOnly
+                    tabIndex={-1}
+                    placeholder="0.00"
+                    className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-default font-medium text-right"
+                  />
+                </div>
+
+                {/* Available Stock */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">
+                    Available Stock
+                  </label>
+                  <div className="h-10 px-3 flex items-center justify-center bg-blue-50 border-2 border-blue-300 rounded-lg">
+                    <span className="text-sm font-bold text-blue-700">
+                      {editSelectedStock?.quantity ?? 'N/A'}
                     </span>
                   </div>
                 </div>
+              </div>
 
-                {/* Modal Action Buttons */}
-                <div className="pt-4 flex justify-end gap-3 border-t">
-                  <button
-                    type="button"
-                    onClick={handleCloseEditModal}
-                    className="px-5 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-6 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-md hover:shadow-lg transition-all"
-                  >
-                    Update
-                  </button>
+              <div className="grid grid-cols-2 gap-4">
+                {/* Issue Qty */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">
+                    Issue Qty *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editFormData.quantity}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, quantity: e.target.value }))}
+                    className={`w-full h-10 px-3 text-sm border-2 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 font-semibold ${editFormErrors.quantity ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                  />
+                  {editFormErrors.quantity && <p className="text-xs text-red-500 mt-1">{editFormErrors.quantity}</p>}
                 </div>
-              </form>
-            </div>
+
+                {/* Discount (%) */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">
+                    Discount (%)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="any"
+                      value={editFormData.discountPercentage}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === '' || (parseFloat(val) >= 0 && parseFloat(val) <= 100)) {
+                          setEditFormData(prev => ({ ...prev, discountPercentage: val }));
+                        }
+                      }}
+                      placeholder="0%"
+                      className="w-full h-10 pl-3 pr-7 text-sm border-2 border-orange-300 rounded-lg bg-orange-50/50 focus:ring-2 focus:ring-orange-500 focus:outline-none font-semibold text-orange-900"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-orange-500 pointer-events-none">%</span>
+                  </div>
+                  {editFormErrors.discountPercentage && <p className="text-xs text-red-500 mt-1">{editFormErrors.discountPercentage}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Location */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">
+                    Location
+                  </label>
+                  <select
+                    value={editFormData.locationId}
+                    onChange={(e) => {
+                      const locId = e.target.value;
+                      const selectedLoc = locations.find(l => l._id === locId);
+                      setEditFormData(prev => ({
+                        ...prev,
+                        locationId: locId,
+                        doctorName: selectedLoc?.doctorName || prev.doctorName,
+                        trainerName: selectedLoc?.trainerName || prev.trainerName
+                      }));
+                    }}
+                    className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                  >
+                    <option value="">Select Location</option>
+                    {locations.map((loc) => (
+                      <option key={loc._id} value={loc._id}>{loc.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Expiry Date (Auto) */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">
+                    Expiry (Auto)
+                  </label>
+                  <input
+                    type="text"
+                    value={editSelectedStock?.expiry ? moment(editSelectedStock.expiry).format('DD/MM/YYYY') : (editingItem.expiry ? moment(editingItem.expiry).format('DD/MM/YYYY') : 'N/A')}
+                    readOnly
+                    tabIndex={-1}
+                    className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-default"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Doctor Name */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">
+                    Doctor Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.doctorName}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, doctorName: e.target.value }))}
+                    placeholder="Doctor Name"
+                    className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                  />
+                </div>
+
+                {/* Trainer Name */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-800 mb-1">
+                    Trainer Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.trainerName}
+                    onChange={(e) => setEditFormData(prev => ({ ...prev, trainerName: e.target.value }))}
+                    placeholder="Trainer Name"
+                    className="w-full h-10 px-3 text-sm border-2 border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Recalculated Net Total Preview */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-800 mb-1">
+                  Net Total Preview
+                </label>
+                <div className="h-10 px-3 flex items-center justify-between bg-red-50 border-2 border-red-300 rounded-lg">
+                  <span className="text-xs text-red-600 font-semibold">QR</span>
+                  <span className="text-sm font-bold text-red-700">
+                    {(() => {
+                      const q = parseFloat(editFormData.quantity) || 0;
+                      const p = parseFloat(editFormData.sellingPrice) || editSelectedStock?.sellingPrice || editingItem.sellingPrice || 0;
+                      const d = parseFloat(editFormData.discountPercentage) || 0;
+                      const tot = q * p;
+                      const disc = (tot * d) / 100;
+                      return (tot - disc).toFixed(2);
+                    })()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div className="pt-4 flex justify-end gap-3 border-t">
+                <button
+                  type="button"
+                  onClick={handleCloseEditModal}
+                  className="px-5 py-2 text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-md hover:shadow-lg transition-all"
+                >
+                  Update
+                </button>
+              </div>
+            </form>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+    </div>
   );
 };
 
