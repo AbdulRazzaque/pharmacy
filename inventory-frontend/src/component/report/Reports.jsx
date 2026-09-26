@@ -419,10 +419,115 @@ const Reports = () => {
     return { count: monthlyData.length, totalQty, totalVal };
   }, [monthlyData]);
 
+  const orderedReportData = useMemo(() => {
+    if (!summaryHasFetched) return [];
+
+    const getEntityId = (item) => {
+      if (!item) return '';
+      if (typeof item === 'string') return item;
+      if (item._id) return String(item._id);
+      if (item.locationId) {
+        if (typeof item.locationId === 'object' && item.locationId._id) {
+          return String(item.locationId._id);
+        }
+        return String(item.locationId);
+      }
+      return String(item);
+    };
+
+    // Index rows by unique location ID from summaryData
+    const rowMap = new Map();
+    (summaryData || []).forEach((row) => {
+      const id = getEntityId(row);
+      if (id) {
+        rowMap.set(id, row);
+      }
+    });
+
+    const selectedSet = new Set(
+      (summaryFilters.locationId && summaryFilters.locationId.length > 0)
+        ? summaryFilters.locationId.map((id) => getEntityId(id))
+        : locations.map((loc) => getEntityId(loc))
+    );
+
+    const ordered = [];
+    const seen = new Set();
+
+    // The Location Filter order (from `locations`) is the SINGLE SOURCE OF TRUTH
+    (locations || []).forEach((loc) => {
+      const strId = getEntityId(loc);
+      if (strId && selectedSet.has(strId) && !seen.has(strId)) {
+        seen.add(strId);
+        const row = rowMap.get(strId);
+        const hasRecords = Boolean(row && ((row.totalQuantity ?? 0) > 0 || (row.grandTotal ?? 0) > 0));
+
+        ordered.push({
+          locationId: strId,
+          locationName: loc.name || row?.locationName || 'Unknown Location',
+          doctorName: loc.doctorName || row?.doctorName || '',
+          trainerName: loc.trainerName || row?.trainerName || '',
+          hasRecords,
+          totalQuantity: hasRecords ? (row.totalQuantity ?? 0) : '-',
+          grandTotal: hasRecords ? (row.grandTotal ?? 0) : '-',
+          numericQuantity: hasRecords ? (row.totalQuantity ?? 0) : 0,
+          numericGrandTotal: hasRecords ? (row.grandTotal ?? 0) : 0,
+        });
+      }
+    });
+
+    // In case there are any selected IDs or summaryData rows not in locations
+    selectedSet.forEach((strId) => {
+      if (strId && !seen.has(strId)) {
+        seen.add(strId);
+        const row = rowMap.get(strId);
+        const hasRecords = Boolean(row && ((row.totalQuantity ?? 0) > 0 || (row.grandTotal ?? 0) > 0));
+        ordered.push({
+          locationId: strId,
+          locationName: row?.locationName || 'Unknown Location',
+          doctorName: row?.doctorName || '',
+          trainerName: row?.trainerName || '',
+          hasRecords,
+          totalQuantity: hasRecords ? (row.totalQuantity ?? 0) : '-',
+          grandTotal: hasRecords ? (row.grandTotal ?? 0) : '-',
+          numericQuantity: hasRecords ? (row.totalQuantity ?? 0) : 0,
+          numericGrandTotal: hasRecords ? (row.grandTotal ?? 0) : 0,
+        });
+      }
+    });
+
+    return ordered;
+  }, [summaryData, summaryFilters.locationId, locations, summaryHasFetched]);
+
   const summaryGrandTotal = useMemo(
-    () => summaryData.reduce((s, r) => s + (r.grandTotal ?? 0), 0),
-    [summaryData]
+    () => orderedReportData.reduce((s, r) => s + r.numericGrandTotal, 0),
+    [orderedReportData]
   );
+
+  const summaryTotalQty = useMemo(
+    () => orderedReportData.reduce((s, r) => s + r.numericQuantity, 0),
+    [orderedReportData]
+  );
+
+  const submittedByName = useMemo(() => {
+    const userInfo = getUserInfo();
+    const dynamicName = userInfo?.fullName || userInfo?.name || (userInfo?.userName && !['admin', 'user'].includes(userInfo.userName.toLowerCase()) ? userInfo.userName : null);
+    return dynamicName || 'Dr. Ashraf Elsharbasy';
+  }, []);
+
+  const summaryReportTitle = useMemo(() => {
+    const selectedLocationNames = (summaryFilters.locationId && summaryFilters.locationId.length === locations.length)
+      ? 'All'
+      : orderedReportData
+        .map(loc => loc.locationName)
+        .filter(Boolean)
+        .join(', ');
+    const startDateStr = summaryFilters.startDate ? moment(summaryFilters.startDate).format('D MMMM YYYY') : '';
+    const endDateStr = summaryFilters.endDate ? moment(summaryFilters.endDate).format('D MMMM YYYY') : '';
+    if (startDateStr && endDateStr) {
+      return `Final Report of medicine consumed at ${selectedLocationNames} from ${startDateStr} to ${endDateStr}`;
+    }
+    return `Final Report of medicine consumed at ${selectedLocationNames || 'Selected Locations'}`;
+  }, [summaryFilters.locationId, summaryFilters.startDate, summaryFilters.endDate, locations.length, orderedReportData]);
 
   const filterRows = (rows, search, getSearchStr) => {
     if (!search.trim()) return rows;
@@ -920,7 +1025,7 @@ const Reports = () => {
   };
 
   const exportSummaryExcel = () => {
-    if (summaryData.length === 0) { showAlert('No data to export', 'error'); return; }
+    if (orderedReportData.length === 0) { showAlert('No data to export', 'error'); return; }
 
     const XLSXStyle = require('xlsx-js-style');
 
@@ -930,9 +1035,8 @@ const Reports = () => {
     // Column widths
     const cols = [
       { wch: 10 }, // Sr. No.
-      { wch: 45 }, // Name of Farm
-      { wch: 20 }, // Amount
-      { wch: 25 }  // Remark
+      { wch: 55 }, // Location/Trainer
+      { wch: 24 }  // Grand Total
     ];
 
     // Data structures for rows
@@ -958,6 +1062,17 @@ const Reports = () => {
 
     const dataStyle = {
       font: { name: 'Calibri', sz: 11, color: { rgb: "800000" } }, // Maroon
+      alignment: { horizontal: 'center', vertical: 'center' },
+      border: {
+        top: { style: 'thin', color: { rgb: '000000' } },
+        bottom: { style: 'thin', color: { rgb: '000000' } },
+        left: { style: 'thin', color: { rgb: '000000' } },
+        right: { style: 'thin', color: { rgb: '000000' } }
+      }
+    };
+
+    const centerStyle = {
+      font: { name: 'Calibri', sz: 11, color: { rgb: "000000" } }, // Black
       alignment: { horizontal: 'center', vertical: 'center' },
       border: {
         top: { style: 'thin', color: { rgb: '000000' } },
@@ -1007,66 +1122,90 @@ const Reports = () => {
     };
 
     // A1: Center Title
-    const selectedLocationNames = (summaryFilters.locationId && summaryFilters.locationId.length === locations.length)
-      ? 'All'
-      : locations
-        .filter(loc => summaryFilters.locationId.includes(loc._id))
-        .map(loc => loc.name)
-        .join(', ');
-    const startDateStr = summaryFilters.startDate ? moment(summaryFilters.startDate).format('D MMMM YYYY') : '';
-    const endDateStr = summaryFilters.endDate ? moment(summaryFilters.endDate).format('D MMMM YYYY') : '';
-    const titleText = `Final Report of medicine consumed at ${selectedLocationNames} from ${startDateStr} to ${endDateStr}`;
-
-    setCell('A1', titleText, 's', titleStyle);
+    setCell('A1', summaryReportTitle, 's', titleStyle);
     ws['B1'] = { s: titleStyle };
     ws['C1'] = { s: titleStyle };
-    ws['D1'] = { s: titleStyle };
 
-    // A2:D2 headers
-    setCell('A2', 'Sr .No', 's', headerStyle);
+    // A2:C2 headers
+    setCell('A2', 'Sr. No', 's', headerStyle);
     setCell('B2', 'Name of Farm', 's', headerStyle);
-    setCell('C2', 'Amount', 's', headerStyle);
-    setCell('D2', 'Remark', 's', headerStyle);
+    setCell('C2', 'Grand Total', 's', headerStyle);
 
     // Data rows starting at row 3 (0-indexed: row 2)
     let curRow = 2; // index 2 represents Excel row 3
-    summaryData.forEach((row, idx) => {
-      setCell(`A${curRow + 1}`, idx + 1, 'n', srNoStyle);
-      setCell(`B${curRow + 1}`, (row.locationName || '').toUpperCase(), 's', dataStyle);
-      setCell(`C${curRow + 1}`, row.grandTotal ?? 0, 'n', amountStyle);
-      ws[`C${curRow + 1}`].z = 'QR#,##0.00';
-      setCell(`D${curRow + 1}`, '', 's', amountStyle); // Remark
+    orderedReportData.forEach((row, idx) => {
+      const rowNum = curRow + 1;
+      setCell(`A${rowNum}`, idx + 1, 'n', srNoStyle);
+      setCell(`B${rowNum}`, row.locationName || '', 's', dataStyle);
+
+      if (row.hasRecords) {
+        setCell(`C${rowNum}`, row.grandTotal, 'n', amountStyle);
+        ws[`C${rowNum}`].z = '" "#,##0.00';
+      } else {
+        setCell(`C${rowNum}`, '-', 's', centerStyle);
+      }
       curRow++;
     });
 
     // Total Row
-    setCell(`A${curRow + 1}`, 'Total', 's', totalRowStyle);
-    ws[`B${curRow + 1}`] = { s: totalRowStyle };
+    const totalRowIdx = curRow; // 0-indexed
+    const totalRowNum = totalRowIdx + 1; // 1-indexed
+    setCell(`A${totalRowNum}`, 'Total', 's', totalRowStyle);
+    ws[`B${totalRowNum}`] = { s: totalRowStyle };
 
-    const grandTotal = summaryData.reduce((s, r) => s + (r.grandTotal ?? 0), 0);
-    setCell(`C${curRow + 1}`, grandTotal, 'n', totalRowStyle);
-    ws[`C${curRow + 1}`].z = 'QR#,##0.00';
-    setCell(`D${curRow + 1}`, '', 's', totalRowStyle);
+    setCell(`C${totalRowNum}`, summaryGrandTotal, 'n', totalRowStyle);
+    ws[`C${totalRowNum}`].z = '"QR "#,##0.00';
 
     // Merges
     ws['!merges'] = [
-      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, // A1:D1
-      { s: { r: curRow, c: 0 }, e: { r: curRow, c: 1 } } // A{Total}:B{Total}
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 2 } }, // A1:C1
+      { s: { r: totalRowIdx, c: 0 }, e: { r: totalRowIdx, c: 1 } } // A{Total}:B{Total}
     ];
 
-    // Columns width definition
-    ws['!cols'] = cols;
+    // Spacing before Submitted By (leave 2 blank rows for spacing)
+    const submittedByLabelRowNum = totalRowNum + 3;
+    const submittedByNameRowNum = submittedByLabelRowNum + 1;
+
+    const submittedByLabelRowIdx = submittedByLabelRowNum - 1;
+    const submittedByNameRowIdx = submittedByNameRowNum - 1;
+
+    const submittedByLabelStyle = {
+      font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: "000000" } },
+      alignment: { horizontal: 'right', vertical: 'center' }
+    };
+    const submittedByNameStyle = {
+      font: { name: 'Calibri', sz: 11, color: { rgb: "000000" } },
+      alignment: { horizontal: 'right', vertical: 'center' }
+    };
+
+    setCell(`B${submittedByLabelRowNum}`, 'Submitted By:', 's', submittedByLabelStyle);
+    ws[`C${submittedByLabelRowNum}`] = { s: submittedByLabelStyle };
+
+    setCell(`B${submittedByNameRowNum}`, submittedByName, 's', submittedByNameStyle);
+    ws[`C${submittedByNameRowNum}`] = { s: submittedByNameStyle };
+
+    ws['!merges'].push(
+      { s: { r: submittedByLabelRowIdx, c: 1 }, e: { r: submittedByLabelRowIdx, c: 2 } },
+      { s: { r: submittedByNameRowIdx, c: 1 }, e: { r: submittedByNameRowIdx, c: 2 } }
+    );
 
     // Rows height definition
     ws['!rows'] = [
       { hpt: 30 }, // Row 1: Title
       { hpt: 25 }, // Row 2: Header
-      ...Array.from({ length: summaryData.length }).map(() => ({ hpt: 20 })), // Data rows
-      { hpt: 22 }  // Total row
+      ...Array.from({ length: orderedReportData.length }).map(() => ({ hpt: 20 })), // Data rows
+      { hpt: 22 }, // Total row
+      { hpt: 15 }, // Blank spacing row 1
+      { hpt: 15 }, // Blank spacing row 2
+      { hpt: 20 }, // Submitted By label row
+      { hpt: 20 }  // Submitted By name row
     ];
 
+    // Columns width definition
+    ws['!cols'] = cols;
+
     // Range limits
-    ws['!ref'] = `A1:D${curRow + 1}`;
+    ws['!ref'] = `A1:C${submittedByNameRowNum}`;
 
     XLSXStyle.utils.book_append_sheet(wb, ws, 'Summary Report');
 
@@ -1088,14 +1227,31 @@ const Reports = () => {
   };
 
   const exportSummaryPdf = () => {
-    if (summaryData.length === 0) { showAlert('No data to export', 'error'); return; }
+    if (orderedReportData.length === 0) { showAlert('No data to export', 'error'); return; }
     const doc = new jsPDF();
     doc.setFontSize(14);
     doc.text('Summary Report', 14, 15);
     doc.setFontSize(10);
     doc.text(`${summaryFilters.startDate} to ${summaryFilters.endDate}`, 14, 22);
-    const tableData = summaryData.map((row) => [row.locationName || '', (row.grandTotal ?? 0).toFixed(2)]);
-    doc.autoTable({ head: [['Location', 'Grand Total']], body: tableData, startY: 28 });
+
+    const tableData = orderedReportData.map((row, idx) => [
+      idx + 1,
+      row.locationName || '',
+      row.hasRecords ? `QR ${(row.grandTotal ?? 0).toFixed(2)}` : '-'
+    ]);
+
+    tableData.push([
+      '',
+      'Total',
+      ` ${summaryGrandTotal.toFixed(2)}`
+    ]);
+
+    doc.autoTable({
+      head: [['Sr. No', 'Name of Farm', 'Grand Total']],
+      body: tableData,
+      startY: 28,
+      styles: { fontSize: 9 }
+    });
     doc.save(`summary-report-${moment().format('YYYY-MM-DD')}.pdf`);
     showAlert('PDF exported', 'success');
   };
@@ -1124,6 +1280,10 @@ const Reports = () => {
   }, [monthlyYear, monthlyMonth]);
 
   const handlePrint = () => {
+    if (activeTab === TAB_SUMMARY && orderedReportData.length === 0) {
+      showAlert('No data to print', 'error');
+      return;
+    }
     window.print();
   };
 
@@ -1287,7 +1447,7 @@ const Reports = () => {
             setFilters={setSummaryFilters}
             loading={loading}
             hasFetched={summaryHasFetched}
-            data={summaryData}
+            data={orderedReportData}
             grandTotalSum={summaryGrandTotal}
             onFetch={applySummaryReport}
             onClearFilters={clearSummaryFilters}
@@ -1457,6 +1617,54 @@ const Reports = () => {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Summary Report Custom Print Area */}
+      {activeTab === TAB_SUMMARY && orderedReportData.length > 0 && (
+        <div className="summary-report-print-area">
+          <div className="print-summary-card">
+            <div className="print-summary-title">
+              {summaryReportTitle}
+            </div>
+
+            <table className="print-summary-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '12%' }}>Sr. No</th>
+                  <th style={{ width: '58%' }}>Name of Farm</th>
+                  <th style={{ width: '30%' }}>Grand Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {orderedReportData.map((row, idx) => (
+                  <tr key={row.locationId || idx}>
+                    <td className="col-sr">{idx + 1}</td>
+                    <td className="col-location">
+                      <span className="location-name">{row.locationName}</span>
+                      {/* {row.doctorName && <span className="doctor-name"> ({row.doctorName})</span>} */}
+                    </td>
+                    <td className="col-total">
+                      {row.hasRecords ? ` ${(row.grandTotal ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="print-summary-total-row">
+                  <td colSpan={2} className="col-total-label">Total</td>
+                  <td className="col-total col-total-amount">
+                    QR {summaryGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <div className="print-summary-footer">
+              <div className="print-summary-submitted-by">
+                <div className="submitted-by-label">Submitted By:</div>
+                <div className="submitted-by-name">{submittedByName}</div>
+              </div>
+            </div>
           </div>
         </div>
       )}

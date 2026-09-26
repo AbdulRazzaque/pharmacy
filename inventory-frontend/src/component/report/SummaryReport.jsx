@@ -38,13 +38,19 @@ const SummaryReport = ({
   const toggleLocation = (locId) => {
     setFilters((f) => {
       const ids = f.locationId || [];
-      const has = ids.includes(locId);
-      return { ...f, locationId: has ? ids.filter((id) => id !== locId) : [...ids, locId] };
+      const strLocId = String(locId);
+      const has = ids.some((id) => String(id) === strLocId);
+      return {
+        ...f,
+        locationId: has
+          ? ids.filter((id) => String(id) !== strLocId)
+          : [...ids, locId]
+      };
     });
   };
 
   const totalQuantitySum = useMemo(
-    () => data.reduce((s, r) => s + (r.totalQuantity ?? 0), 0),
+    () => data.reduce((s, r) => s + (r.numericQuantity ?? (typeof r.totalQuantity === 'number' ? r.totalQuantity : 0)), 0),
     [data]
   );
 
@@ -129,7 +135,7 @@ const SummaryReport = ({
                   <label key={loc._id} className="reports-product-item">
                     <input
                       type="checkbox"
-                      checked={(filters.locationId || []).includes(loc._id)}
+                      checked={(filters.locationId || []).some((id) => String(id) === String(loc._id))}
                       onChange={() => toggleLocation(loc._id)}
                     />
                     <span>{loc.name} {loc.doctorName ? `- ${loc.doctorName}` : ''}</span>
@@ -203,7 +209,6 @@ const SummaryReport = ({
                   <thead>
                     <tr>
                       <th className="min-w-[280px]">Location</th>
-                      <th className="col-qty text-right min-w-[160px]">Total Quantity</th>
                       <th className="col-total text-right min-w-[160px]">Grand Total</th>
                     </tr>
                   </thead>
@@ -214,15 +219,15 @@ const SummaryReport = ({
                           {row.locationName || '-'}
                           {row.doctorName && <span className="text-xs text-[var(--ph-text-secondary)] ml-2 font-normal">({row.doctorName})</span>}
                         </td>
-                        <td className="col-qty text-right font-mono font-bold min-w-[160px]">{(row.totalQuantity ?? 0).toLocaleString()}</td>
-                        <td className="col-total text-right font-mono font-bold min-w-[160px]">QR {(row.grandTotal ?? 0).toFixed(2)}</td>
+                        <td className="col-total text-right font-mono font-bold min-w-[160px]">
+                          {row.hasRecords ? `QR ${(row.grandTotal ?? 0).toFixed(2)}` : '-'}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="bg-[var(--ph-surface-2)] font-bold">
                       <td className="min-w-[280px] font-bold text-[var(--ph-text)]">Total</td>
-                      <td className="col-qty text-right font-mono font-bold min-w-[160px]">{totalQuantitySum.toLocaleString()}</td>
                       <td className="col-total text-right font-mono font-bold min-w-[160px]">QR {grandTotalSum.toFixed(2)}</td>
                     </tr>
                   </tfoot>

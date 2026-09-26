@@ -999,7 +999,8 @@
 
 /* Print */
 .monthly-report-print-area,
-.stockout-report-print-area {
+.stockout-report-print-area,
+.summary-report-print-area {
   display: none;
 }
 
@@ -1012,7 +1013,7 @@
 
   @page {
     size: A4 portrait;
-    margin: 30mm 25mm 20mm 25mm !important;
+    margin: 15mm 15mm 15mm 15mm !important;
   }
 
   /* Reset layout margins and de-activate flex/grid/scroll heights on all parents for print */
@@ -1025,7 +1026,9 @@
   .reports-page,
   .monthly-report-print-area,
   .stockout-report-print-area,
-  .print-location-page {
+  .summary-report-print-area,
+  .print-location-page,
+  .print-summary-card {
     background: #ffffff !important;
     color: #000000 !important;
     display: block !important;
@@ -1053,7 +1056,8 @@
   }
 
   .monthly-report-print-area,
-  .stockout-report-print-area {
+  .stockout-report-print-area,
+  .summary-report-print-area {
     display: block !important;
     position: relative !important;
     width: 100% !important;
@@ -1207,5 +1211,158 @@
 
   .print-sig-line {
     font-weight: bold;
+  }
+
+  /* Summary Report Print Styles (matching Excel & PDF design) */
+  .print-summary-card {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    box-sizing: border-box !important;
+    page-break-inside: auto !important;
+  }
+
+  .print-summary-title {
+    background-color: #D9E1F2 !important;
+    color: #1F4E79 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    font-weight: bold !important;
+    text-align: center !important;
+    border: 1px solid #1F4E79 !important;
+    padding: 10px 14px !important;
+    margin-top: 0 !important;
+    margin-bottom: 22px !important;
+    font-size: 12pt !important;
+    line-height: 1.4 !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .print-summary-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-bottom: 25px !important;
+    table-layout: fixed !important;
+    box-sizing: border-box !important;
+  }
+
+  .print-summary-table thead {
+    display: table-header-group !important;
+  }
+
+  .print-summary-table tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print-summary-table th {
+    background-color: #D9E1F2 !important;
+    color: #1F4E79 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    border: 1px solid #000000 !important;
+    padding: 8px 10px !important;
+    font-size: 11pt !important;
+    font-weight: bold !important;
+    text-align: center !important;
+    vertical-align: middle !important;
+    box-sizing: border-box !important;
+  }
+
+  .print-summary-table td {
+    border: 1px solid #000000 !important;
+    padding: 8px 10px !important;
+    font-size: 11pt !important;
+    vertical-align: middle !important;
+    box-sizing: border-box !important;
+  }
+
+  .print-summary-table td.col-sr {
+    text-align: center !important;
+    color: #000000 !important;
+  }
+
+  .print-summary-table td.col-location {
+    text-align: center !important;
+    color: #800000 !important;
+    font-weight: 500 !important;
+  }
+
+  .print-summary-table td.col-location .doctor-name {
+    color: #4b5563 !important;
+    font-size: 9.5pt !important;
+    font-weight: normal !important;
+  }
+
+  .print-summary-table td.col-qty {
+    text-align: center !important;
+    color: #000000 !important;
+  }
+
+  .print-summary-table td.col-total {
+    text-align: center !important;
+    color: #000000 !important;
+  }
+
+  /* Total Row (matching Excel light olive green #C2D69B and maroon #800000) */
+  .print-summary-total-row,
+  .print-summary-total-row td {
+    background-color: #C2D69B !important;
+    color: #800000 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    font-weight: bold !important;
+    font-size: 11pt !important;
+    border: 1px solid #000000 !important;
+  }
+
+  .print-summary-total-row td.col-total-label {
+    text-align: center !important;
+    font-weight: bold !important;
+  }
+
+  .print-summary-total-row td.col-total-qty {
+    text-align: center !important;
+    font-weight: bold !important;
+  }
+
+  .print-summary-total-row td.col-total-amount {
+    text-align: center !important;
+    font-weight: bold !important;
+  }
+
+  /* Submitted By Section at the bottom right */
+  .print-summary-footer {
+    margin-top: 35px !important;
+    display: flex !important;
+    justify-content: flex-end !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .print-summary-submitted-by {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    text-align: center !important;
+    min-width: 240px !important;
+  }
+
+  .print-summary-submitted-by .submitted-by-label {
+    font-weight: bold !important;
+    font-size: 11pt !important;
+    color: #000000 !important;
+    margin-bottom: 6px !important;
+  }
+
+  .print-summary-submitted-by .submitted-by-name {
+    font-size: 11pt !important;
+    color: #000000 !important;
   }
 }
