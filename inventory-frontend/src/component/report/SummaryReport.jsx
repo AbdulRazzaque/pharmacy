@@ -191,7 +191,7 @@ const SummaryReport = ({
           <div className="reports-kpi-grid">
             <div className="reports-kpi-card blue">
               <div className="reports-kpi-label">Combined grand total</div>
-              <div className="reports-kpi-value">${grandTotalSum.toFixed(2)}</div>
+              <div className="reports-kpi-value">QR {grandTotalSum.toFixed(2)}</div>
             </div>
             <div className="reports-kpi-card green">
               <div className="reports-kpi-label">Total Quantity Issued</div>
