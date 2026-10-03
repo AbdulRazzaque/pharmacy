@@ -1011,61 +1011,231 @@ const stockOutController = {
     },
 
     async deleteStockOut(req, res) {
-        try {
-            const { id, docNo } = req.body || req.params || {};
-            if (id) {
-                const item = await StockOutItem.findById(id);
-                if (item) {
-                    // Return stock balance
-                    let bal = null;
-                    if (item.expiry) {
-                        bal = await StockBalance.findOne({
-                            productId: item.productId,
-                            expiry: item.expiry
-                        });
-                    }
-                    if (!bal) {
-                        bal = await StockBalance.findOne({ productId: item.productId }).sort({ createdAt: -1 });
-                    }
-                    if (bal) {
-                        bal.quantity = (bal.quantity || 0) + (item.quantity || 0);
-                        await bal.save();
-                    }
+        const AuditLog = require("../models/AuditLogModule");
 
-                    await InventoryTransaction.deleteMany({ referenceId: item._id });
-                    await StockOutItem.findByIdAndDelete(id);
-                    await recalculateRunningBalances(item.productId);
+        // Resolve identifier: support DELETE /documents/:id (MongoDB _id),
+        // POST /deleteStockOut (body.docNo), POST /deleteStockOut/:id (body/params id=docNo)
+        const paramId = req.params?.id;          // could be MongoDB _id or docNo
+        const bodyDocNo = req.body?.docNo;
+        const bodyId = req.body?.id;
+
+        const executeDelete = async (session) => {
+            let header = null;
+
+            // 1. Resolve the StockOutHeader
+            // Try paramId as MongoDB _id first, then as docNo, then fall back to body
+            if (paramId) {
+                if (mongoose.Types.ObjectId.isValid(paramId)) {
+                    header = await StockOutHeader.findById(paramId).session(session);
                 }
-            } else if (docNo) {
-                const header = await StockOutHeader.findOne({ docNo: Number(docNo) });
-                if (header) {
-                    const items = await StockOutItem.find({ stockOutHeaderId: header._id });
-                    for (const item of items) {
-                        let bal = null;
-                        if (item.expiry) {
-                            bal = await StockBalance.findOne({
-                                productId: item.productId,
-                                expiry: item.expiry
-                            });
-                        }
-                        if (!bal) {
-                            bal = await StockBalance.findOne({ productId: item.productId }).sort({ createdAt: -1 });
-                        }
-                        if (bal) {
-                            bal.quantity = (bal.quantity || 0) + (item.quantity || 0);
-                            await bal.save();
-                        }
-
-                        await InventoryTransaction.deleteMany({ referenceId: item._id });
-                        await recalculateRunningBalances(item.productId);
-                    }
-                    await StockOutItem.deleteMany({ stockOutHeaderId: header._id });
-                    await StockOutHeader.findByIdAndDelete(header._id);
+                if (!header && !isNaN(Number(paramId))) {
+                    header = await StockOutHeader.findOne({ docNo: Number(paramId) }).session(session);
+                }
+            }
+            if (!header && bodyDocNo) {
+                header = await StockOutHeader.findOne({ docNo: Number(bodyDocNo) }).session(session);
+            }
+            if (!header && bodyId) {
+                if (mongoose.Types.ObjectId.isValid(bodyId)) {
+                    header = await StockOutHeader.findById(bodyId).session(session);
+                }
+                if (!header && !isNaN(Number(bodyId))) {
+                    header = await StockOutHeader.findOne({ docNo: Number(bodyId) }).session(session);
                 }
             }
 
-            return res.status(200).json({ msg: "success", result: "Deleted" });
+            if (!header) {
+                const err = new Error("Stock Out Document not found");
+                err.statusCode = 404;
+                throw err;
+            }
+
+            const docNo = header.docNo;
+            const headerId = header._id;
+
+            // 2. Fetch all line items
+            const items = await StockOutItem.find({ stockOutHeaderId: headerId }).session(session);
+
+            const touchedProductIds = new Set();
+
+            // 3. For each line item: reverse stock balance + delete transactions
+            for (const item of items) {
+                const productId = item.productId;
+                const returnQty = Number(item.quantity || 0);
+                if (returnQty <= 0) continue;
+
+                // Match the exact same expiry-based lookup used in bulkUpdate isDeleted path
+                let bal = null;
+                if (item.expiry) {
+                    bal = await StockBalance.findOne({
+                        productId: productId,
+                        expiry: item.expiry
+                    }).session(session);
+                }
+                if (!bal) {
+                    bal = await StockBalance.findOne({ productId: productId }).sort({ createdAt: -1 }).session(session);
+                }
+
+                if (bal) {
+                    bal.quantity = (bal.quantity || 0) + returnQty;
+                    await bal.save(session ? { session } : {});
+                } else {
+                    // No batch found - recreate the balance record (same as bulkUpdate)
+                    await StockBalance.create(
+                        [{
+                            productId: productId,
+                            expiry: item.expiry || null,
+                            batchNumber: item.batchNumber || "",
+                            quantity: returnQty,
+                            purchasingPrice: item.purchasingPrice || 0,
+                            sellingPrice: item.sellingPrice || 0
+                        }],
+                        session ? { session } : {}
+                    );
+                }
+
+                // Remove all inventory transactions that reference this line item
+                await InventoryTransaction.deleteMany(
+                    { referenceId: item._id },
+                    session ? { session } : {}
+                );
+
+                touchedProductIds.add(String(productId));
+            }
+
+            // 4. Recalculate running balances for every affected product
+            for (const pId of touchedProductIds) {
+                await recalculateRunningBalances(pId, session);
+            }
+
+            // 5. Delete all StockOutItems for this document
+            await StockOutItem.deleteMany(
+                { stockOutHeaderId: headerId },
+                session ? { session } : {}
+            );
+
+            // 6. Delete any StockOutPdf records linked to this docNo
+            try {
+                const StockOutPdf = require("../models/StockOutPdfModule");
+                await StockOutPdf.deleteMany({ docNo }, session ? { session } : {});
+            } catch (e) {
+                console.error("Error deleting StockOutPdf records:", e.message);
+            }
+
+            // 7. Delete the StockOutHeader
+            await StockOutHeader.findByIdAndDelete(headerId, session ? { session } : {});
+
+            // 8. Write audit log
+            try {
+                const auditItems = items.map(i => ({
+                    productId: i.productId,
+                    quantity: i.quantity,
+                    expiry: i.expiry,
+                    batchNumber: i.batchNumber
+                }));
+                const totalQtyReversed = items.reduce((s, i) => s + (i.quantity || 0), 0);
+                const grandTotal = header.grandTotal || 0;
+                await AuditLog.create({
+                    docNo,
+                    docType: "StockOut",
+                    productId: items[0]?.productId || new mongoose.Types.ObjectId(),
+                    productName: `Document #${docNo} deleted - ${items.length} line(s)`,
+                    previousValue: {
+                        action: "DELETE_STOCK_OUT_DOCUMENT",
+                        location: header.location,
+                        grandTotal,
+                        totalQtyReversed,
+                        items: auditItems,
+                        deletedAt: new Date()
+                    },
+                    newValue: null,
+                    updatedBy: req.user?._id || new mongoose.Types.ObjectId(),
+                    updatedByRole: req.user?.role || "user"
+                });
+            } catch (e) {
+                // Audit log failure must NOT abort the deletion
+                console.error("Audit log write failed (non-fatal):", e.message);
+            }
+
+            return {
+                docNo,
+                itemsDeleted: items.length,
+                stockReversed: Array.from(touchedProductIds)
+            };
+        };
+
+        try {
+            // Attempt with session/transaction, fall back to non-transactional
+            // (identical pattern used by bulkUpdate)
+            const session = await mongoose.startSession();
+            let useTransaction = true;
+            try {
+                session.startTransaction();
+            } catch (e) {
+                useTransaction = false;
+                session.endSession();
+            }
+
+            if (useTransaction) {
+                try {
+                    const result = await executeDelete(session);
+                    await session.commitTransaction();
+                    session.endSession();
+                    return res.status(200).json({
+                        msg: "success",
+                        result: `Stock Out Document #${result.docNo} deleted successfully. Stock quantities have been restored.`
+                    });
+                } catch (txError) {
+                    await session.abortTransaction();
+                    session.endSession();
+
+                    if (txError.statusCode === 404) {
+                        return res.status(404).json({ msg: "error", error: "Stock Out Document not found" });
+                    }
+
+                    const errorMsg = txError.message || '';
+                    const isTxUnsupported = errorMsg.includes('replica set') ||
+                        errorMsg.includes('Transaction numbers') ||
+                        errorMsg.includes('does not support') ||
+                        txError.code === 20 ||
+                        txError.codeName === 'IllegalOperation';
+
+                    if (isTxUnsupported) {
+                        try {
+                            const result = await executeDelete(null);
+                            return res.status(200).json({
+                                msg: "success",
+                                result: `Stock Out Document #${result.docNo} deleted successfully. Stock quantities have been restored.`
+                            });
+                        } catch (fallbackError) {
+                            if (fallbackError.statusCode === 404) {
+                                return res.status(404).json({ msg: "error", error: "Stock Out Document not found" });
+                            }
+                            console.error("deleteStockOut fallback error:", fallbackError);
+                            return res.status(500).json({ msg: "error", error: "Deletion failed. No changes were made." });
+                        }
+                    }
+
+                    console.error("deleteStockOut transaction error:", txError);
+                    return res.status(500).json({ msg: "error", error: "Deletion failed. No changes were made." });
+                }
+            } else {
+                try {
+                    const result = await executeDelete(null);
+                    return res.status(200).json({
+                        msg: "success",
+                        result: `Stock Out Document #${result.docNo} deleted successfully. Stock quantities have been restored.`
+                    });
+                } catch (fallbackError) {
+                    if (fallbackError.statusCode === 404) {
+                        return res.status(404).json({ msg: "error", error: "Stock Out Document not found" });
+                    }
+                    console.error("deleteStockOut error:", fallbackError);
+                    return res.status(500).json({ msg: "error", error: "Deletion failed. No changes were made." });
+                }
+            }
         } catch (err) {
+            console.error("deleteStockOut outer error:", err);
             return res.status(500).json({ msg: "error", error: err.message });
         }
     },
