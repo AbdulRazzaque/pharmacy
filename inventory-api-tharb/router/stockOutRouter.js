@@ -17,6 +17,7 @@ router.put('/items/:itemId',isUserAuth,stockOutController.stockOutUpdateQuantity
 router.patch('/items/:itemId',isUserAuth,stockOutController.stockOutUpdateQuantity)
 router.post('/deleteStockOut/:id',isUserAuth,stockOutController.deleteStockOut)
 router.delete('/documents/:id',isUserAuth,stockOutController.deleteStockOut)
+router.delete('/:id',isUserAuth,stockOutController.deleteStockOut)
 router.post('/getDocumentStockOut',isUserAuth,stockOutController.getDocumentStockOut)
 router.post('/getSummaryStockOut',isUserAuth,stockOutController.getSummaryStockOut)
 router.post('/getStockAllStockOut',isUserAuth,stockOutController.getStockAllStockOut)

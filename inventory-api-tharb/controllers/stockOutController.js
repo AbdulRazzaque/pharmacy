@@ -61,14 +61,14 @@ const stockOutController = {
     },
 
     async createStockOut(req, res) {
-        try {
+        const executeCreate = async (session) => {
             const body = req.body || {};
             let parsedDocNo = Number(body.docNo);
             if (!parsedDocNo) {
-                parsedDocNo = await getNextStockOutDocNo();
+                parsedDocNo = await getNextStockOutDocNo(session);
             }
 
-            let existingHeader = await StockOutHeader.findOne({ docNo: parsedDocNo });
+            let existingHeader = await StockOutHeader.findOne({ docNo: parsedDocNo }).session(session);
 
             let items = [];
             if (Array.isArray(body.items) && body.items.length > 0) {
@@ -95,27 +95,26 @@ const stockOutController = {
             const remarks = body.remarks || body.doctorName || body.trainerName || existingHeader?.remarks || "";
 
             if (!location || items.length === 0) {
-                return res.status(400).json({ msg: "Bad Request", result: "location and items are required" });
+                const err = new Error('location and items are required');
+                err.statusCode = 400;
+                throw err;
             }
 
             let header = existingHeader;
             if (!header) {
-                header = await StockOutHeader.create({
-                    docNo: parsedDocNo,
-                    location,
-                    date,
-                    remarks,
-                    createdBy: req.user?._id || null,
-                    createdByRole: req.user?.role || "user"
-                });
+                const headerArr = await StockOutHeader.create(
+                    [{ docNo: parsedDocNo, location, date, remarks, createdBy: req.user?._id || null, createdByRole: req.user?.role || "user" }],
+                    session ? { session } : {}
+                );
+                header = headerArr[0];
                 await Sequence.findOneAndUpdate(
                     { _id: "stockOutDocument" },
                     { $max: { seq: parsedDocNo } },
-                    { upsert: true }
+                    { upsert: true, session }
                 );
             } else if (location && String(header.location) !== String(location)) {
                 header.location = location;
-                await header.save();
+                await header.save(session ? { session } : {});
             }
 
             const issuedItems = [];
@@ -124,62 +123,121 @@ const stockOutController = {
             for (const item of items) {
                 if (item.isDeleted) continue;
                 const targetProductId = item.productId || item.stockId;
-                const requestedQty = Number(item.quantity || 0);
-                if (!targetProductId || requestedQty <= 0) continue;
+
+                // ── Input validation ──────────────────────────────────────────────────────
+                const rawQty = item.quantity;
+                const requestedQty = Number(rawQty);
+                if (
+                    !targetProductId ||
+                    rawQty === null ||
+                    rawQty === undefined ||
+                    rawQty === '' ||
+                    !Number.isFinite(requestedQty) ||
+                    !Number.isInteger(requestedQty) ||
+                    requestedQty <= 0
+                ) {
+                    const err = new Error('Quantity must be a positive integer greater than zero');
+                    err.statusCode = 400;
+                    throw err;
+                }
+
+                const rawDisc = item.discountPercentage !== undefined ? item.discountPercentage : (body.discountPercentage !== undefined ? body.discountPercentage : 0);
+                const itemDiscPct = Number(rawDisc || 0);
+                if (isNaN(itemDiscPct) || itemDiscPct < 0 || itemDiscPct > 100) {
+                    const err = new Error(`Invalid discount percentage (${rawDisc}) for item`);
+                    err.statusCode = 400;
+                    throw err;
+                }
 
                 let pId = String(targetProductId);
-                const productDoc = await Product.findById(pId);
+                const productDoc = await Product.findById(pId).session(session);
                 if (!productDoc) {
-                    return res.status(404).json({ msg: "error", error: `Product not found for ID: ${pId}` });
+                    const err = new Error(`Product not found for ID: ${pId}`);
+                    err.statusCode = 404;
+                    throw err;
                 }
 
-                // FEFO / FIFO Batch Allocation from StockBalances
-                const balances = await StockBalance.find({
+                // ── Pre-validation: check total available ─────────────────────────────────
+                // (FEFO sorted, positive qty only)
+                const balancesForCheck = await StockBalance.find({
                     productId: mongoose.Types.ObjectId(pId),
                     quantity: { $gt: 0 }
-                }).sort({ expiry: 1, createdAt: 1 });
+                }).sort({ expiry: 1, createdAt: 1 }).session(session);
 
-                const totalAvailable = balances.reduce((sum, b) => sum + (b.quantity || 0), 0);
+                const totalAvailable = balancesForCheck.reduce((sum, b) => sum + (b.quantity || 0), 0);
                 if (totalAvailable < requestedQty) {
-                    return res.status(400).json({
-                        msg: "error",
-                        error: `Insufficient stock for "${productDoc.name}". Requested: ${requestedQty}, Available: ${totalAvailable}`
-                    });
+                    const err = new Error(`Insufficient stock for "${productDoc.name}". Requested: ${requestedQty}, Available: ${totalAvailable}`);
+                    err.statusCode = 409;
+                    err.code = 'INSUFFICIENT_STOCK';
+                    err.availableQuantity = totalAvailable;
+                    err.requestedQuantity = requestedQty;
+                    err.productName = productDoc.name;
+                    throw err;
                 }
 
+                // ── Atomic FEFO batch deduction ───────────────────────────────────────────
+                // Use findOneAndUpdate with a $gte guard to prevent race conditions.
+                // If the batch was consumed by a concurrent request between our check
+                // and our update, the update will find no matching document and we
+                // fall through to the next batch — or throw INSUFFICIENT_STOCK.
                 let remaining = requestedQty;
-                for (const bal of balances) {
+                for (const bal of balancesForCheck) {
                     if (remaining <= 0) break;
 
                     const takeQty = Math.min(remaining, bal.quantity);
-                    const prevQty = bal.quantity;
-                    bal.quantity -= takeQty;
-                    await bal.save();
 
-                    const rawDisc = item.discountPercentage !== undefined ? item.discountPercentage : (body.discountPercentage !== undefined ? body.discountPercentage : 0);
-                    const itemDiscPct = Number(rawDisc || 0);
-                    if (isNaN(itemDiscPct) || itemDiscPct < 0 || itemDiscPct > 100) {
-                        return res.status(400).json({ msg: "error", error: `Invalid discount percentage (${rawDisc}) for item` });
+                    // Atomic: only deduct if the batch still has >= takeQty units
+                    const updatedBal = await StockBalance.findOneAndUpdate(
+                        {
+                            _id: bal._id,
+                            quantity: { $gte: takeQty }   // ← TOCTOU guard
+                        },
+                        { $inc: { quantity: -takeQty } },
+                        { new: true, session }
+                    );
+
+                    if (!updatedBal) {
+                        // Concurrent request consumed this batch — re-check total available
+                        const recheck = await StockBalance.find({
+                            productId: mongoose.Types.ObjectId(pId),
+                            quantity: { $gt: 0 }
+                        }).session(session);
+                        const recheckTotal = recheck.reduce((s, b) => s + (b.quantity || 0), 0);
+                        const err = new Error(`Insufficient stock for "${productDoc.name}". Requested: ${remaining}, Available: ${recheckTotal}`);
+                        err.statusCode = 409;
+                        err.code = 'INSUFFICIENT_STOCK';
+                        err.availableQuantity = recheckTotal;
+                        err.requestedQuantity = requestedQty;
+                        err.productName = productDoc.name;
+                        throw err;
                     }
+
+                    const prevQty = bal.quantity; // before deduction (pre-recorded from check above)
+                    const newQty = updatedBal.quantity;
+
                     const itemPrice = Number(item.sellingPrice ?? bal.sellingPrice ?? 0);
                     const itemTotal = Math.round((takeQty * itemPrice) * 100) / 100;
                     const discountAmount = Math.round((itemTotal * itemDiscPct / 100) * 100) / 100;
                     const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
 
-                    const outItem = await StockOutItem.create({
-                        stockOutHeaderId: header._id,
-                        productId: pId,
-                        quantity: takeQty,
-                        sellingPrice: itemPrice,
-                        purchasingPrice: bal.purchasingPrice || 0,
-                        expiry: bal.expiry,
-                        batchNumber: bal.batchNumber || "",
-                        remarks: item.remarks || remarks || "",
-                        discountPercentage: itemDiscPct,
-                        discountAmount,
-                        itemTotal,
-                        netTotal
-                    });
+                    const outItemArr = await StockOutItem.create(
+                        [{
+                            stockOutHeaderId: header._id,
+                            productId: pId,
+                            quantity: takeQty,
+                            sellingPrice: itemPrice,
+                            purchasingPrice: bal.purchasingPrice || 0,
+                            expiry: bal.expiry,
+                            batchNumber: bal.batchNumber || "",
+                            remarks: item.remarks || remarks || "",
+                            discountPercentage: itemDiscPct,
+                            discountAmount,
+                            itemTotal,
+                            netTotal
+                        }],
+                        session ? { session } : {}
+                    );
+                    const outItem = outItemArr[0];
 
                     const txn = new InventoryTransaction({
                         productId: pId,
@@ -188,7 +246,7 @@ const stockOutController = {
                         expiry: bal.expiry,
                         quantityDelta: -takeQty,
                         previousBalance: prevQty,
-                        newBalance: bal.quantity,
+                        newBalance: newQty,
                         unitCost: bal.purchasingPrice || 0,
                         sellingPrice: Number(item.sellingPrice ?? bal.sellingPrice ?? 0),
                         transactionType: "STOCK_OUT",
@@ -199,31 +257,109 @@ const stockOutController = {
                         date,
                         remarks: item.remarks || remarks || "Stock Out"
                     });
-                    await txn.save();
+                    await txn.save(session ? { session } : {});
 
                     issuedItems.push(outItem);
                     remaining -= takeQty;
                 }
+
+                if (remaining > 0) {
+                    // Batches ran out mid-loop despite pre-check — race condition fallback
+                    const finalCheck = await StockBalance.find({
+                        productId: mongoose.Types.ObjectId(pId), quantity: { $gt: 0 }
+                    }).session(session);
+                    const finalTotal = finalCheck.reduce((s, b) => s + (b.quantity || 0), 0);
+                    const err = new Error(`Insufficient stock for "${productDoc.name}". Requested: ${requestedQty}, Available: ${finalTotal}`);
+                    err.statusCode = 409;
+                    err.code = 'INSUFFICIENT_STOCK';
+                    err.availableQuantity = finalTotal;
+                    err.requestedQuantity = requestedQty;
+                    err.productName = productDoc.name;
+                    throw err;
+                }
+
                 updatedProductIds.add(pId);
             }
 
             for (const pId of updatedProductIds) {
-                await recalculateRunningBalances(pId);
+                await recalculateRunningBalances(pId, session);
             }
 
-            await updateHeaderTotals(header._id);
-            const updatedHeader = await StockOutHeader.findById(header._id).lean();
+            await updateHeaderTotals(header._id, session);
+            const updatedHeader = await StockOutHeader.findById(header._id).session(session).lean();
 
-            return res.status(200).json({
-                msg: "success",
-                result: {
-                    ...updatedHeader,
-                    items: issuedItems
+            return { header: updatedHeader, items: issuedItems };
+        };
+
+        try {
+            const session = await mongoose.startSession();
+            let useTransaction = true;
+            try {
+                session.startTransaction();
+            } catch (e) {
+                useTransaction = false;
+                session.endSession();
+            }
+
+            const handleError = (err, res) => {
+                console.error('createStockOut error:', err);
+                if (err.code === 'INSUFFICIENT_STOCK') {
+                    return res.status(409).json({
+                        msg: 'error',
+                        code: 'INSUFFICIENT_STOCK',
+                        error: err.message,
+                        availableQuantity: err.availableQuantity,
+                        requestedQuantity: err.requestedQuantity,
+                        productName: err.productName
+                    });
                 }
-            });
+                if (err.statusCode === 400) {
+                    return res.status(400).json({ msg: 'error', error: err.message });
+                }
+                if (err.statusCode === 404) {
+                    return res.status(404).json({ msg: 'error', error: err.message });
+                }
+                return res.status(500).json({ msg: 'error', error: err.message });
+            };
+
+            if (useTransaction) {
+                try {
+                    const result = await executeCreate(session);
+                    await session.commitTransaction();
+                    session.endSession();
+                    return res.status(200).json({ msg: 'success', result: { ...result.header, items: result.items } });
+                } catch (txError) {
+                    await session.abortTransaction();
+                    session.endSession();
+
+                    const errorMsg = txError.message || '';
+                    const isTxUnsupported = errorMsg.includes('replica set') ||
+                        errorMsg.includes('Transaction numbers') ||
+                        errorMsg.includes('does not support') ||
+                        txError.code === 20 ||
+                        txError.codeName === 'IllegalOperation';
+
+                    if (isTxUnsupported) {
+                        try {
+                            const result = await executeCreate(null);
+                            return res.status(200).json({ msg: 'success', result: { ...result.header, items: result.items } });
+                        } catch (fallbackError) {
+                            return handleError(fallbackError, res);
+                        }
+                    }
+                    return handleError(txError, res);
+                }
+            } else {
+                try {
+                    const result = await executeCreate(null);
+                    return res.status(200).json({ msg: 'success', result: { ...result.header, items: result.items } });
+                } catch (fallbackError) {
+                    return handleError(fallbackError, res);
+                }
+            }
         } catch (err) {
-            console.error(err);
-            return res.status(500).json({ msg: "error", error: err.message });
+            console.error('createStockOut outer error:', err);
+            return res.status(500).json({ msg: 'error', error: err.message });
         }
     },
 
@@ -1064,12 +1200,25 @@ const stockOutController = {
                 const returnQty = Number(item.quantity || 0);
                 if (returnQty <= 0) continue;
 
-                // Match the exact same expiry-based lookup used in bulkUpdate isDeleted path
+                // Match exact batchNumber and expiry if available
                 let bal = null;
-                if (item.expiry) {
+                if (item.batchNumber && item.expiry) {
+                    bal = await StockBalance.findOne({
+                        productId: productId,
+                        batchNumber: item.batchNumber,
+                        expiry: item.expiry
+                    }).session(session);
+                }
+                if (!bal && item.expiry) {
                     bal = await StockBalance.findOne({
                         productId: productId,
                         expiry: item.expiry
+                    }).session(session);
+                }
+                if (!bal && item.batchNumber) {
+                    bal = await StockBalance.findOne({
+                        productId: productId,
+                        batchNumber: item.batchNumber
                     }).session(session);
                 }
                 if (!bal) {
@@ -1094,14 +1243,21 @@ const stockOutController = {
                     );
                 }
 
-                // Remove all inventory transactions that reference this line item
-                await InventoryTransaction.deleteMany(
-                    { referenceId: item._id },
-                    session ? { session } : {}
-                );
-
                 touchedProductIds.add(String(productId));
             }
+
+            // Remove all inventory transactions that reference this document or its line items
+            const itemIds = items.map(i => i._id);
+            await InventoryTransaction.deleteMany(
+                {
+                    $or: [
+                        { referenceId: { $in: itemIds } },
+                        { docNo: docNo, transactionType: "STOCK_OUT" },
+                        { docNo: docNo, referenceType: "StockOut" }
+                    ]
+                },
+                session ? { session } : {}
+            );
 
             // 4. Recalculate running balances for every affected product
             for (const pId of touchedProductIds) {
@@ -1135,7 +1291,7 @@ const stockOutController = {
                 }));
                 const totalQtyReversed = items.reduce((s, i) => s + (i.quantity || 0), 0);
                 const grandTotal = header.grandTotal || 0;
-                await AuditLog.create({
+                await AuditLog.create([{
                     docNo,
                     docType: "StockOut",
                     productId: items[0]?.productId || new mongoose.Types.ObjectId(),
@@ -1149,9 +1305,9 @@ const stockOutController = {
                         deletedAt: new Date()
                     },
                     newValue: null,
-                    updatedBy: req.user?._id || new mongoose.Types.ObjectId(),
-                    updatedByRole: req.user?.role || "user"
-                });
+                    updatedBy: req.user?._id || header.createdBy || new mongoose.Types.ObjectId(),
+                    updatedByRole: req.user?.role || header.createdByRole || "user"
+                }], session ? { session } : {});
             } catch (e) {
                 // Audit log failure must NOT abort the deletion
                 console.error("Audit log write failed (non-fatal):", e.message);

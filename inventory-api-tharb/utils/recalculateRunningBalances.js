@@ -11,6 +11,10 @@ const recalculateRunningBalances = async (productId, session = null) => {
     .sort({ date: 1, createdAt: 1 })
     .session(session);
 
+  if (!txns || txns.length === 0) {
+    return;
+  }
+
   let running = 0;
   for (const t of txns) {
     const prev = running;

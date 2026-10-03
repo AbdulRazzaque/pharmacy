@@ -83,6 +83,16 @@ const StockOutDocsList = () => {
     setTimeout(() => setToast({ show: false, message: '', type: '' }), 5000);
   };
 
+  const getDestinationName = (doc) => {
+    if (!doc) return '—';
+    if (typeof doc.location === 'string') return doc.location;
+    if (doc.location?.name) return doc.location.name;
+    if (doc.location?.trainerName) return doc.location.trainerName;
+    if (doc.location?.doctorName) return doc.location.doctorName;
+    if (doc.items?.[0]?.location?.name) return doc.items[0].location.name;
+    return '—';
+  };
+
   // ── Delete handlers ─────────────────────────────────────────────────────────
   const handleOpenDeleteModal = (doc) => {
     setDeletingDoc(doc);
@@ -297,7 +307,7 @@ const StockOutDocsList = () => {
                 </TableHeader>
                 <TableBody>
                   {filteredDocs.map((doc) => {
-                    const locName = doc.location?.name || (typeof doc.location === 'string' ? doc.location : '') || doc.items?.[0]?.location?.name || '-';
+                    const locName = getDestinationName(doc);
                     const subTotal = doc.subTotal !== undefined ? doc.subTotal : (doc.items || []).reduce((s, i) => s + (i.quantity * i.sellingPrice), 0);
                     const totalDisc = doc.totalDiscount !== undefined ? doc.totalDiscount : (doc.items || []).reduce((s, i) => s + (i.discountAmount || 0), 0);
                     const grandTotal = doc.grandTotal !== undefined ? doc.grandTotal : (subTotal - totalDisc);
@@ -367,6 +377,7 @@ const StockOutDocsList = () => {
                               onClick={() => handleOpenDeleteModal(doc)}
                               className="h-7 px-2 text-xs hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 border-[var(--ph-border)] text-rose-600 transition-colors"
                               title="Delete Stock Out Document"
+                              aria-label="Delete Stock Out Document"
                             >
                               <Trash2 className="h-3 w-3" />
                             </Button>
@@ -504,7 +515,7 @@ const StockOutDocsList = () => {
                       <MapPin className="w-3.5 h-3.5" />Destination
                     </span>
                     <span className="font-medium text-[var(--ph-text)] truncate max-w-[160px]">
-                      {deletingDoc.location?.name || (typeof deletingDoc.location === 'string' ? deletingDoc.location : '') || deletingDoc.items?.[0]?.location?.name || '—'}
+                      {getDestinationName(deletingDoc)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between px-4 py-2.5 text-xs">

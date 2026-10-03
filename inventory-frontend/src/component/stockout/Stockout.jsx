@@ -235,16 +235,39 @@ const Stockout = () => {
   const handleUpdateItem = (e) => {
     if (e) e.preventDefault();
     const errors = {};
-    if (!editFormData.quantity || Number(editFormData.quantity) <= 0) {
-      errors.quantity = 'Please enter a valid quantity';
-    }
-    if (editFormData.discountPercentage !== '' && (Number(editFormData.discountPercentage) < 0 || Number(editFormData.discountPercentage) > 100)) {
-      errors.discountPercentage = 'Discount percentage must be between 0 and 100';
+
+    const rawQty = editFormData.quantity;
+    const qty = Number(rawQty);
+    if (
+      rawQty === '' ||
+      rawQty === null ||
+      rawQty === undefined ||
+      !Number.isFinite(qty) ||
+      !Number.isInteger(qty) ||
+      qty <= 0
+    ) {
+      errors.quantity = 'Please enter a valid quantity (positive whole number)';
+    } else if (editSelectedStock) {
+      // Account for other staged items of the same product (excluding the item being edited)
+      const alreadyStagedQty = stockOutItems
+        .filter(i => {
+          if (i.id === editingItem.id) return false; // exclude the current item
+          const iProductId = i.productId || i.stockId;
+          const selectedProductId = editSelectedStock.productId || editSelectedStock.originalStockId || editSelectedStock._id;
+          return String(iProductId) === String(selectedProductId);
+        })
+        .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+
+      const effectiveAvailable = (editSelectedStock.quantity || 0) - alreadyStagedQty;
+      if (qty > effectiveAvailable) {
+        errors.quantity = effectiveAvailable <= 0
+          ? `No remaining stock — all ${editSelectedStock.quantity} units are already staged`
+          : `Insufficient stock. Only ${effectiveAvailable} units available (${editSelectedStock.quantity} total − ${alreadyStagedQty} already staged)`;
+      }
     }
 
-    const availableQty = editSelectedStock?.quantity;
-    if (availableQty !== undefined && Number(editFormData.quantity) > availableQty) {
-      errors.quantity = `Only ${availableQty} units available`;
+    if (editFormData.discountPercentage !== '' && (Number(editFormData.discountPercentage) < 0 || Number(editFormData.discountPercentage) > 100)) {
+      errors.discountPercentage = 'Discount percentage must be between 0 and 100';
     }
 
     if (Object.keys(errors).length > 0) {
@@ -252,10 +275,10 @@ const Stockout = () => {
       return;
     }
 
-    const qty = parseInt(editFormData.quantity, 10);
+    const parsedQty = parseInt(rawQty, 10);
     const price = parseFloat(editFormData.sellingPrice) || editSelectedStock?.sellingPrice || editingItem.sellingPrice || 0;
     const discPct = parseFloat(editFormData.discountPercentage) || 0;
-    const itemTotal = Math.round((qty * price) * 100) / 100;
+    const itemTotal = Math.round((parsedQty * price) * 100) / 100;
     const discountAmount = Math.round((itemTotal * discPct / 100) * 100) / 100;
     const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
 
@@ -273,7 +296,7 @@ const Stockout = () => {
           unit: editSelectedStock?.unit || i.unit,
           locationId: editFormData.locationId || i.locationId,
           location: selectedLoc ? selectedLoc.name : i.location,
-          quantity: qty,
+          quantity: parsedQty,
           sellingPrice: price,
           discountPercentage: discPct,
           discountAmount: discountAmount,
@@ -420,10 +443,35 @@ const Stockout = () => {
 
     if (!formData.stockId) errors.stockId = 'Please select a product';
     if (!docLocationId) errors.locationId = 'Please select a location';
-    if (!formData.quantity || formData.quantity <= 0) errors.quantity = 'Please enter valid quantity';
 
-    if (selectedStock && formData.quantity > selectedStock.quantity) {
-      errors.quantity = `Only ${selectedStock.quantity} units available`;
+    const rawQty = formData.quantity;
+    const qty = Number(rawQty);
+
+    if (
+      rawQty === '' ||
+      rawQty === null ||
+      rawQty === undefined ||
+      !Number.isFinite(qty) ||
+      !Number.isInteger(qty) ||
+      qty <= 0
+    ) {
+      errors.quantity = 'Please enter a valid quantity (positive whole number)';
+    } else if (selectedStock) {
+      // Account for quantity of the same product already staged in this document
+      const alreadyStagedQty = stockOutItems
+        .filter(i => {
+          const iProductId = i.productId || i.stockId;
+          const selectedProductId = selectedStock.productId || selectedStock.originalStockId || selectedStock._id;
+          return String(iProductId) === String(selectedProductId);
+        })
+        .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+
+      const effectiveAvailable = (selectedStock.quantity || 0) - alreadyStagedQty;
+      if (qty > effectiveAvailable) {
+        errors.quantity = effectiveAvailable <= 0
+          ? `No stock remaining — ${selectedStock.quantity} units are already staged in this document`
+          : `Insufficient stock. Only ${effectiveAvailable} units available (${selectedStock.quantity} total − ${alreadyStagedQty} already staged)`;
+      }
     }
 
     setFormErrors(errors);
@@ -497,33 +545,38 @@ const Stockout = () => {
 
     setLoading(true);
 
-    // 2. Save Stock OUT records sequentially to prevent race conditions
-    let saveChain = Promise.resolve();
-    stockOutItems.forEach(item => {
-      saveChain = saveChain.then(() =>
-        axios.post(
-          `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOuts`,
-          {
-            docNo: docNo,
-            date: date,
-            stockId: item.stockId,
-            productId: item.productId || item.stockId,
-            locationId: item.locationId,
-            quantity: item.quantity,
-            sellingPrice: item.sellingPrice ?? 0,
-            discountPercentage: item.discountPercentage !== undefined ? item.discountPercentage : 0,
-            discountAmount: item.discountAmount ?? 0,
-            itemTotal: item.itemTotal ?? 0,
-            netTotal: item.netTotal ?? 0,
-            doctorName: item.doctorName || '',
-            trainerName: item.trainerName || ''
-          },
-          { headers: { token: accessToken } }
-        )
-      );
-    });
+    // 2. Save Stock OUT records sequentially to prevent race conditions.
+    // Build a sequential promise chain that STOPS immediately on any error
+    // (including backend-reported INSUFFICIENT_STOCK)
+    const buildChain = () => {
+      let chain = Promise.resolve();
+      for (const item of stockOutItems) {
+        chain = chain.then(() =>
+          axios.post(
+            `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOuts`,
+            {
+              docNo: docNo,
+              date: date,
+              stockId: item.stockId,
+              productId: item.productId || item.stockId,
+              locationId: item.locationId,
+              quantity: item.quantity,
+              sellingPrice: item.sellingPrice ?? 0,
+              discountPercentage: item.discountPercentage !== undefined ? item.discountPercentage : 0,
+              discountAmount: item.discountAmount ?? 0,
+              itemTotal: item.itemTotal ?? 0,
+              netTotal: item.netTotal ?? 0,
+              doctorName: item.doctorName || '',
+              trainerName: item.trainerName || ''
+            },
+            { headers: { token: accessToken } }
+          )
+        );
+      }
+      return chain;
+    };
 
-    saveChain
+    buildChain()
       .then(() => {
         // 3. Save PDF record in the database
         const selectedLoc = locations.find(l => l._id === docLocationId);
@@ -583,7 +636,21 @@ const Stockout = () => {
         navigate(`/stockoutpdf/${savedPdf._id}?autoPrint=${isPrintFlow}`);
       })
       .catch((err) => {
-        showAlert(err.response?.data?.message || 'Failed to save stock out transaction.', 'error');
+        const data = err.response?.data;
+        // Parse structured INSUFFICIENT_STOCK error from backend
+        if (data?.code === 'INSUFFICIENT_STOCK') {
+          const available = data.availableQuantity;
+          const requested = data.requestedQuantity;
+          const product = data.productName || 'the product';
+          showAlert(
+            `Insufficient stock for "${product}". Only ${available} unit${available !== 1 ? 's' : ''} available${requested !== undefined ? ` (requested: ${requested})` : ''}.`,
+            'error'
+          );
+          // Refresh stock so the UI shows the current real quantity from the DB
+          fetchStocks();
+        } else {
+          showAlert(err.response?.data?.error || err.response?.data?.result || err.response?.data?.message || 'Failed to save stock out transaction.', 'error');
+        }
         console.error(err);
         setLoading(false);
       });
@@ -877,17 +944,50 @@ const Stockout = () => {
               <label className="block text-xs font-semibold text-[var(--ph-text)] mb-1.5">
                 Quantity *
               </label>
-              <input
-                id="quantity"
-                type="number"
-                value={formData.quantity}
-                onChange={(e) => handleInputChange('quantity', e.target.value)}
-                placeholder="0"
-                min="1"
-                max={selectedStock?.quantity || 999999}
-                className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] font-semibold ${formErrors.quantity ? 'border-rose-500' : 'border-[var(--ph-border)]'
-                  }`}
-              />
+              {(() => {
+                // Compute effective available (total minus already-staged for same product)
+                let effectiveAvail = selectedStock?.quantity || 0;
+                if (selectedStock) {
+                  const staged = stockOutItems
+                    .filter(i => {
+                      const iId = i.productId || i.stockId;
+                      const sId = selectedStock.productId || selectedStock.originalStockId || selectedStock._id;
+                      return String(iId) === String(sId);
+                    })
+                    .reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+                  effectiveAvail = Math.max(0, (selectedStock.quantity || 0) - staged);
+                }
+                const enteredQty = Number(formData.quantity);
+                const isOverLimit = selectedStock && formData.quantity !== '' && Number.isFinite(enteredQty) && enteredQty > effectiveAvail;
+                return (
+                  <>
+                    <input
+                      id="quantity"
+                      type="number"
+                      value={formData.quantity}
+                      onChange={(e) => handleInputChange('quantity', e.target.value)}
+                      placeholder="0"
+                      min="1"
+                      max={selectedStock ? effectiveAvail : 999999}
+                      className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] font-semibold ${
+                        (formErrors.quantity || isOverLimit) ? 'border-rose-500' : 'border-[var(--ph-border)]'
+                      }`}
+                    />
+                    {isOverLimit && !formErrors.quantity && (
+                      <p className="mt-1 text-[10px] text-rose-600 flex items-center gap-1 font-semibold">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        Only {effectiveAvail} unit{effectiveAvail !== 1 ? 's' : ''} available
+                      </p>
+                    )}
+                    {formErrors.quantity && (
+                      <p className="mt-1 text-[10px] text-rose-600 flex items-center gap-1 font-semibold">
+                        <AlertCircle className="w-3 h-3 shrink-0" />
+                        {formErrors.quantity}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {/* Product Discount (%) */}
