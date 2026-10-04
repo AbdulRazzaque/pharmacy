@@ -140,10 +140,7 @@ const StockOutDetails = () => {
       const stock = groupedStocks.find((s) => s._id === outFormData.stockId);
       setOutSelectedStock(stock || null);
       if (stock) {
-        setOutStockQuery(
-          `${stock.productName}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''
-          } (Qty: ${stock.quantity})`
-        );
+        setOutStockQuery(getOutStockDisplayLabel(stock));
       }
     } else {
       setOutSelectedStock(null);
@@ -309,8 +306,7 @@ const StockOutDetails = () => {
   };
 
   const getOutStockDisplayLabel = (stock) =>
-    `${stock.productName}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''
-    } (Qty: ${stock.quantity})`;
+    `${stock.productName}${stock.companyName ? ` (${stock.companyName})` : ''}${stock.unit ? ` [Unit: ${stock.unit}]` : ''}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Available: ${stock.quantity})`;
 
   const handleOutChange = (field, value) => {
     setOutFormData((prev) => ({ ...prev, [field]: value }));
@@ -997,26 +993,49 @@ const StockOutDetails = () => {
                             </button>
                           )}
                           {outStockDropdownOpen && (
-                            <div className="absolute z-[100] left-0 right-0 mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                            <div className="absolute z-[100] left-0 right-0 mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-xl max-h-56 overflow-y-auto divide-y divide-gray-100">
                               {groupedStocks.length === 0 ? (
-                                <div className="px-3 py-4 text-sm text-gray-500">No stock available.</div>
+                                <div className="px-3 py-4 text-xs text-gray-500 text-center">No stock available.</div>
                               ) : stockOutSuggestions.length === 0 ? (
-                                <div className="px-3 py-4 text-sm text-gray-500">No matching products.</div>
+                                <div className="px-3 py-4 text-xs text-gray-500 text-center">No matching products.</div>
                               ) : (
                                 stockOutSuggestions.map((stock) => (
                                   <button
                                     key={stock._id}
                                     type="button"
-                                    className="w-full px-3 py-2.5 text-left text-sm hover:bg-red-50 flex flex-col gap-0.5 border-b border-gray-50 last:border-0"
+                                    className="w-full px-3 py-2.5 text-left text-xs sm:text-sm hover:bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-colors"
                                     onClick={() => handleSelectOutStock(stock)}
                                   >
-                                    <span className="font-medium text-gray-900">
-                                      {stock.productName} | {stock.companyName || 'N/A'} | {stock.unit || 'N/A'}
-                                    </span>
-                                    <span className="text-xs text-gray-500">
-                                      {stock.expiry ? `Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : 'No expiry'} •
-                                      Qty: {stock.quantity}
-                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-semibold text-gray-900 leading-snug">
+                                        {stock.productName}
+                                      </div>
+                                      {stock.companyName && (
+                                        <div className="text-[11px] text-gray-500 mt-0.5">
+                                          {stock.companyName}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex flex-wrap items-center sm:justify-end gap-1.5 shrink-0">
+                                      <span className="inline-flex items-center text-[10px] sm:text-[11px] font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-200 shadow-xs">
+                                        Available:&nbsp;<span className="font-extrabold">{stock.quantity}</span>
+                                      </span>
+                                      {stock.unit ? (
+                                        <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
+                                          Unit:&nbsp;<span className="font-semibold text-slate-800">{stock.unit}</span>
+                                        </span>
+                                      ) : null}
+                                      {stock.sellingPrice != null && (
+                                        <span className="inline-flex items-center text-[10px] sm:text-[11px] font-mono font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200">
+                                          Price:&nbsp;<span className="font-bold">QR {(stock.sellingPrice || 0).toFixed(2)}</span>
+                                        </span>
+                                      )}
+                                      {stock.expiry && (
+                                        <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                          Expiry:&nbsp;<span className="font-semibold">{moment(stock.expiry).format('DD/MM/YYYY')}</span>
+                                        </span>
+                                      )}
+                                    </div>
                                   </button>
                                 ))
                               )}

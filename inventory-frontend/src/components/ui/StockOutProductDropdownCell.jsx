@@ -147,7 +147,8 @@ const StockOutProductDropdownCell = ({ item, stocks, onSelect, cellId }) => {
             position: 'absolute',
             top: dropdownPos.top + 4,
             left: dropdownPos.left,
-            width: dropdownPos.width,
+            width: Math.max(dropdownPos.width, 440),
+            minWidth: 380,
             zIndex: 9999,
           }}
           className="bg-white border border-gray-300 rounded-lg shadow-2xl overflow-hidden"
@@ -181,7 +182,7 @@ const StockOutProductDropdownCell = ({ item, stocks, onSelect, cellId }) => {
           </div>
 
           {/* Results */}
-          <div className="max-h-64 overflow-y-auto">
+          <div className="max-h-64 overflow-y-auto divide-y divide-gray-100">
             {stocks.length === 0 ? (
               <div className="px-4 py-5 text-xs text-gray-500 text-center">No stock available.</div>
             ) : filteredStocks.length === 0 ? (
@@ -200,42 +201,63 @@ const StockOutProductDropdownCell = ({ item, stocks, onSelect, cellId }) => {
                       e.preventDefault();
                       if (!isOutOfStock) handleSelect(stock);
                     }}
-                    className={`px-3 py-2.5 border-b border-gray-50 last:border-0 transition-colors
+                    className={`px-3 py-2.5 transition-colors
                       ${isOutOfStock
                         ? 'opacity-50 cursor-not-allowed bg-gray-50'
                         : isCurrent
                           ? 'bg-red-50 border-l-2 border-l-red-500 cursor-pointer'
-                          : 'cursor-pointer hover:bg-red-50'
+                          : 'cursor-pointer hover:bg-slate-50'
                       }`}
                   >
-                    {/* Row 1: Product name + company + unit */}
+                    {/* Row 1: Product name + company */}
                     <div className="flex items-center justify-between gap-2">
-                      <span className={`font-semibold text-xs ${isCurrent ? 'text-red-800' : 'text-gray-800'}`}>
-                        {stock.productName} | {stock.companyName || 'N/A'} | {stock.unit || 'N/A'}
-                      </span>
-                      {isOutOfStock && (
-                        <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded flex-shrink-0">
-                          OUT
-                        </span>
-                      )}
-                      {isCurrent && !isOutOfStock && (
-                        <span className="text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded flex-shrink-0">
-                          Current
-                        </span>
-                      )}
+                      <div className="font-semibold text-xs text-gray-800">
+                        {stock.productName}
+                        {stock.companyName && (
+                          <span className="text-gray-500 font-normal ml-1">
+                            ({stock.companyName})
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {isOutOfStock && (
+                          <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded">
+                            OUT
+                          </span>
+                        )}
+                        {isCurrent && !isOutOfStock && (
+                          <span className="text-[10px] font-bold bg-red-100 text-red-700 px-1.5 py-0.5 rounded">
+                            Current
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    {/* Row 2: Expiry • Qty • Unit Price */}
-                    <div className="flex items-center gap-3 mt-0.5">
-                      <span className="text-[11px] text-gray-500">
-                        {stock.expiry ? `Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : 'No expiry'}
+                    {/* Row 2: Badges - Available, Unit, Price, Expiry */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                      <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                        isOutOfStock 
+                          ? 'bg-red-50 text-red-600 border-red-200' 
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}>
+                        Available:&nbsp;<span className="font-extrabold">{isOutOfStock ? '0' : stock.quantity}</span>
                       </span>
-                      <span className={`text-[11px] font-semibold ${isOutOfStock ? 'text-red-500' : 'text-blue-600'}`}>
-                        Qty: {isOutOfStock ? 'Out of Stock' : stock.quantity}
-                      </span>
+
+                      {stock.unit ? (
+                        <span className="inline-flex items-center text-[10px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
+                          Unit:&nbsp;<span className="font-semibold text-slate-800">{stock.unit}</span>
+                        </span>
+                      ) : null}
+
                       {stock.sellingPrice > 0 && (
-                        <span className="text-[11px] text-emerald-600 font-medium">
-                          Price: {stock.sellingPrice.toFixed(2)}
+                        <span className="inline-flex items-center text-[10px] font-mono font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200">
+                          Price:&nbsp;<span className="font-bold">QR {stock.sellingPrice.toFixed(2)}</span>
+                        </span>
+                      )}
+
+                      {stock.expiry && (
+                        <span className="inline-flex items-center text-[10px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          Expiry:&nbsp;<span className="font-semibold">{moment(stock.expiry).format('DD/MM/YYYY')}</span>
                         </span>
                       )}
                     </div>

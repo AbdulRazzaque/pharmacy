@@ -520,6 +520,111 @@ const stockOutController = {
         }
     },
 
+    async getTrainerExpense(req, res) {
+        try {
+            const StockOutPdf = require("../models/StockOutPdfModule");
+            const moment = require("moment");
+
+            const trainerQuery = req.query.trainer || req.query.trainerName || req.body?.trainer || req.body?.trainerName || "";
+            const trainerId = req.query.trainerId || req.body?.trainerId || "";
+            const targetTrainer = trainerQuery.trim();
+
+            // Resolve reference date (defaults to current date in server local time)
+            const dateParam = req.query.date || req.query.today || req.body?.date || req.body?.today;
+            const refDate = (dateParam && moment(dateParam).isValid()) ? moment(dateParam) : moment();
+
+            const monthStr = refDate.format("YYYY-MM");
+            const fromDateStr = refDate.clone().startOf("month").format("YYYY-MM-DD");
+            const toDateStr = refDate.format("YYYY-MM-DD");
+
+            if (!targetTrainer && !trainerId) {
+                return res.status(200).json({
+                    msg: "success",
+                    trainerName: "",
+                    month: monthStr,
+                    fromDate: fromDateStr,
+                    toDate: toDateStr,
+                    totalExpense: 0,
+                    documentsCount: 0,
+                    documents: []
+                });
+            }
+
+            const normTarget = targetTrainer.toLowerCase().replace(/[.\-_,]/g, ' ').replace(/\s+/g, ' ').trim();
+
+            // Broad date filter to cover buffer around current month
+            const queryStart = refDate.clone().startOf("month").subtract(3, "days").toDate();
+            const queryEnd = refDate.clone().endOf("day").add(3, "days").toDate();
+
+            const headers = await StockOutHeader.find({
+                date: { $gte: queryStart, $lte: queryEnd }
+            })
+                .populate("location", "name doctorName trainerName")
+                .sort({ docNo: 1 })
+                .lean();
+
+            const docNos = headers.map(h => Number(h.docNo)).filter(Boolean);
+            const pdfRecords = docNos.length > 0 
+                ? await StockOutPdf.find({ docNo: { $in: docNos } }).lean()
+                : [];
+            const pdfMap = new Map();
+            pdfRecords.forEach(pdf => {
+                if (pdf.docNo) pdfMap.set(Number(pdf.docNo), pdf);
+            });
+
+            let totalExpense = 0;
+            const matchingDocs = [];
+
+            for (const h of headers) {
+                const pdf = pdfMap.get(Number(h.docNo));
+                const docTrainer = pdf?.trainerName || h.location?.trainerName || "";
+                const normDocTrainer = docTrainer.toLowerCase().replace(/[.\-_,]/g, ' ').replace(/\s+/g, ' ').trim();
+
+                // Check trainer match
+                let isTrainerMatch = false;
+                if (trainerId && h.location?._id && String(h.location._id) === String(trainerId)) {
+                    isTrainerMatch = true;
+                } else if (normTarget) {
+                    if (normDocTrainer === normTarget || normDocTrainer.includes(normTarget) || normTarget.includes(normDocTrainer)) {
+                        isTrainerMatch = true;
+                    }
+                }
+
+                if (!isTrainerMatch) continue;
+
+                // Check transaction date belongs to current month and <= today
+                const docDateStr = moment(h.date || h.createdAt).format("YYYY-MM-DD");
+                if (docDateStr >= fromDateStr && docDateStr <= toDateStr) {
+                    const docNetTotal = Number(h.grandTotal || 0);
+                    totalExpense += docNetTotal;
+                    matchingDocs.push({
+                        docNo: h.docNo,
+                        date: docDateStr,
+                        grandTotal: docNetTotal,
+                        trainerName: docTrainer || targetTrainer,
+                        locationName: h.location?.name || pdf?.locationName || ""
+                    });
+                }
+            }
+
+            const roundedTotal = Math.round(totalExpense * 100) / 100;
+
+            return res.status(200).json({
+                msg: "success",
+                trainerName: targetTrainer,
+                month: monthStr,
+                fromDate: fromDateStr,
+                toDate: toDateStr,
+                totalExpense: roundedTotal,
+                documentsCount: matchingDocs.length,
+                documents: matchingDocs
+            });
+        } catch (err) {
+            console.error("getTrainerExpense error:", err);
+            return res.status(500).json({ msg: "error", error: err.message });
+        }
+    },
+
     async getStockOutByDocNo(req, res) {
         try {
             const { docNo } = req.body || {};

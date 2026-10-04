@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import { getToken, getUserInfo } from '../../utils/auth';
 import { Badge } from '../../components/ui/badge';
@@ -25,6 +25,17 @@ const Stockout = () => {
   const [storeIncharge, setStoreIncharge] = useState('');
   const [takenBy, setTakenBy] = useState('');
   const [comments, setComments] = useState('');
+
+  // Trainer Expense Summary (Month-to-Date) state
+  const [trainerExpense, setTrainerExpense] = useState({
+    trainerName: '',
+    month: moment().format('YYYY-MM'),
+    fromDate: moment().startOf('month').format('YYYY-MM-DD'),
+    toDate: moment().format('YYYY-MM-DD'),
+    totalExpense: 0,
+    documentsCount: 0,
+    loading: false
+  });
 
   // Form state
   const [formData, setFormData] = useState({
@@ -157,12 +168,71 @@ const Stockout = () => {
     }));
   }, [date, docLocationId, docTrainerName, stockOutItems]);
 
+  const fetchTrainerExpense = useCallback(async (trainer) => {
+    const t = (trainer !== undefined ? trainer : docTrainerName || '').trim();
+    if (!t) {
+      setTrainerExpense({
+        trainerName: '',
+        month: moment().format('YYYY-MM'),
+        fromDate: moment().startOf('month').format('YYYY-MM-DD'),
+        toDate: moment().format('YYYY-MM-DD'),
+        totalExpense: 0,
+        documentsCount: 0,
+        loading: false
+      });
+      return;
+    }
+
+    setTrainerExpense(prev => ({ ...prev, loading: true }));
+    try {
+      const res = await axios.get(`${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/trainer-expense`, {
+        params: { trainer: t },
+        headers: { token: accessToken }
+      });
+      if (res.data) {
+        setTrainerExpense({
+          trainerName: res.data.trainerName || t,
+          month: res.data.month || moment().format('YYYY-MM'),
+          fromDate: res.data.fromDate || moment().startOf('month').format('YYYY-MM-DD'),
+          toDate: res.data.toDate || moment().format('YYYY-MM-DD'),
+          totalExpense: Number(res.data.totalExpense || 0),
+          documentsCount: Number(res.data.documentsCount || 0),
+          loading: false
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching trainer expense:', err);
+      setTrainerExpense(prev => ({ ...prev, loading: false }));
+    }
+  }, [accessToken, docTrainerName]);
+
+  useEffect(() => {
+    if (!docTrainerName.trim()) {
+      setTrainerExpense({
+        trainerName: '',
+        month: moment().format('YYYY-MM'),
+        fromDate: moment().startOf('month').format('YYYY-MM-DD'),
+        toDate: moment().format('YYYY-MM-DD'),
+        totalExpense: 0,
+        documentsCount: 0,
+        loading: false
+      });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      fetchTrainerExpense(docTrainerName);
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [docTrainerName, fetchTrainerExpense]);
+
   useEffect(() => {
     if (formData.stockId) {
       const stock = stocks.find(s => s._id === formData.stockId);
       setSelectedStock(stock || null);
       if (stock) {
-        setStockQuery(`${stock.productName}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Qty: ${stock.quantity})`);
+        setStockQuery(getStockDisplayLabel(stock));
         const sp = stock.sellingPrice ?? 0;
         setFormData(prev => (
           prev.sellingPrice === String(sp) ? prev : { ...prev, sellingPrice: String(sp) }
@@ -232,7 +302,7 @@ const Stockout = () => {
       sellingPrice: String(stock.sellingPrice ?? prev.sellingPrice)
     }));
     setEditSelectedStock(stock);
-    setEditStockQuery(`${stock.productName}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Qty: ${stock.quantity})`);
+    setEditStockQuery(getStockDisplayLabel(stock));
     setEditStockDropdownOpen(false);
     if (editFormErrors.stockId) setEditFormErrors(prev => ({ ...prev, stockId: '' }));
   };
@@ -420,7 +490,7 @@ const Stockout = () => {
   };
 
   const getStockDisplayLabel = (stock) =>
-    `${stock.productName}${stock.companyName ? ` (${stock.companyName})` : ''}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Qty: ${stock.quantity})`;
+    `${stock.productName}${stock.companyName ? ` (${stock.companyName})` : ''}${stock.unit ? ` [Unit: ${stock.unit}]` : ''}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Available: ${stock.quantity})`;
 
   const handleSelectStock = (stock) => {
     const sellingPrice = stock.sellingPrice ?? 0;
@@ -641,12 +711,14 @@ const Stockout = () => {
             { headers: { token: accessToken } }
           );
           const savedPdf = pdfRes.data?.data;
+          fetchTrainerExpense(docTrainerName);
           showAlert(`Stock Out #${finalDocNo} and PDF records saved successfully! 🎉`, 'success');
           if (savedPdf?._id) {
             navigate(`/stockoutpdf/${savedPdf._id}?autoPrint=${isPrintFlow}`);
           }
         } catch (pdfErr) {
           console.warn('StockOutPdf record creation warning:', pdfErr);
+          fetchTrainerExpense(docTrainerName);
           showAlert(`Stock Out #${finalDocNo} saved successfully! 🎉`, 'success');
         }
       })
@@ -708,7 +780,7 @@ const Stockout = () => {
 
       {/* Financial Summary Strip */}
       {isAdmin && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="ph-card p-4 border border-[var(--ph-border)] flex items-center justify-between">
             <div>
               <span className="text-xs uppercase font-semibold text-[var(--ph-text-secondary)]">Gross Subtotal</span>
@@ -729,6 +801,51 @@ const Stockout = () => {
               <div className="text-2xl font-black text-emerald-700 dark:text-emerald-400 mt-0.5">QR {getGrandTotal().toFixed(2)}</div>
             </div>
             <Badge variant="success" className="text-xs font-mono font-bold">Net Total</Badge>
+          </div>
+
+          {/* Dynamic Trainer Expense Summary (Month-to-Date) */}
+          <div className="ph-card p-4 border border-blue-200 dark:border-blue-900/50 bg-blue-50/40 dark:bg-blue-950/20 flex flex-col justify-between relative overflow-hidden transition-all">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <span className="text-[11px] uppercase font-bold tracking-wider text-blue-800 dark:text-blue-300 block truncate">
+                  TRAINER EXPENSE — {moment(trainerExpense.month, 'YYYY-MM').isValid() ? moment(trainerExpense.month, 'YYYY-MM').format('MMMM').toUpperCase() : moment().format('MMMM').toUpperCase()}
+                </span>
+                <div className="text-xs font-semibold text-[var(--ph-text)] mt-0.5 truncate" title={docTrainerName.trim() || 'No trainer selected'}>
+                  {docTrainerName.trim() ? (
+                    docTrainerName.trim()
+                  ) : (
+                    <span className="text-[var(--ph-muted)] font-normal italic">No trainer selected</span>
+                  )}
+                </div>
+              </div>
+              <Badge variant="outline" className="text-[10px] font-medium bg-blue-100/70 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 shrink-0">
+                {moment(trainerExpense.fromDate).format('DD MMM')} – {moment(trainerExpense.toDate).format('DD MMM')}
+              </Badge>
+            </div>
+
+            <div className="mt-2">
+              {docTrainerName.trim() ? (
+                <div className="text-2xl font-black text-blue-700 dark:text-blue-400">
+                  {trainerExpense.loading ? (
+                    <span className="text-sm font-semibold text-blue-500 animate-pulse">Calculating...</span>
+                  ) : (
+                    `QR ${trainerExpense.totalExpense.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                  )}
+                </div>
+              ) : (
+                <div className="text-xs text-[var(--ph-text-secondary)] font-medium mt-1">
+                  Select a trainer to view monthly expense
+                </div>
+              )}
+              <div className="text-[10px] text-blue-800/80 dark:text-blue-300/80 font-medium mt-0.5 flex items-center justify-between">
+                <span>Month-to-Date Expense</span>
+                {docTrainerName.trim() && !trainerExpense.loading && (
+                  <span className="text-[10px] bg-blue-100/80 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-semibold">
+                    {trainerExpense.documentsCount} {trainerExpense.documentsCount === 1 ? 'doc' : 'docs'}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -766,7 +883,15 @@ const Stockout = () => {
             <select
               id="docLocationId"
               value={docLocationId}
-              onChange={(e) => setDocLocationId(e.target.value)}
+              onChange={(e) => {
+                const locId = e.target.value;
+                setDocLocationId(locId);
+                const loc = locations.find(l => String(l._id) === String(locId));
+                if (loc) {
+                  if (loc.trainerName) setDocTrainerName(loc.trainerName);
+                  if (loc.doctorName) setDocDoctorName(loc.doctorName);
+                }
+              }}
               className={`w-full h-10 px-3 text-xs sm:text-sm bg-[var(--ph-surface)] border rounded-lg focus:ring-2 focus:ring-[var(--ph-navy)]/30 focus:border-[var(--ph-navy)] focus:outline-none transition-colors ${formErrors.locationId && !docLocationId ? 'border-rose-500' : 'border-[var(--ph-border)]'
                 }`}
             >
@@ -903,7 +1028,7 @@ const Stockout = () => {
                   </button>
                 )}
                 {stockDropdownOpen && (
-                  <div className="absolute z-[70] left-0 top-[calc(100%+4px)] w-full min-w-full sm:min-w-[460px] max-w-[95vw] max-h-72 overflow-y-auto bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-xl shadow-2xl py-1 text-xs divide-y divide-[var(--ph-border)]/40">
+                  <div className="absolute z-[70] left-0 top-[calc(100%+4px)] w-full min-w-full sm:min-w-[520px] max-w-[95vw] max-h-72 overflow-y-auto bg-[var(--ph-surface)] border border-[var(--ph-border)] rounded-xl shadow-2xl py-1 text-xs divide-y divide-[var(--ph-border)]/40">
                     {stockSuggestions.length === 0 ? (
                       <div className="px-4 py-5 text-center">
                         <Search className="w-6 h-6 mx-auto mb-1 text-[var(--ph-muted)] opacity-40" />
@@ -918,7 +1043,7 @@ const Stockout = () => {
                             key={s._id || s.originalStockId || idx}
                             data-stockout-sug-idx={idx}
                             onClick={() => handleSelectStock(s)}
-                            className={`px-3.5 py-2.5 cursor-pointer flex items-center justify-between gap-3 border-l-4 transition-colors ${active
+                            className={`px-3.5 py-2.5 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-l-4 transition-colors ${active
                                 ? 'bg-[var(--ph-navy)]/10 dark:bg-[var(--ph-navy)]/25 border-[var(--ph-navy)]'
                                 : 'border-transparent hover:bg-[var(--ph-surface-2)]'
                               }`}
@@ -933,16 +1058,28 @@ const Stockout = () => {
                                 </div>
                               )}
                             </div>
-                            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1.5 shrink-0 text-right">
-                              <span className="text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60">
-                                Available: {s.quantity} {s.unit || ''}
+                            <div className="flex flex-wrap items-center sm:justify-end gap-1.5 shrink-0">
+                              {/* Stock Quantity only */}
+                              <span className="inline-flex items-center text-[10px] sm:text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 shadow-xs">
+                                Available:&nbsp;<span className="font-extrabold">{s.quantity}</span>
                               </span>
-                              <span className="text-[10px] font-mono font-bold text-[var(--ph-text)] bg-[var(--ph-surface-2)] px-2 py-0.5 rounded-full border border-[var(--ph-border)]">
-                                QR {(s.sellingPrice || 0).toFixed(2)}
+
+                              {/* Unit / Pack Size only */}
+                              {s.unit ? (
+                                <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium bg-slate-100 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                  Unit:&nbsp;<span className="font-semibold text-slate-800 dark:text-slate-200">{s.unit}</span>
+                                </span>
+                              ) : null}
+
+                              {/* Price */}
+                              <span className="inline-flex items-center text-[10px] sm:text-[11px] font-mono font-medium text-[var(--ph-text)] bg-[var(--ph-surface-2)] px-2 py-0.5 rounded-full border border-[var(--ph-border)]">
+                                Price:&nbsp;<span className="font-bold">QR {(s.sellingPrice || 0).toFixed(2)}</span>
                               </span>
+
+                              {/* Expiry */}
                               {s.expiry && (
-                                <span className="text-[10px] text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800/40">
-                                  Exp: {moment(s.expiry).format('DD/MM/YYYY')}
+                                <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
+                                  Expiry:&nbsp;<span className="font-semibold">{moment(s.expiry).format('DD/MM/YYYY')}</span>
                                 </span>
                               )}
                             </div>
@@ -1289,18 +1426,36 @@ const Stockout = () => {
                 {editFormErrors.stockId && <p className="text-xs text-red-500 mt-1">{editFormErrors.stockId}</p>}
 
                 {editStockDropdownOpen && editStockSuggestions.length > 0 && (
-                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white border-2 border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-50 left-0 right-0 mt-1 bg-white dark:bg-[var(--ph-surface)] border-2 border-gray-200 dark:border-[var(--ph-border)] rounded-lg shadow-lg max-h-56 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
                     {editStockSuggestions.map((s) => (
                       <button
                         key={s._id}
                         type="button"
                         onClick={() => handleSelectEditStock(s)}
-                        className="w-full px-3 py-2 text-left text-sm hover:bg-red-50 flex flex-col gap-0.5 border-b border-gray-50 last:border-0"
+                        className="w-full px-3 py-2.5 text-left text-xs sm:text-sm hover:bg-slate-50 dark:hover:bg-[var(--ph-surface-2)] flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition-colors"
                       >
-                        <span className="font-medium text-gray-900">{s.productName} | {s.companyName || 'N/A'}</span>
-                        <span className="text-xs text-gray-500">
-                          {s.expiry ? `Exp: ${moment(s.expiry).format('DD/MM/YY')}` : 'No expiry'} • Available: {s.quantity}
-                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-gray-900 dark:text-gray-100">{s.productName}</div>
+                          {s.companyName && <div className="text-[11px] text-gray-500">{s.companyName}</div>}
+                        </div>
+                        <div className="flex flex-wrap items-center sm:justify-end gap-1.5 shrink-0">
+                          <span className="inline-flex items-center text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60">
+                            Available:&nbsp;<span className="font-extrabold">{s.quantity}</span>
+                          </span>
+                          {s.unit ? (
+                            <span className="inline-flex items-center text-[10px] font-medium bg-slate-100 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                              Unit:&nbsp;<span className="font-semibold text-slate-800 dark:text-slate-200">{s.unit}</span>
+                            </span>
+                          ) : null}
+                          <span className="inline-flex items-center text-[10px] font-mono font-medium text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-700">
+                            Price:&nbsp;<span className="font-bold">QR {(s.sellingPrice || 0).toFixed(2)}</span>
+                          </span>
+                          {s.expiry && (
+                            <span className="inline-flex items-center text-[10px] font-medium text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full border border-amber-200 dark:border-amber-800/40">
+                              Expiry:&nbsp;<span className="font-semibold">{moment(s.expiry).format('DD/MM/YYYY')}</span>
+                            </span>
+                          )}
+                        </div>
                       </button>
                     ))}
                   </div>

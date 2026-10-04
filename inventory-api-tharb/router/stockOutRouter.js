@@ -9,6 +9,8 @@ router.post('/getStockOutByDocNo',isUserAuth,stockOutController.getStockOutByDoc
 router.post('/deleteStockOut',isUserAuth,stockOutController.deleteStockOut)
 router.get('/getStockOutDocNo',isUserAuth,stockOutController.getStockOutDocNo) 
 router.get('/getStockOutDocs',isUserAuth,stockOutController.getStockOutDocs)
+router.get('/trainer-expense',isUserAuth,stockOutController.getTrainerExpense)
+router.post('/trainer-expense',isUserAuth,stockOutController.getTrainerExpense)
 router.post('/stockOutBulkUpdate',isUserAuth,stockOutController.bulkUpdate)
 router.post('/stockOutUpdateQuantity/:id',isUserAuth,stockOutController.stockOutUpdateQuantity)
 router.put('/stockOutUpdateQuantity/:id',isUserAuth,stockOutController.stockOutUpdateQuantity)
