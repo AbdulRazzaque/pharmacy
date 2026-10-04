@@ -89,11 +89,12 @@ const StockOutDetails = () => {
           if (stock.totalQuantity > 0 && stock.expiryArray && stock.expiryArray.length > 0) {
             stock.expiryArray.forEach((expiryItem) => {
               if (expiryItem.quantity > 0) {
+                const productId = String(stock.product?._id || stock.product || stock._id);
                 const productName = stock.name || stock.product?.name || 'Unknown Product';
                 const expiryDate = expiryItem.expiry
                   ? moment(expiryItem.expiry).format('YYYY-MM-DD')
                   : 'no-expiry';
-                const mapKey = `${productName}_${expiryDate}`;
+                const mapKey = `${productId}_${expiryDate}`;
                 if (stockMap.has(mapKey)) {
                   const existing = stockMap.get(mapKey);
                   existing.quantity += expiryItem.quantity || 0;
@@ -109,7 +110,7 @@ const StockOutDetails = () => {
                     unit: stock.product?.unit || '',
                     quantity: expiryItem.quantity || 0,
                     sellingPrice: expiryItem.sellingPrice ?? 0,
-                    productId: stock.product?._id || stock.product,
+                    productId: productId,
                     expiry: expiryItem.expiry,
                     expiryArray: stock.expiryArray || []
                   });
@@ -404,23 +405,26 @@ const StockOutDetails = () => {
       return;
     }
     setCreating(true);
-    const promises = pendingOutItems.map((item) =>
-      axios.post(
-        `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOuts`,
-        {
-          docNo: Number(docNo),
-          date: outDate,
+    axios.post(
+      `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOuts`,
+      {
+        docNo: Number(docNo),
+        isExistingDoc: true,
+        date: outDate,
+        locationId: pendingOutItems[0]?.locationId,
+        location: pendingOutItems[0]?.locationId,
+        items: pendingOutItems.map((item) => ({
           stockId: item.stockId,
+          productId: item.productId || item.stockId,
           locationId: item.locationId,
           quantity: item.quantity,
           sellingPrice: item.sellingPrice,
           doctorName: item.doctorName || '',
           trainerName: item.trainerName || ''
-        },
-        { headers: { token: accessToken } }
-      )
-    );
-    Promise.all(promises)
+        }))
+      },
+      { headers: { token: accessToken } }
+    )
       .then(() => {
         showAlert('All Stock Out lines saved under this document', 'success');
         setShowCreateModal(false);
@@ -431,7 +435,7 @@ const StockOutDetails = () => {
       .catch((err) => {
         console.error('Create stock out error:', err.response?.data || err.message);
         showAlert(
-          err.response?.data?.message || err.response?.data?.result || 'Failed to save Stock Out',
+          err.response?.data?.error || err.response?.data?.message || err.response?.data?.result || 'Failed to save Stock Out',
           'error'
         );
       })

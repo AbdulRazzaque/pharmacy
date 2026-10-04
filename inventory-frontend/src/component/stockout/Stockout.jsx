@@ -51,10 +51,13 @@ const Stockout = () => {
     const q = (stockQuery || '').trim().toLowerCase();
     if (!q) return stocks.slice(0, 25);
     return stocks.filter(
-      (s) => (s.productName || '').toLowerCase().includes(q) || (s.type || '').toLowerCase().includes(q)
+      (s) => (s.productName || '').toLowerCase().includes(q) ||
+             (s.companyName || '').toLowerCase().includes(q) ||
+             (s.type || '').toLowerCase().includes(q)
     ).slice(0, 25);
   }, [stocks, stockQuery]);
 
+  const isSubmittingRef = useRef(false);
   const handleSaveAndPrintRef = useRef(null);
   const loadingRef = useRef(loading);
   useEffect(() => {
@@ -69,7 +72,7 @@ const Stockout = () => {
         e.preventDefault();
         e.stopPropagation();
         if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-        if (!loadingRef.current && typeof handleSaveAndPrintRef.current === 'function') {
+        if (!isSubmittingRef.current && !loadingRef.current && typeof handleSaveAndPrintRef.current === 'function') {
           handleSaveAndPrintRef.current(false);
         }
       }
@@ -115,7 +118,9 @@ const Stockout = () => {
     const q = (editStockQuery || '').trim().toLowerCase();
     if (!q) return stocks.slice(0, 25);
     return stocks.filter(
-      (s) => (s.productName || '').toLowerCase().includes(q) || (s.type || '').toLowerCase().includes(q)
+      (s) => (s.productName || '').toLowerCase().includes(q) ||
+             (s.companyName || '').toLowerCase().includes(q) ||
+             (s.type || '').toLowerCase().includes(q)
     ).slice(0, 25);
   }, [stocks, editStockQuery]);
 
@@ -343,12 +348,13 @@ const Stockout = () => {
           if (stock.totalQuantity > 0 && stock.expiryArray && stock.expiryArray.length > 0) {
             stock.expiryArray.forEach(expiryItem => {
               if (expiryItem.quantity > 0) {
+                const productId = String(stock.product?._id || stock.product || stock._id);
                 const productName = stock.name || (stock.product?.name) || 'Unknown Product';
                 const expiryDate = expiryItem.expiry ? moment(expiryItem.expiry).format('YYYY-MM-DD') : 'no-expiry';
-                const mapKey = `${productName}_${expiryDate}`;
+                const mapKey = `${productId}_${expiryDate}`;
 
                 if (stockMap.has(mapKey)) {
-                  // Add to existing entry
+                  // Add to existing entry for the exact same product and lot
                   const existing = stockMap.get(mapKey);
                   existing.quantity += expiryItem.quantity || 0;
                   existing.stockIds.push(stock._id);
@@ -365,7 +371,7 @@ const Stockout = () => {
                     quantity: expiryItem.quantity || 0,
                     purchasingPrice: expiryItem.purchasingPrice ?? 0,
                     sellingPrice: expiryItem.sellingPrice || stock.sellingPrice || stock.product?.sellingPrice || 0,
-                    productId: stock.product?._id || stock.product,
+                    productId: productId,
                     expiry: expiryItem.expiry,
                     expiryArray: stock.expiryArray || []
                   });
@@ -414,7 +420,7 @@ const Stockout = () => {
   };
 
   const getStockDisplayLabel = (stock) =>
-    `${stock.productName}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Qty: ${stock.quantity})`;
+    `${stock.productName}${stock.companyName ? ` (${stock.companyName})` : ''}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Qty: ${stock.quantity})`;
 
   const handleSelectStock = (stock) => {
     const sellingPrice = stock.sellingPrice ?? 0;
@@ -533,7 +539,10 @@ const Stockout = () => {
   };
 
   const handleSaveAndPrint = (isPrintFlow) => {
-    // 1. Validation
+    // 1. Double-submission / concurrent click guard
+    if (isSubmittingRef.current || loading) return;
+
+    // 2. Form Validation
     if (!docLocationId) {
       showAlert('Please select a location', 'error');
       return;
@@ -543,45 +552,67 @@ const Stockout = () => {
       return;
     }
 
+    isSubmittingRef.current = true;
     setLoading(true);
 
-    // 2. Save Stock OUT records sequentially to prevent race conditions.
-    // Build a sequential promise chain that STOPS immediately on any error
-    // (including backend-reported INSUFFICIENT_STOCK)
-    const buildChain = () => {
-      let chain = Promise.resolve();
-      for (const item of stockOutItems) {
-        chain = chain.then(() =>
-          axios.post(
-            `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOuts`,
-            {
-              docNo: docNo,
-              date: date,
-              stockId: item.stockId,
-              productId: item.productId || item.stockId,
-              locationId: item.locationId,
-              quantity: item.quantity,
-              sellingPrice: item.sellingPrice ?? 0,
-              discountPercentage: item.discountPercentage !== undefined ? item.discountPercentage : 0,
-              discountAmount: item.discountAmount ?? 0,
-              itemTotal: item.itemTotal ?? 0,
-              netTotal: item.netTotal ?? 0,
-              doctorName: item.doctorName || '',
-              trainerName: item.trainerName || ''
-            },
-            { headers: { token: accessToken } }
-          )
-        );
-      }
-      return chain;
+    // 3. Send ALL items in ONE atomic HTTP request
+    const stockOutPayload = {
+      isNewDocument: true,
+      docNo: docNo,
+      date: date,
+      location: docLocationId,
+      locationId: docLocationId,
+      doctorName: docDoctorName,
+      trainerName: docTrainerName,
+      remarks: comments,
+      items: stockOutItems.map(item => ({
+        stockId: item.stockId,
+        productId: item.productId || item.stockId,
+        quantity: item.quantity,
+        sellingPrice: item.sellingPrice ?? 0,
+        discountPercentage: item.discountPercentage !== undefined ? item.discountPercentage : 0,
+        discountAmount: item.discountAmount ?? 0,
+        itemTotal: item.itemTotal ?? 0,
+        netTotal: item.netTotal ?? 0,
+        expiry: item.expiry,
+        doctorName: item.doctorName || docDoctorName || '',
+        trainerName: item.trainerName || docTrainerName || ''
+      }))
     };
 
-    buildChain()
-      .then(() => {
-        // 3. Save PDF record in the database
+    axios.post(
+      `${process.env.REACT_APP_DEVELOPMENT}/api/stockOut/stockOuts`,
+      stockOutPayload,
+      { headers: { token: accessToken } }
+    )
+      .then(async (stockOutRes) => {
+        const savedHeader = stockOutRes.data?.result;
+        const finalDocNo = savedHeader?.docNo || docNo;
+
+        // Clean up UI & draft storage immediately since the stock out is fully saved
+        setStockOutItems([]);
+        setStoreIncharge('');
+        setTakenBy('');
+        setComments('');
+        setFormData({
+          stockId: '',
+          quantity: '',
+          sellingPrice: '',
+          discountPercentage: ''
+        });
+        setStockQuery('');
+        setSelectedStock(null);
+        localStorage.removeItem('stockout_draft');
+
+        fetchDocNo();
+        fetchStocks(); // Refresh stocks with authoritative database quantities
+        isSubmittingRef.current = false;
+        setLoading(false);
+
+        // 4. Save PDF record asynchronously in the database
         const selectedLoc = locations.find(l => l._id === docLocationId);
         const pdfPayload = {
-          docNo: docNo,
+          docNo: finalDocNo,
           date: date,
           locationId: docLocationId,
           locationName: selectedLoc ? selectedLoc.name : '',
@@ -603,39 +634,25 @@ const Stockout = () => {
           }))
         };
 
-        return axios.post(
-          `${process.env.REACT_APP_DEVELOPMENT}/api/stockOutPdf`,
-          pdfPayload,
-          { headers: { token: accessToken } }
-        );
-      })
-      .then((pdfRes) => {
-        const savedPdf = pdfRes.data.data;
-        showAlert('Stock Out and PDF records saved successfully! 🎉', 'success');
-
-        // Clear states and localStorage
-        setStockOutItems([]);
-        setStoreIncharge('');
-        setTakenBy('');
-        setComments('');
-        setFormData({
-          stockId: '',
-          quantity: '',
-          sellingPrice: '',
-          discountPercentage: ''
-        });
-        setStockQuery('');
-        setSelectedStock(null);
-        localStorage.removeItem('stockout_draft');
-
-        fetchDocNo();
-        fetchStocks(); // Refresh stocks
-        setLoading(false);
-
-        // Redirect to exact design print view
-        navigate(`/stockoutpdf/${savedPdf._id}?autoPrint=${isPrintFlow}`);
+        try {
+          const pdfRes = await axios.post(
+            `${process.env.REACT_APP_DEVELOPMENT}/api/stockOutPdf`,
+            pdfPayload,
+            { headers: { token: accessToken } }
+          );
+          const savedPdf = pdfRes.data?.data;
+          showAlert(`Stock Out #${finalDocNo} and PDF records saved successfully! 🎉`, 'success');
+          if (savedPdf?._id) {
+            navigate(`/stockoutpdf/${savedPdf._id}?autoPrint=${isPrintFlow}`);
+          }
+        } catch (pdfErr) {
+          console.warn('StockOutPdf record creation warning:', pdfErr);
+          showAlert(`Stock Out #${finalDocNo} saved successfully! 🎉`, 'success');
+        }
       })
       .catch((err) => {
+        isSubmittingRef.current = false;
+        setLoading(false);
         const data = err.response?.data;
         // Parse structured INSUFFICIENT_STOCK error from backend
         if (data?.code === 'INSUFFICIENT_STOCK') {
@@ -651,8 +668,7 @@ const Stockout = () => {
         } else {
           showAlert(err.response?.data?.error || err.response?.data?.result || err.response?.data?.message || 'Failed to save stock out transaction.', 'error');
         }
-        console.error(err);
-        setLoading(false);
+        console.error('Stock Out Save Error:', err);
       });
   };
 

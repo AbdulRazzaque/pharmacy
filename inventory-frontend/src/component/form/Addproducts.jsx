@@ -64,11 +64,13 @@ const Addproducts = () => {
   const accessToken = getToken();
   const isAdmin = (getUserInfo()?.role || '').toLowerCase() === 'admin';
 
-  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
     defaultValues: {
       requiresExpiry: true
     }
   });
+
+  const selectedUnit = watch('unit');
 
   const fetchProducts = useCallback(() => {
     return axios
@@ -487,10 +489,14 @@ const Addproducts = () => {
                   <option value="">Select unit</option>
                   <option value="Kg">Kg</option>
                   <option value="Liter">Liter</option>
+                  <option value="ML">ML</option>
                   <option value="Pieces">Pieces</option>
                   <option value="Box">Box</option>
                   <option value="Bottle">Bottle</option>
                   <option value="Packet">Packet</option>
+                  {selectedUnit && !['Kg', 'Liter', 'ML', 'Pieces', 'Box', 'Bottle', 'Packet'].includes(selectedUnit) && (
+                    <option value={selectedUnit}>{selectedUnit}</option>
+                  )}
                 </select>
                 {errors.unit && (
                   <p className="text-xs text-rose-600 font-medium">{errors.unit.message}</p>

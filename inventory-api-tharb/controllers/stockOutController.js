@@ -7,33 +7,22 @@ const Product = require("../models/ProductModule");
 const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
 
-const getNextStockOutDocNo = async (session = null) => {
-    let query = StockOutHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 });
+const peekNextStockOutDocNo = async (session = null) => {
+    let query = StockOutHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 }).select('docNo');
     if (session) query = query.session(session);
     const maxHeader = await query.lean();
 
     let maxDocNo = 0;
     if (maxHeader && maxHeader.docNo !== undefined && maxHeader.docNo !== null) {
         const num = Number(maxHeader.docNo);
-        if (!isNaN(num)) {
+        if (Number.isFinite(num)) {
             maxDocNo = num;
         }
     }
 
-    const nextDocNo = maxDocNo + 1;
-
-    try {
-        await Sequence.findOneAndUpdate(
-            { _id: "stockOutDocument" },
-            { $set: { seq: nextDocNo } },
-            { upsert: true, session }
-        );
-    } catch (e) {
-        console.error("Error updating Sequence for stockOutDocument:", e);
-    }
-
-    return nextDocNo;
+    return maxDocNo + 1;
 };
+const getNextStockOutDocNo = peekNextStockOutDocNo;
 
 const updateHeaderTotals = async (headerId, session = null) => {
     if (!headerId) return;
@@ -47,6 +36,21 @@ const updateHeaderTotals = async (headerId, session = null) => {
     header.totalDiscount = Math.round(totalDiscount * 100) / 100;
     header.grandTotal = Math.round(grandTotal * 100) / 100;
     await header.save(session ? { session } : {});
+};
+
+const getAuthoritativeStock = async (productId, session = null) => {
+    if (!productId) return { totalAvailable: 0, balances: [] };
+    const pId = new mongoose.Types.ObjectId(String(productId));
+    const balances = await StockBalance.find({
+        productId: pId,
+        quantity: { $gt: 0 }
+    }).sort({ expiry: 1, createdAt: 1 }).session(session);
+
+    const totalAvailable = balances.reduce((sum, b) => sum + (Number(b.quantity) || 0), 0);
+    return {
+        totalAvailable,
+        balances
+    };
 };
 
 const stockOutController = {
@@ -63,70 +67,57 @@ const stockOutController = {
     async createStockOut(req, res) {
         const executeCreate = async (session) => {
             const body = req.body || {};
-            let parsedDocNo = Number(body.docNo);
-            if (!parsedDocNo) {
-                parsedDocNo = await getNextStockOutDocNo(session);
-            }
-
-            let existingHeader = await StockOutHeader.findOne({ docNo: parsedDocNo }).session(session);
 
             let items = [];
             if (Array.isArray(body.items) && body.items.length > 0) {
-                items = body.items;
+                items = body.items.filter(i => !i.isDeleted);
             } else if (Array.isArray(body.updates) && body.updates.length > 0) {
-                items = body.updates;
+                items = body.updates.filter(i => !i.isDeleted);
             } else if (body.productId || body.stockId) {
                 items = [{
                     productId: body.productId || body.stockId,
                     quantity: body.quantity,
                     sellingPrice: body.sellingPrice,
                     discountPercentage: body.discountPercentage !== undefined ? body.discountPercentage : 0,
-                    remarks: body.remarks || body.doctorName || body.trainerName || ""
+                    remarks: body.remarks || body.doctorName || body.trainerName || "",
+                    doctorName: body.doctorName || "",
+                    trainerName: body.trainerName || "",
+                    expiry: body.expiry,
+                    batchNumber: body.batchNumber
                 }];
             }
 
             const location = body.location ||
                 body.locationId ||
-                existingHeader?.location ||
                 items.find(i => i.locationId || i.location)?.locationId ||
                 items.find(i => i.locationId || i.location)?.location;
 
-            const date = body.date ? new Date(body.date) : (existingHeader?.date || new Date());
-            const remarks = body.remarks || body.doctorName || body.trainerName || existingHeader?.remarks || "";
+            const date = body.date ? new Date(body.date) : new Date();
+            const remarks = body.remarks || body.doctorName || body.trainerName || "";
 
-            if (!location || items.length === 0) {
-                const err = new Error('location and items are required');
+            if (!location) {
+                const err = new Error('Receiving location is required');
                 err.statusCode = 400;
                 throw err;
             }
 
-            let header = existingHeader;
-            if (!header) {
-                const headerArr = await StockOutHeader.create(
-                    [{ docNo: parsedDocNo, location, date, remarks, createdBy: req.user?._id || null, createdByRole: req.user?.role || "user" }],
-                    session ? { session } : {}
-                );
-                header = headerArr[0];
-                await Sequence.findOneAndUpdate(
-                    { _id: "stockOutDocument" },
-                    { $max: { seq: parsedDocNo } },
-                    { upsert: true, session }
-                );
-            } else if (location && String(header.location) !== String(location)) {
-                header.location = location;
-                await header.save(session ? { session } : {});
+            if (items.length === 0) {
+                const err = new Error('At least one item is required to dispense');
+                err.statusCode = 400;
+                throw err;
             }
 
-            const issuedItems = [];
-            const updatedProductIds = new Set();
+            // ═════════════════════════════════════════════════════════════════
+            // PHASE 1: VALIDATE ALL (READ-ONLY, ZERO MUTATIONS)
+            // ═════════════════════════════════════════════════════════════════
 
-            for (const item of items) {
-                if (item.isDeleted) continue;
+            // 1.1 Field validation for every line item
+            for (let idx = 0; idx < items.length; idx++) {
+                const item = items[idx];
                 const targetProductId = item.productId || item.stockId;
-
-                // ── Input validation ──────────────────────────────────────────────────────
                 const rawQty = item.quantity;
                 const requestedQty = Number(rawQty);
+
                 if (
                     !targetProductId ||
                     rawQty === null ||
@@ -136,7 +127,7 @@ const stockOutController = {
                     !Number.isInteger(requestedQty) ||
                     requestedQty <= 0
                 ) {
-                    const err = new Error('Quantity must be a positive integer greater than zero');
+                    const err = new Error(`Item #${idx + 1}: Quantity must be a positive integer greater than zero`);
                     err.statusCode = 400;
                     throw err;
                 }
@@ -144,77 +135,182 @@ const stockOutController = {
                 const rawDisc = item.discountPercentage !== undefined ? item.discountPercentage : (body.discountPercentage !== undefined ? body.discountPercentage : 0);
                 const itemDiscPct = Number(rawDisc || 0);
                 if (isNaN(itemDiscPct) || itemDiscPct < 0 || itemDiscPct > 100) {
-                    const err = new Error(`Invalid discount percentage (${rawDisc}) for item`);
+                    const err = new Error(`Item #${idx + 1}: Invalid discount percentage (${rawDisc})`);
+                    err.statusCode = 400;
+                    throw err;
+                }
+            }
+
+            // 1.2 Group requested quantities by product (handles multiple lines of same product)
+            const productTotalRequested = new Map();
+            for (const item of items) {
+                const pId = String(item.productId || item.stockId);
+                const qty = Number(item.quantity);
+                productTotalRequested.set(pId, (productTotalRequested.get(pId) || 0) + qty);
+            }
+
+            // 1.3 Validate product existence and available stock for all products
+            const productDocMap = new Map();
+            for (const [pId, totalRequested] of productTotalRequested.entries()) {
+                if (!mongoose.Types.ObjectId.isValid(pId)) {
+                    const err = new Error(`Invalid Product ID: ${pId}`);
                     err.statusCode = 400;
                     throw err;
                 }
 
-                let pId = String(targetProductId);
                 const productDoc = await Product.findById(pId).session(session);
-                if (!productDoc) {
-                    const err = new Error(`Product not found for ID: ${pId}`);
+                if (!productDoc || productDoc.isDeleted) {
+                    const err = new Error(`Product not found or inactive for ID: ${pId}`);
                     err.statusCode = 404;
                     throw err;
                 }
+                productDocMap.set(pId, productDoc);
 
-                // ── Pre-validation: check total available ─────────────────────────────────
-                // (FEFO sorted, positive qty only)
-                const balancesForCheck = await StockBalance.find({
-                    productId: mongoose.Types.ObjectId(pId),
-                    quantity: { $gt: 0 }
-                }).sort({ expiry: 1, createdAt: 1 }).session(session);
-
-                const totalAvailable = balancesForCheck.reduce((sum, b) => sum + (b.quantity || 0), 0);
-                if (totalAvailable < requestedQty) {
-                    const err = new Error(`Insufficient stock for "${productDoc.name}". Requested: ${requestedQty}, Available: ${totalAvailable}`);
+                const { totalAvailable } = await getAuthoritativeStock(pId, session);
+                if (totalAvailable < totalRequested) {
+                    const err = new Error(`Insufficient stock for "${productDoc.name}". Requested: ${totalRequested}, Available: ${totalAvailable}`);
                     err.statusCode = 409;
                     err.code = 'INSUFFICIENT_STOCK';
                     err.availableQuantity = totalAvailable;
-                    err.requestedQuantity = requestedQty;
+                    err.requestedQuantity = totalRequested;
                     err.productName = productDoc.name;
+                    err.productId = pId;
                     throw err;
                 }
+            }
 
-                // ── Atomic FEFO batch deduction ───────────────────────────────────────────
-                // Use findOneAndUpdate with a $gte guard to prevent race conditions.
-                // If the batch was consumed by a concurrent request between our check
-                // and our update, the update will find no matching document and we
-                // fall through to the next batch — or throw INSUFFICIENT_STOCK.
+            // ═════════════════════════════════════════════════════════════════
+            // PHASE 2: WRITE DATA (ATOMIC TRANSACTION)
+            // ═════════════════════════════════════════════════════════════════
+            // All items and all products passed Phase 1 validation.
+            // Now create header, deduct stock, create line items and transactions.
+
+            const isAppend = body.isExistingDoc === true || body.append === true;
+            let header = null;
+            let parsedDocNo = null;
+
+            if (isAppend) {
+                const targetDocNo = Number(body.docNo);
+                if (!targetDocNo || isNaN(targetDocNo)) {
+                    const err = new Error('Valid document number is required when appending to an existing document');
+                    err.statusCode = 400;
+                    throw err;
+                }
+                header = await StockOutHeader.findOne({ docNo: targetDocNo }).session(session);
+                if (!header) {
+                    const err = new Error(`Stock Out document #${targetDocNo} not found`);
+                    err.statusCode = 404;
+                    throw err;
+                }
+                parsedDocNo = header.docNo;
+                if (remarks && !header.remarks) {
+                    header.remarks = remarks;
+                    if (session) await header.save({ session });
+                    else await StockOutHeader.findByIdAndUpdate(header._id, { remarks });
+                }
+            } else {
+                // Creating a NEW Stock Out document with atomic concurrency protection
+                let attempts = 0;
+                const maxAttempts = 10;
+                while (!header && attempts < maxAttempts) {
+                    attempts++;
+
+                    // Authoritative lookup: highest committed docNo in StockOutHeader
+                    const latestHeader = await StockOutHeader.findOne({ docNo: { $exists: true, $ne: null } })
+                        .sort({ docNo: -1 })
+                        .select('docNo')
+                        .session(session)
+                        .lean();
+
+                    let candidateDocNo = 1;
+                    if (latestHeader && latestHeader.docNo !== undefined && latestHeader.docNo !== null) {
+                        const num = Number(latestHeader.docNo);
+                        if (Number.isFinite(num)) {
+                            candidateDocNo = num + 1;
+                        }
+                    }
+
+                    try {
+                        const headerArr = await StockOutHeader.create(
+                            [{
+                                docNo: candidateDocNo,
+                                location,
+                                date,
+                                remarks,
+                                createdBy: req.user?._id || null,
+                                createdByRole: req.user?.role || "user"
+                            }],
+                            session ? { session } : {}
+                        );
+                        header = headerArr[0];
+                        parsedDocNo = header.docNo;
+                    } catch (createErr) {
+                        const isDupKey = createErr.code === 11000 ||
+                            (createErr.name === 'MongoServerError' && createErr.code === 11000) ||
+                            (createErr.message && createErr.message.includes('E11000 duplicate key'));
+
+                        if (isDupKey && attempts < maxAttempts) {
+                            await new Promise(r => setTimeout(r, Math.floor(Math.random() * 25) + 10));
+                            continue;
+                        }
+                        throw createErr;
+                    }
+                }
+
+                if (!header) {
+                    const err = new Error('Could not allocate unique Stock Out document number after multiple attempts');
+                    err.statusCode = 500;
+                    throw err;
+                }
+            }
+
+            await Sequence.findOneAndUpdate(
+                { _id: "stockOutDocument" },
+                { $set: { seq: header.docNo } },
+                { upsert: true, session: session || undefined }
+            );
+
+            const issuedItems = [];
+            const touchedProductIds = new Set();
+
+            for (const item of items) {
+                const pId = String(item.productId || item.stockId);
+                const productDoc = productDocMap.get(pId);
+                const requestedQty = Number(item.quantity);
+                const rawDisc = item.discountPercentage !== undefined ? item.discountPercentage : (body.discountPercentage !== undefined ? body.discountPercentage : 0);
+                const itemDiscPct = Number(rawDisc || 0);
+
+                // Fetch current active balances for deduction (FEFO sorted)
+                const balances = await StockBalance.find({
+                    productId: new mongoose.Types.ObjectId(pId),
+                    quantity: { $gt: 0 }
+                }).sort({ expiry: 1, createdAt: 1 }).session(session);
+
                 let remaining = requestedQty;
-                for (const bal of balancesForCheck) {
+                for (const bal of balances) {
                     if (remaining <= 0) break;
-
                     const takeQty = Math.min(remaining, bal.quantity);
 
-                    // Atomic: only deduct if the batch still has >= takeQty units
+                    // Atomic deduction with $gte TOCTOU guard
                     const updatedBal = await StockBalance.findOneAndUpdate(
-                        {
-                            _id: bal._id,
-                            quantity: { $gte: takeQty }   // ← TOCTOU guard
-                        },
+                        { _id: bal._id, quantity: { $gte: takeQty } },
                         { $inc: { quantity: -takeQty } },
                         { new: true, session }
                     );
 
                     if (!updatedBal) {
-                        // Concurrent request consumed this batch — re-check total available
-                        const recheck = await StockBalance.find({
-                            productId: mongoose.Types.ObjectId(pId),
-                            quantity: { $gt: 0 }
-                        }).session(session);
-                        const recheckTotal = recheck.reduce((s, b) => s + (b.quantity || 0), 0);
-                        const err = new Error(`Insufficient stock for "${productDoc.name}". Requested: ${remaining}, Available: ${recheckTotal}`);
+                        const recheck = await getAuthoritativeStock(pId, session);
+                        const err = new Error(`Stock for "${productDoc.name}" changed concurrently. Available: ${recheck.totalAvailable}, Requested: ${remaining}`);
                         err.statusCode = 409;
                         err.code = 'INSUFFICIENT_STOCK';
-                        err.availableQuantity = recheckTotal;
+                        err.availableQuantity = recheck.totalAvailable;
                         err.requestedQuantity = requestedQty;
                         err.productName = productDoc.name;
                         throw err;
                     }
 
-                    const prevQty = bal.quantity; // before deduction (pre-recorded from check above)
+                    const prevQty = bal.quantity;
                     const newQty = updatedBal.quantity;
-
                     const itemPrice = Number(item.sellingPrice ?? bal.sellingPrice ?? 0);
                     const itemTotal = Math.round((takeQty * itemPrice) * 100) / 100;
                     const discountAmount = Math.round((itemTotal * itemDiscPct / 100) * 100) / 100;
@@ -248,7 +344,7 @@ const stockOutController = {
                         previousBalance: prevQty,
                         newBalance: newQty,
                         unitCost: bal.purchasingPrice || 0,
-                        sellingPrice: Number(item.sellingPrice ?? bal.sellingPrice ?? 0),
+                        sellingPrice: itemPrice,
                         transactionType: "STOCK_OUT",
                         referenceType: "StockOut",
                         referenceId: outItem._id,
@@ -264,24 +360,21 @@ const stockOutController = {
                 }
 
                 if (remaining > 0) {
-                    // Batches ran out mid-loop despite pre-check — race condition fallback
-                    const finalCheck = await StockBalance.find({
-                        productId: mongoose.Types.ObjectId(pId), quantity: { $gt: 0 }
-                    }).session(session);
-                    const finalTotal = finalCheck.reduce((s, b) => s + (b.quantity || 0), 0);
-                    const err = new Error(`Insufficient stock for "${productDoc.name}". Requested: ${requestedQty}, Available: ${finalTotal}`);
+                    const recheck = await getAuthoritativeStock(pId, session);
+                    const err = new Error(`Insufficient stock remaining for "${productDoc.name}". Available: ${recheck.totalAvailable}, Requested: ${remaining}`);
                     err.statusCode = 409;
                     err.code = 'INSUFFICIENT_STOCK';
-                    err.availableQuantity = finalTotal;
+                    err.availableQuantity = recheck.totalAvailable;
                     err.requestedQuantity = requestedQty;
                     err.productName = productDoc.name;
                     throw err;
                 }
 
-                updatedProductIds.add(pId);
+                touchedProductIds.add(pId);
             }
 
-            for (const pId of updatedProductIds) {
+            // Recalculate running balances for all touched products
+            for (const pId of touchedProductIds) {
                 await recalculateRunningBalances(pId, session);
             }
 
@@ -291,45 +384,57 @@ const stockOutController = {
             return { header: updatedHeader, items: issuedItems };
         };
 
-        try {
-            const session = await mongoose.startSession();
-            let useTransaction = true;
-            try {
-                session.startTransaction();
-            } catch (e) {
-                useTransaction = false;
-                session.endSession();
+        const handleError = (err, res) => {
+            console.error('createStockOut error:', err);
+            if (err.code === 'INSUFFICIENT_STOCK') {
+                return res.status(409).json({
+                    msg: 'error',
+                    code: 'INSUFFICIENT_STOCK',
+                    error: err.message,
+                    availableQuantity: err.availableQuantity,
+                    requestedQuantity: err.requestedQuantity,
+                    productName: err.productName
+                });
             }
+            if (err.statusCode === 400) {
+                return res.status(400).json({ msg: 'error', error: err.message });
+            }
+            if (err.statusCode === 404) {
+                return res.status(404).json({ msg: 'error', error: err.message });
+            }
+            return res.status(500).json({ msg: 'error', error: err.message });
+        };
 
-            const handleError = (err, res) => {
-                console.error('createStockOut error:', err);
-                if (err.code === 'INSUFFICIENT_STOCK') {
-                    return res.status(409).json({
-                        msg: 'error',
-                        code: 'INSUFFICIENT_STOCK',
-                        error: err.message,
-                        availableQuantity: err.availableQuantity,
-                        requestedQuantity: err.requestedQuantity,
-                        productName: err.productName
-                    });
-                }
-                if (err.statusCode === 400) {
-                    return res.status(400).json({ msg: 'error', error: err.message });
-                }
-                if (err.statusCode === 404) {
-                    return res.status(404).json({ msg: 'error', error: err.message });
-                }
-                return res.status(500).json({ msg: 'error', error: err.message });
-            };
+        const runTransactionWithRetry = async () => {
+            let txAttempts = 0;
+            const maxTxAttempts = 5;
 
-            if (useTransaction) {
+            while (txAttempts < maxTxAttempts) {
+                txAttempts++;
+                const session = await mongoose.startSession();
+                let useTransaction = true;
+                try {
+                    session.startTransaction();
+                } catch (e) {
+                    useTransaction = false;
+                    session.endSession();
+                }
+
+                if (!useTransaction) {
+                    return await executeCreate(null);
+                }
+
                 try {
                     const result = await executeCreate(session);
                     await session.commitTransaction();
                     session.endSession();
-                    return res.status(200).json({ msg: 'success', result: { ...result.header, items: result.items } });
+                    return result;
                 } catch (txError) {
-                    await session.abortTransaction();
+                    try {
+                        await session.abortTransaction();
+                    } catch (abortErr) {
+                        // ignore abort error
+                    }
                     session.endSession();
 
                     const errorMsg = txError.message || '';
@@ -340,26 +445,32 @@ const stockOutController = {
                         txError.codeName === 'IllegalOperation';
 
                     if (isTxUnsupported) {
-                        try {
-                            const result = await executeCreate(null);
-                            return res.status(200).json({ msg: 'success', result: { ...result.header, items: result.items } });
-                        } catch (fallbackError) {
-                            return handleError(fallbackError, res);
-                        }
+                        return await executeCreate(null);
                     }
-                    return handleError(txError, res);
-                }
-            } else {
-                try {
-                    const result = await executeCreate(null);
-                    return res.status(200).json({ msg: 'success', result: { ...result.header, items: result.items } });
-                } catch (fallbackError) {
-                    return handleError(fallbackError, res);
+
+                    const isDupKey = txError.code === 11000 ||
+                        (txError.name === 'MongoServerError' && txError.code === 11000) ||
+                        errorMsg.includes('E11000 duplicate key');
+                    const isWriteConflict = txError.code === 112 ||
+                        txError.codeName === 'WriteConflict' ||
+                        errorMsg.includes('WriteConflict');
+                    const isTransient = txError.hasErrorLabel && txError.hasErrorLabel('TransientTransactionError');
+
+                    if ((isDupKey || isWriteConflict || isTransient) && txAttempts < maxTxAttempts) {
+                        await new Promise(r => setTimeout(r, Math.floor(Math.random() * 30) + 15));
+                        continue;
+                    }
+
+                    throw txError;
                 }
             }
+        };
+
+        try {
+            const result = await runTransactionWithRetry();
+            return res.status(200).json({ msg: 'success', result: { ...result.header, items: result.items } });
         } catch (err) {
-            console.error('createStockOut outer error:', err);
-            return res.status(500).json({ msg: 'error', error: err.message });
+            return handleError(err, res);
         }
     },
 
@@ -368,6 +479,7 @@ const stockOutController = {
     },
 
     async stockOutAgainByDocNo(req, res) {
+        req.body = { ...req.body, isExistingDoc: true };
         return stockOutController.createStockOut(req, res);
     },
 

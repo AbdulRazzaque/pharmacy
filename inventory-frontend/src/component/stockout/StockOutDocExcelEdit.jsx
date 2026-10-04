@@ -135,9 +135,10 @@ const StockOutDocExcelEdit = () => {
         (stockRes.data.result || []).forEach(stock => {
           if (stock.expiryArray && stock.expiryArray.length > 0) {
             stock.expiryArray.forEach(expiryItem => {
+              const productId = String(stock.product?._id || stock.product || stock._id);
               const productName = stock.name || stock.product?.name || 'Unknown';
               const expiryDate = expiryItem.expiry ? moment(expiryItem.expiry).format('YYYY-MM-DD') : 'no-expiry';
-              const mapKey = `${productName}_${expiryDate}`;
+              const mapKey = `${productId}_${expiryDate}`;
               if (stockMap.has(mapKey)) {
                 const existing = stockMap.get(mapKey);
                 existing.quantity += expiryItem.quantity || 0;
@@ -152,7 +153,7 @@ const StockOutDocExcelEdit = () => {
                   quantity: expiryItem.quantity || 0,
                   purchasingPrice: expiryItem.purchasingPrice ?? 0,
                   sellingPrice: expiryItem.sellingPrice ?? 0,
-                  productId: stock.product?._id || stock.product,
+                  productId: productId,
                   expiry: expiryItem.expiry || null,
                 });
               }
