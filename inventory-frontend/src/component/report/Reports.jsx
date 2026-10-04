@@ -818,7 +818,7 @@ const Reports = () => {
 
       // Title Text
       const personInfo = (trainerName || '').toUpperCase();
-      const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `(MR. ${personInfo}) ` : ''}${dateRangeStr}`;
+      const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `( ${personInfo}) ` : ''}${dateRangeStr}`;
 
       // Styles
       const titleStyle = {
@@ -1622,7 +1622,7 @@ const Reports = () => {
             const trainerName = sample.trainerName || '';
             const personInfo = (trainerName || '').toUpperCase();
 
-            const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `(MR. ${personInfo}) ` : ''}from 1 ${monthName} ${monthlyYear} to ${lastDayInMonth} ${monthName} ${monthlyYear}`;
+            const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `( ${personInfo}) ` : ''}from 1 ${monthName} ${monthlyYear} to ${lastDayInMonth} ${monthName} ${monthlyYear}`;
 
             const totalLocQty = locItems.reduce((s, r) => s + (r.quantity ?? 0), 0);
             // All items in print are non-discounted, so net = gross
