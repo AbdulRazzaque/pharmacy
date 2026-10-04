@@ -6,6 +6,9 @@ const Location = require("../models/LocationModule");
 const Supplier = require("../models/Supplier.Module");
 const StockInHeader = require("../models/StockInHeaderModule");
 const StockInItem = require("../models/StockInItemModule");
+const StockOutHeader = require("../models/StockOutHeaderModule");
+const StockOutItem = require("../models/StockOutItemModule");
+const StockOutPdf = require("../models/StockOutPdfModule");
 
 const parseDateRange = (startDate, endDate, from, to) => {
     let start = null;
@@ -92,7 +95,6 @@ const reportController = {
             });
 
             // Fetch StockOutPdf records for docNo level overrides/fallbacks
-            const StockOutPdf = require("../models/StockOutPdfModule");
             const docNos = Array.from(new Set(txns.map(t => Number(t.docNo)).filter(Boolean)));
             const pdfRecords = docNos.length > 0 
                 ? await StockOutPdf.find({ docNo: { $in: docNos } }).lean()
@@ -104,6 +106,27 @@ const reportController = {
                 }
             });
 
+            // Fetch authoritative StockOutItems
+            const itemIds = txns.map(t => t.referenceId).filter(Boolean);
+            const stockOutItems = itemIds.length > 0
+                ? await StockOutItem.find({ _id: { $in: itemIds } }).lean()
+                : [];
+            const itemMap = new Map();
+            stockOutItems.forEach(item => {
+                itemMap.set(String(item._id), item);
+            });
+
+            // Fetch StockOutHeaders for document totals / trainer fallbacks
+            const headers = docNos.length > 0
+                ? await StockOutHeader.find({ docNo: { $in: docNos } }).lean()
+                : [];
+            const headerMap = new Map();
+            headers.forEach(h => {
+                if (h.docNo) {
+                    headerMap.set(Number(h.docNo), h);
+                }
+            });
+
             let rows = txns.map(t => {
                 const qty = Math.abs(t.quantityDelta || 0);
                 const rate = Number(t.sellingPrice || t.unitCost || 0);
@@ -111,10 +134,50 @@ const reportController = {
                 const locIdStr = String(locObj?._id || t.locationId || '');
                 const fallbackLoc = locationMap.get(locIdStr) || null;
                 const pdfObj = t.docNo ? pdfMap.get(Number(t.docNo)) : null;
+                const headerObj = t.docNo ? headerMap.get(Number(t.docNo)) : null;
+                const stockItem = t.referenceId ? itemMap.get(String(t.referenceId)) : null;
 
                 const resolvedLocationName = locObj?.name || fallbackLoc?.name || pdfObj?.locationName || 'Default Location';
                 const resolvedDoctorName = locObj?.doctorName || fallbackLoc?.doctorName || pdfObj?.veterinarian || '';
                 const resolvedTrainerName = locObj?.trainerName || fallbackLoc?.trainerName || pdfObj?.trainerName || '';
+
+                // Authoritative financial calculations from saved database records
+                let grossAmount = Math.round((qty * rate) * 100) / 100;
+                let discountPercentage = 0;
+                let discountAmount = 0;
+                let netTotal = grossAmount;
+
+                if (stockItem) {
+                    if (stockItem.itemTotal !== undefined && stockItem.itemTotal !== null) {
+                        grossAmount = Number(stockItem.itemTotal);
+                    }
+                    if (stockItem.discountPercentage !== undefined && stockItem.discountPercentage !== null) {
+                        discountPercentage = Number(stockItem.discountPercentage);
+                    }
+                    if (stockItem.discountAmount !== undefined && stockItem.discountAmount !== null) {
+                        discountAmount = Number(stockItem.discountAmount);
+                    } else if (discountPercentage > 0) {
+                        discountAmount = Math.round((grossAmount * discountPercentage / 100) * 100) / 100;
+                    }
+                    if (stockItem.netTotal !== undefined && stockItem.netTotal !== null) {
+                        netTotal = Number(stockItem.netTotal);
+                    } else {
+                        netTotal = Math.round((grossAmount - discountAmount) * 100) / 100;
+                    }
+                } else if (pdfObj && Array.isArray(pdfObj.items)) {
+                    const pdfItem = pdfObj.items.find(pi => String(pi.productId) === String(t.productId?._id || t.productId));
+                    if (pdfItem) {
+                        discountPercentage = Number(pdfItem.discountPercentage || 0);
+                        discountAmount = Number(pdfItem.discountAmount || 0);
+                        grossAmount = Number(pdfItem.itemTotal || (qty * rate));
+                        netTotal = Number(pdfItem.netTotal !== undefined ? pdfItem.netTotal : (grossAmount - discountAmount));
+                    }
+                }
+
+                // Final safety round
+                grossAmount = Math.round(grossAmount * 100) / 100;
+                discountAmount = Math.round(discountAmount * 100) / 100;
+                netTotal = Math.round(netTotal * 100) / 100;
 
                 return {
                     _id: t._id,
@@ -130,8 +193,16 @@ const reportController = {
                     rate: rate,
                     purchasingPrice: t.unitCost || 0,
                     sellingPrice: rate,
-                    totalAmount: qty * rate,
-                    total: qty * rate,
+                    grossAmount: grossAmount,
+                    grossTotal: grossAmount,
+                    itemTotal: grossAmount,
+                    discountPercentage: discountPercentage,
+                    discountPercent: discountPercentage,
+                    discountAmount: discountAmount,
+                    netAmount: netTotal,
+                    netTotal: netTotal,
+                    totalAmount: netTotal, // MUST use Net Total after discount
+                    total: netTotal,       // MUST use Net Total after discount
                     location: locObj || fallbackLoc || { _id: locIdStr, name: resolvedLocationName, doctorName: resolvedDoctorName, trainerName: resolvedTrainerName },
                     locationId: locIdStr || 'default',
                     locationName: resolvedLocationName,
@@ -350,10 +421,49 @@ const reportController = {
                 txns = txns.filter(t => (t.locationId?.doctorName || '').toLowerCase().includes(qDoc) || (t.remarks || '').toLowerCase().includes(qDoc));
             }
 
+            const itemIds = txns.map(t => t.referenceId).filter(Boolean);
+            const stockOutItems = itemIds.length > 0
+                ? await StockOutItem.find({ _id: { $in: itemIds } }).lean()
+                : [];
+            const itemMap = new Map();
+            stockOutItems.forEach(item => {
+                itemMap.set(String(item._id), item);
+            });
+
             const rows = txns.map(t => {
                 const qty = Math.abs(t.quantityDelta || 0);
                 const price = Number(t.sellingPrice || t.unitCost || 0);
                 const locObj = t.locationId || {};
+                const stockItem = t.referenceId ? itemMap.get(String(t.referenceId)) : null;
+
+                let grossAmount = Math.round((qty * price) * 100) / 100;
+                let discountPercentage = 0;
+                let discountAmount = 0;
+                let netTotal = grossAmount;
+
+                if (stockItem) {
+                    if (stockItem.itemTotal !== undefined && stockItem.itemTotal !== null) {
+                        grossAmount = Number(stockItem.itemTotal);
+                    }
+                    if (stockItem.discountPercentage !== undefined && stockItem.discountPercentage !== null) {
+                        discountPercentage = Number(stockItem.discountPercentage);
+                    }
+                    if (stockItem.discountAmount !== undefined && stockItem.discountAmount !== null) {
+                        discountAmount = Number(stockItem.discountAmount);
+                    } else if (discountPercentage > 0) {
+                        discountAmount = Math.round((grossAmount * discountPercentage / 100) * 100) / 100;
+                    }
+                    if (stockItem.netTotal !== undefined && stockItem.netTotal !== null) {
+                        netTotal = Number(stockItem.netTotal);
+                    } else {
+                        netTotal = Math.round((grossAmount - discountAmount) * 100) / 100;
+                    }
+                }
+
+                grossAmount = Math.round(grossAmount * 100) / 100;
+                discountAmount = Math.round(discountAmount * 100) / 100;
+                netTotal = Math.round(netTotal * 100) / 100;
+
                 return {
                     _id: t._id,
                     docNo: t.docNo,
@@ -367,8 +477,16 @@ const reportController = {
                     quantity: qty,
                     sellingPrice: price,
                     unitPrice: price,
-                    totalAmount: qty * price,
-                    total: qty * price,
+                    grossAmount: grossAmount,
+                    grossTotal: grossAmount,
+                    itemTotal: grossAmount,
+                    discountPercentage: discountPercentage,
+                    discountPercent: discountPercentage,
+                    discountAmount: discountAmount,
+                    netAmount: netTotal,
+                    netTotal: netTotal,
+                    totalAmount: netTotal,
+                    total: netTotal,
                     location: locObj,
                     locationId: locObj._id || null,
                     locationName: locObj.name || '',
@@ -434,13 +552,35 @@ const reportController = {
                 .sort({ date: -1, createdAt: -1 })
                 .lean();
 
+            const itemIds = txns.map(t => t.referenceId).filter(Boolean);
+            const stockOutItems = itemIds.length > 0
+                ? await StockOutItem.find({ _id: { $in: itemIds } }).lean()
+                : [];
+            const itemMap = new Map();
+            stockOutItems.forEach(item => {
+                itemMap.set(String(item._id), item);
+            });
+
             const locMap = new Map();
             txns.forEach(t => {
                 const locObj = t.locationId || {};
                 const locKey = String(locObj._id || 'unassigned');
                 const locName = locObj.name || 'Unassigned Location';
                 const qty = Math.abs(t.quantityDelta || 0);
-                const amt = qty * Number(t.sellingPrice || t.unitCost || 0);
+                const rate = Number(t.sellingPrice || t.unitCost || 0);
+                const stockItem = t.referenceId ? itemMap.get(String(t.referenceId)) : null;
+
+                let netAmt = qty * rate;
+                if (stockItem) {
+                    if (stockItem.netTotal !== undefined && stockItem.netTotal !== null) {
+                        netAmt = Number(stockItem.netTotal);
+                    } else {
+                        const iTot = Number(stockItem.itemTotal ?? (qty * rate));
+                        const dAmt = Number(stockItem.discountAmount ?? 0);
+                        netAmt = iTot - dAmt;
+                    }
+                }
+                const amt = Math.round(netAmt * 100) / 100;
 
                 if (!locMap.has(locKey)) {
                     locMap.set(locKey, {

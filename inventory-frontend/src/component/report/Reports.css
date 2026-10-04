@@ -634,6 +634,14 @@
   color: #2563eb;
 }
 
+.reports-kpi-card.purple .reports-kpi-value {
+  color: #7c3aed;
+}
+
+.reports-kpi-card.amber .reports-kpi-value {
+  color: #d97706;
+}
+
 /* Chart container */
 .reports-chart-wrap {
   height: 320px;
@@ -829,6 +837,135 @@
   text-align: right;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-weight: 700;
+}
+
+
+/* ====================================================
+   Monthly Report – compact column classes (col-mr-*)
+   Tighter widths to minimize horizontal scrolling
+   ==================================================== */
+.reports-table th.col-mr-date,
+.reports-table td.col-mr-date {
+  width: 78px;
+  min-width: 78px;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.reports-table th.col-mr-docno,
+.reports-table td.col-mr-docno {
+  width: 72px;
+  min-width: 72px;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.reports-table th.col-mr-location,
+.reports-table td.col-mr-location {
+  width: 110px;
+  min-width: 90px;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+
+.reports-table th.col-mr-doctor,
+.reports-table td.col-mr-doctor {
+  width: 100px;
+  min-width: 80px;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+
+.reports-table th.col-mr-trainer,
+.reports-table td.col-mr-trainer {
+  width: 90px;
+  min-width: 80px;
+  max-width: 110px;
+  font-size: 0.75rem;
+}
+
+.reports-table th.col-mr-product,
+.reports-table td.col-mr-product {
+  min-width: 130px;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.reports-table th.col-mr-company,
+.reports-table td.col-mr-company {
+  width: 90px;
+  min-width: 75px;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+
+.reports-table th.col-mr-unit,
+.reports-table td.col-mr-unit {
+  width: 60px;
+  min-width: 55px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.reports-table th.col-mr-qty,
+.reports-table td.col-mr-qty {
+  width: 50px;
+  min-width: 50px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.reports-table th.col-mr-price,
+.reports-table td.col-mr-price {
+  width: 80px;
+  min-width: 75px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.reports-table th.col-mr-discount,
+.reports-table td.col-mr-discount {
+  width: 55px;
+  min-width: 52px;
+  text-align: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.reports-table th.col-mr-total,
+.reports-table td.col-mr-total {
+  width: 90px;
+  min-width: 85px;
+  text-align: right;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+/* Compact padding for Monthly Report table to fit more content vertically without scrolling */
+.reports-table.monthly-table th {
+  padding: 8px 10px;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.reports-table.monthly-table td {
+  padding: 7px 10px;
+  font-size: 0.8rem;
 }
 
 /* Table search */

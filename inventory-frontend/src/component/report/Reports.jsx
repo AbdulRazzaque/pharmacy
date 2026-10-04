@@ -415,8 +415,30 @@ const Reports = () => {
 
   const monthlyKpis = useMemo(() => {
     const totalQty = monthlyData.reduce((s, r) => s + (r.quantity ?? 0), 0);
-    const totalVal = monthlyData.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
-    return { count: monthlyData.length, totalQty, totalVal };
+    const totalDiscount = monthlyData.reduce((s, r) => s + Number(r.discountAmount ?? 0), 0);
+    const totalNet = monthlyData.reduce((s, r) => {
+      const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
+      const discAmt = Number(r.discountAmount ?? 0);
+      const net = Number(
+        r.netTotal !== undefined && r.netTotal !== null
+          ? r.netTotal
+          : r.netAmount !== undefined && r.netAmount !== null
+            ? r.netAmount
+            : r.totalAmount !== undefined && r.totalAmount !== null
+              ? r.totalAmount
+              : gross - discAmt
+      );
+      return s + net;
+    }, 0);
+    const roundedDiscount = Math.round(totalDiscount * 100) / 100;
+    const roundedNet = Math.round(totalNet * 100) / 100;
+    return {
+      count: monthlyData.length,
+      totalQty,
+      totalDiscount: roundedDiscount,
+      totalNet: roundedNet,
+      totalVal: roundedNet
+    };
   }, [monthlyData]);
 
   const orderedReportData = useMemo(() => {
@@ -503,10 +525,6 @@ const Reports = () => {
     [orderedReportData]
   );
 
-  const summaryTotalQty = useMemo(
-    () => orderedReportData.reduce((s, r) => s + r.numericQuantity, 0),
-    [orderedReportData]
-  );
 
   const submittedByName = useMemo(() => {
     const userInfo = getUserInfo();
@@ -559,7 +577,12 @@ const Reports = () => {
         r.trainerName,
         r.docNo ? String(r.docNo) : '',
         r.date ? moment(r.date).format('M/D/YYYY') : '',
-        r.date ? moment(r.date).format('DD/MM/YYYY') : ''
+        r.date ? moment(r.date).format('DD/MM/YYYY') : '',
+        r.discountPercentage !== undefined ? `${r.discountPercentage}%` : '',
+        r.discountPercent !== undefined ? `${r.discountPercent}%` : '',
+        r.discountAmount !== undefined ? String(r.discountAmount) : '',
+        r.grossAmount !== undefined ? String(r.grossAmount) : '',
+        r.netTotal !== undefined ? String(r.netTotal) : ''
       ].filter(Boolean).join(' ')
     );
   }, [monthlyData, monthlySearch]);
@@ -767,13 +790,21 @@ const Reports = () => {
 
     Object.keys(groups).forEach((locKey) => {
       const locItems = groups[locKey];
+      // EXCEL: exclude any product with discount > 0%
+      const filteredItems = locItems.filter((item) => {
+        const qty = item.quantity ?? 0;
+        const rate = item.rate ?? 0;
+        const gross = Number(item.grossAmount ?? (qty * rate));
+        const discPct = Number(item.discountPercentage ?? item.discountPercent ?? 0);
+        const discAmt = Number(item.discountAmount ?? (gross * discPct / 100));
+        return discPct <= 0 && discAmt <= 0;
+      });
+
       const sample = locItems[0];
       const locName = sample.locationName || 'Monthly Report';
       const trainerName = sample.trainerName || '';
-      const doctorName = sample.doctorName || '';
-
       // Clean sheet name: max 31 chars, no invalid chars like: \ / ? * [ ] :
-      let sheetName = locName.replace(/[\\/?*\[\]:]/g, '').substring(0, 31).trim();
+      let sheetName = locName.replace(/[\\/?*[\]:]/g, '').substring(0, 31).trim();
       if (!sheetName) sheetName = 'Report';
 
       // If worksheet with this name already exists, append index
@@ -851,7 +882,6 @@ const Reports = () => {
       };
 
       const footerLabelStyle = {
-
         font: { name: 'Calibri', sz: 11, bold: true, color: { rgb: "000000" } },
         alignment: { horizontal: 'left', vertical: 'center' }
       };
@@ -861,78 +891,95 @@ const Reports = () => {
         ws[cellRef] = { v: val, t: type, s: style };
       };
 
-      // Merge Title across A1:E1
+      // Merge Title across A1:F1 (6 columns: Date, Doc No, Description, Qty, Unit Price, Net Total)
       setCell('A1', titleText, 's', titleStyle);
       ws['B1'] = { s: titleStyle };
       ws['C1'] = { s: titleStyle };
       ws['D1'] = { s: titleStyle };
       ws['E1'] = { s: titleStyle };
+      ws['F1'] = { s: titleStyle };
 
-      // Headers (A2:E2)
+      // Headers (A2:F2) — No Discount column in Excel
       setCell('A2', 'Date', 's', headerStyle);
-      setCell('B2', 'Description of Items', 's', headerStyle);
-      setCell('C2', 'Qty', 's', headerStyle);
-      setCell('D2', 'Unit Price', 's', headerStyle);
-      setCell('E2', 'Total Price', 's', headerStyle);
+      setCell('B2', 'Doc No', 's', headerStyle);
+      setCell('C2', 'Description of Items', 's', headerStyle);
+      setCell('D2', 'Qty', 's', headerStyle);
+      setCell('E2', 'Unit Price', 's', headerStyle);
+      setCell('F2', 'Net Total', 's', headerStyle);
 
-      // Data Rows
+      // Data Rows — only non-discounted items
       let curRow = 3;
-      const exportLocItems = [...locItems].reverse();
+      const exportLocItems = [...filteredItems].reverse();
       exportLocItems.forEach((item) => {
         const formattedDate = item.date ? moment(item.date).format('DD-MM-YYYY') : '';
+        const docNoStr = item.docNo ? `#${item.docNo}` : '-';
         const descText = item.productName || '';
         const qty = item.quantity ?? 0;
         const rate = item.rate ?? 0;
-        const total = qty * rate;
+        const gross = Number(item.grossAmount ?? (qty * rate));
+        const net = Number(
+          item.netTotal !== undefined && item.netTotal !== null
+            ? item.netTotal
+            : item.netAmount !== undefined && item.netAmount !== null
+              ? item.netAmount
+              : item.totalAmount !== undefined && item.totalAmount !== null
+                ? item.totalAmount
+                : gross
+        );
 
         setCell(`A${curRow}`, formattedDate, 's', cellCenter);
-        setCell(`B${curRow}`, descText, 's', cellLeft);
-        setCell(`C${curRow}`, qty, 'n', cellCenter);
-        setCell(`D${curRow}`, rate, 'n', cellRight);
-        ws[`D${curRow}`].z = '#,##0.00';
-        setCell(`E${curRow}`, total, 'n', cellRight);
+        setCell(`B${curRow}`, docNoStr, 's', cellCenter);
+        setCell(`C${curRow}`, descText, 's', cellLeft);
+        setCell(`D${curRow}`, qty, 'n', cellCenter);
+        setCell(`E${curRow}`, rate, 'n', cellRight);
         ws[`E${curRow}`].z = '#,##0.00';
+        setCell(`F${curRow}`, net, 'n', cellRight);
+        ws[`F${curRow}`].z = '#,##0.00';
 
         curRow++;
       });
 
-      // Total Row
+      // Total Row — calculated from filtered (non-discounted) items only
       setCell(`A${curRow}`, '', 's', totalStyle);
-
       setCell(`B${curRow}`, '', 's', totalStyle);
-
       setCell(`C${curRow}`, '', 's', totalStyle);
-
-      // Total label inside Unit Price column (D)
-      setCell(`D${curRow}`, 'Total', 's', {
+      const totalLocQty = filteredItems.reduce((s, r) => s + (r.quantity ?? 0), 0);
+      setCell(`D${curRow}`, totalLocQty, 'n', {
         ...totalStyle,
-        alignment: {
-          horizontal: 'right',
-          vertical: 'center'
-        }
+        alignment: { horizontal: 'center', vertical: 'center' }
       });
 
-      // Grand Total inside Total Price column (E)
-      const grandTotal = locItems.reduce(
-        (s, r) => s + (r.totalAmount ?? 0),
-        0
-      );
-
-      setCell(`E${curRow}`, grandTotal, 'n', {
+      // Total label inside Unit Price column (E)
+      setCell(`E${curRow}`, 'Total', 's', {
         ...totalStyle,
-        alignment: {
-          horizontal: 'right',
-          vertical: 'center'
-        }
+        alignment: { horizontal: 'right', vertical: 'center' }
       });
 
-      ws[`E${curRow}`].z = '#,##0.00';
+      // Grand Total (F) — sum of filtered items net only
+      const grandTotal = filteredItems.reduce((s, r) => {
+        const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
+        const net = Number(
+          r.netTotal !== undefined && r.netTotal !== null
+            ? r.netTotal
+            : r.netAmount !== undefined && r.netAmount !== null
+              ? r.netAmount
+              : r.totalAmount !== undefined && r.totalAmount !== null
+                ? r.totalAmount
+                : gross
+        );
+        return s + net;
+      }, 0);
+
+      setCell(`F${curRow}`, grandTotal, 'n', {
+        ...totalStyle,
+        alignment: { horizontal: 'right', vertical: 'center' }
+      });
+      ws[`F${curRow}`].z = '#,##0.00';
 
       curRow++; // Leave a blank row after Total
       curRow++;
 
       // Footer - Notes
-      const uniqueNotes = Array.from(new Set(locItems.map(item => item.remarks).filter(Boolean))).join(', ');
       setCell(`A${curRow}`, `Note: ${`We removed Collecting needle and Tubes.` || ''}`, 's', footerLabelStyle);
 
       curRow++; // Leave blank row before signature labels
@@ -949,28 +996,29 @@ const Reports = () => {
       setCell(`A${curRow}`, 'Signature :', 's', footerLabelStyle);
       setCell(`D${curRow}`, 'Signature :', 's', footerLabelStyle);
 
-      // Columns Width
+      // Columns Width — 6 columns (no Discount column)
       ws['!cols'] = [
-        { wch: 15 }, // Date
-        { wch: 45 }, // Description of Items
+        { wch: 14 }, // Date
+        { wch: 10 }, // Doc No
+        { wch: 44 }, // Description of Items
         { wch: 10 }, // Qty
-        { wch: 15 }, // Unit Price
-        { wch: 18 }  // Total Price
+        { wch: 14 }, // Unit Price
+        { wch: 16 }  // Net Total
       ];
 
-      // Merges
+      // Merges — A1:F1
       ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } } // A1:E1
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } } // A1:F1
       ];
 
       // Range limits
-      ws['!ref'] = `A1:E${curRow}`;
+      ws['!ref'] = `A1:F${curRow}`;
 
       // Row Heights
       const rowsHeight = [
         { hpt: 30 }, // Title
         { hpt: 25 }, // Header
-        ...Array.from({ length: locItems.length }).map(() => ({ hpt: 20 })), // Data
+        ...Array.from({ length: filteredItems.length }).map(() => ({ hpt: 20 })), // Data
         { hpt: 22 }  // Total
       ];
       ws['!rows'] = rowsHeight;
@@ -995,34 +1043,87 @@ const Reports = () => {
     showAlert('Premium Excel report exported successfully! 📊', 'success');
   };
 
+
   const exportMonthlyPdf = () => {
     if (monthlyData.length === 0) { showAlert('No data to export', 'error'); return; }
+
+    // PDF: exclude products with discount > 0%
+    const exportData = [...monthlyData]
+      .reverse()
+      .filter((row) => {
+        const qty = row.quantity ?? 0;
+        const rate = row.rate ?? 0;
+        const gross = Number(row.grossAmount ?? (qty * rate));
+        const discPct = Number(row.discountPercentage ?? row.discountPercent ?? 0);
+        const discAmt = Number(row.discountAmount ?? (gross * discPct / 100));
+        return discPct <= 0 && discAmt <= 0;
+      });
+
     const doc = new jsPDF({ orientation: 'landscape' });
     doc.setFontSize(14);
     doc.text(`Monthly Report — ${monthlyMonth}/${monthlyYear}`, 14, 15);
-    const exportData = [...monthlyData].reverse();
-    const tableData = exportData.map((row) => [
-      row.date ? moment(row.date).format('DD/MM/YYYY') : '',
-      row.docNo ? `#${row.docNo}` : '-',
-      row.locationName || row.location?.name || '-',
-      row.doctorName || row.location?.doctorName || '-',
-      row.trainerName || row.location?.trainerName || '-',
-      row.productName || '',
-      row.companyName || '',
-      row.size || row.unit || '',
-      row.quantity ?? 0,
-      row.rate ?? 0,
-      (row.totalAmount ?? 0).toFixed(2),
-    ]);
+
+    const tableData = exportData.map((row) => {
+      const qty = row.quantity ?? 0;
+      const rate = row.rate ?? 0;
+      const gross = Number(row.grossAmount ?? (qty * rate));
+      const net = Number(
+        row.netTotal !== undefined && row.netTotal !== null
+          ? row.netTotal
+          : row.netAmount !== undefined && row.netAmount !== null
+            ? row.netAmount
+            : row.totalAmount !== undefined && row.totalAmount !== null
+              ? row.totalAmount
+              : gross
+      );
+
+      return [
+        row.date ? moment(row.date).format('DD/MM/YYYY') : '',
+        row.docNo ? `#${row.docNo}` : '-',
+        row.locationName || row.location?.name || '-',
+        row.doctorName || row.location?.doctorName || '-',
+        row.trainerName || row.location?.trainerName || '-',
+        row.productName || '',
+        row.companyName || '',
+        row.size || row.unit || '',
+        qty,
+        `QR ${rate.toFixed(2)}`,
+        `QR ${net.toFixed(2)}`,
+      ];
+    });
+
+    // Totals from filtered (non-discounted) rows only
+    const totalQty = exportData.reduce((s, r) => s + (r.quantity ?? 0), 0);
+    const totalNet = exportData.reduce((s, r) => {
+      const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
+      const net = Number(
+        r.netTotal !== undefined && r.netTotal !== null
+          ? r.netTotal
+          : r.netAmount !== undefined && r.netAmount !== null
+            ? r.netAmount
+            : r.totalAmount !== undefined && r.totalAmount !== null
+              ? r.totalAmount
+              : gross
+      );
+      return s + net;
+    }, 0);
+
+    const footData = [
+      ['Total', '', '', '', '', `${exportData.length} items`, '', '', totalQty, '', `QR ${totalNet.toFixed(2)}`]
+    ];
+
     doc.autoTable({
-      head: [['Date', 'Doc No', 'Location', 'Doctor', 'Trainer', 'Product Name', 'Company', 'Size', 'Qty', 'Rate', 'Total']],
+      head: [['Date', 'Doc No', 'Location', 'Doctor', 'Trainer', 'Product Name', 'Company', 'Size', 'Qty', 'Unit Price', 'Net Total']],
       body: tableData,
+      foot: footData,
       startY: 22,
-      styles: { fontSize: 8 }
+      styles: { fontSize: 7 }
     });
     doc.save(`monthly-report-${monthlyYear}-${monthlyMonth}.pdf`);
     showAlert('PDF exported', 'success');
   };
+
+
 
   const exportSummaryExcel = () => {
     if (orderedReportData.length === 0) { showAlert('No data to export', 'error'); return; }
@@ -1260,6 +1361,14 @@ const Reports = () => {
     if (activeTab !== TAB_MONTHLY || monthlyData.length === 0) return {};
     const groups = {};
     monthlyData.forEach((row) => {
+      // PRINT: exclude products with discount > 0%
+      const qty = row.quantity ?? 0;
+      const rate = row.rate ?? 0;
+      const gross = Number(row.grossAmount ?? (qty * rate));
+      const discPct = Number(row.discountPercentage ?? row.discountPercent ?? 0);
+      const discAmt = Number(row.discountAmount ?? (gross * discPct / 100));
+      if (discPct > 0 || discAmt > 0) return; // skip discounted products in print
+
       const locKey = row.locationId || 'default';
       if (!groups[locKey]) {
         groups[locKey] = [];
@@ -1504,7 +1613,7 @@ const Reports = () => {
       </div>
 
       {/* Monthly Report Custom Print Area */}
-      {activeTab === TAB_MONTHLY && monthlyData.length > 0 && (
+      {activeTab === TAB_MONTHLY && monthlyData.length > 0 && Object.keys(monthlyPrintGroups).length > 0 && (
         <div className="monthly-report-print-area">
           {Object.keys(monthlyPrintGroups).map((locKey) => {
             const locItems = monthlyPrintGroups[locKey];
@@ -1515,9 +1624,21 @@ const Reports = () => {
 
             const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `(MR. ${personInfo}) ` : ''}from 1 ${monthName} ${monthlyYear} to ${lastDayInMonth} ${monthName} ${monthlyYear}`;
 
-            const uniqueRemarks = Array.from(new Set(locItems.map(item => item.remarks).filter(Boolean))).join(', ');
-
-            const grandTotal = locItems.reduce((s, r) => s + (r.totalAmount ?? 0), 0);
+            const totalLocQty = locItems.reduce((s, r) => s + (r.quantity ?? 0), 0);
+            // All items in print are non-discounted, so net = gross
+            const grandTotal = locItems.reduce((s, r) => {
+              const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
+              const net = Number(
+                r.netTotal !== undefined && r.netTotal !== null
+                  ? r.netTotal
+                  : r.netAmount !== undefined && r.netAmount !== null
+                    ? r.netAmount
+                    : r.totalAmount !== undefined && r.totalAmount !== null
+                      ? r.totalAmount
+                      : gross
+              );
+              return s + net;
+            }, 0);
 
             return (
               <div key={locKey} className="print-location-page">
@@ -1525,29 +1646,47 @@ const Reports = () => {
                 <table className="print-report-table">
                   <thead>
                     <tr className='print-table-head'>
-                      <th style={{ width: '15%' }}>Date</th>
+                      <th style={{ width: '13%' }}>Date</th>
+                      <th style={{ width: '10%' }}>Doc No</th>
                       <th style={{ width: '45%' }}>Description of Items</th>
-                      <th style={{ width: '10%' }}>Qty</th>
-                      <th style={{ width: '15%' }}>Unit Price</th>
-                      <th style={{ width: '15%' }}>Total Price</th>
+                      <th style={{ width: '8%' }}>Qty</th>
+                      <th style={{ width: '12%' }}>Unit Price</th>
+                      <th style={{ width: '12%' }}>Net Total</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {[...locItems].reverse().map((item, idx) => (
-                      <tr key={item._id || idx}>
-                        <td className="col-center">{item.date ? moment(item.date).format('DD-MM-YYYY') : ''}</td>
-                        <td className="col-left">{item.productName || ''}</td>
-                        <td className="col-center">{item.quantity ?? 0}</td>
-                        <td className="col-right">{(item.rate ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                        <td className="col-right">{(item.totalAmount ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))}
+                    {[...locItems].reverse().map((item, idx) => {
+                      const qty = item.quantity ?? 0;
+                      const rate = item.rate ?? 0;
+                      const gross = Number(item.grossAmount ?? (qty * rate));
+                      const net = Number(
+                        item.netTotal !== undefined && item.netTotal !== null
+                          ? item.netTotal
+                          : item.netAmount !== undefined && item.netAmount !== null
+                            ? item.netAmount
+                            : item.totalAmount !== undefined && item.totalAmount !== null
+                              ? item.totalAmount
+                              : gross
+                      );
+
+                      return (
+                        <tr key={item._id || idx}>
+                          <td className="col-center">{item.date ? moment(item.date).format('DD-MM-YYYY') : ''}</td>
+                          <td className="col-center font-mono">{item.docNo ? `#${item.docNo}` : '-'}</td>
+                          <td className="col-left">{item.productName || ''}</td>
+                          <td className="col-center">{qty}</td>
+                          <td className="col-right">QR {rate.toFixed(2)}</td>
+                          <td className="col-right font-bold">QR {net.toFixed(2)}</td>
+                        </tr>
+                      );
+                    })}
                     <tr className="print-total-row">
                       <td className="col-center"></td>
-                      <td className="col-left"></td>
                       <td className="col-center"></td>
-                      <td className="col-right">Total</td>
-                      <td className="col-right">{grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="col-left"></td>
+                      <td className="col-center">{totalLocQty}</td>
+                      <td className="col-right">Total:</td>
+                      <td className="col-right font-bold">QR {grandTotal.toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1569,6 +1708,8 @@ const Reports = () => {
           })}
         </div>
       )}
+
+
 
       {/* Stock-Out (Issued Products) Report Custom Print Area */}
       {activeTab === TAB_STOCK_OUT && stockOutData.length > 0 && (

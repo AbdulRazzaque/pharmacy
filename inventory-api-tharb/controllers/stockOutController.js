@@ -4,6 +4,7 @@ const InventoryTransaction = require("../models/InventoryTransactionModule");
 const StockOutHeader = require("../models/StockOutHeaderModule");
 const StockOutItem = require("../models/StockOutItemModule");
 const Product = require("../models/ProductModule");
+const Location = require("../models/LocationModule");
 const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
 
@@ -29,9 +30,9 @@ const updateHeaderTotals = async (headerId, session = null) => {
     const header = await StockOutHeader.findById(headerId).session(session);
     if (!header) return;
     const items = await StockOutItem.find({ stockOutHeaderId: header._id }).session(session);
-    const subTotal = items.reduce((sum, i) => sum + (i.itemTotal !== undefined && i.itemTotal !== 0 ? i.itemTotal : ((i.quantity || 0) * (i.sellingPrice || 0))), 0);
-    const totalDiscount = items.reduce((sum, i) => sum + (i.discountAmount || 0), 0);
-    const grandTotal = items.reduce((sum, i) => sum + (i.netTotal !== undefined && i.netTotal !== 0 ? i.netTotal : ((i.quantity || 0) * (i.sellingPrice || 0) - (i.discountAmount || 0))), 0);
+    const subTotal = items.reduce((sum, i) => sum + (i.itemTotal !== undefined && i.itemTotal !== null ? Number(i.itemTotal) : ((i.quantity || 0) * (i.sellingPrice || 0))), 0);
+    const totalDiscount = items.reduce((sum, i) => sum + (Number(i.discountAmount) || 0), 0);
+    const grandTotal = items.reduce((sum, i) => sum + (i.netTotal !== undefined && i.netTotal !== null ? Number(i.netTotal) : ((i.quantity || 0) * (i.sellingPrice || 0) - (Number(i.discountAmount) || 0))), 0);
     header.subTotal = Math.round(subTotal * 100) / 100;
     header.totalDiscount = Math.round(totalDiscount * 100) / 100;
     header.grandTotal = Math.round(grandTotal * 100) / 100;
@@ -494,9 +495,9 @@ const stockOutController = {
             const docs = await Promise.all(headers.map(async (h) => {
                 const items = await StockOutItem.find({ stockOutHeaderId: h._id }).lean();
                 const totalQuantity = items.reduce((sum, i) => sum + (i.quantity || 0), 0);
-                const subTotal = items.reduce((sum, i) => sum + (i.itemTotal !== undefined && i.itemTotal !== 0 ? i.itemTotal : ((i.quantity || 0) * (i.sellingPrice || 0))), 0);
-                const totalDiscount = items.reduce((sum, i) => sum + (i.discountAmount || 0), 0);
-                const grandTotal = items.reduce((sum, i) => sum + (i.netTotal !== undefined && i.netTotal !== 0 ? i.netTotal : ((i.quantity || 0) * (i.sellingPrice || 0) - (i.discountAmount || 0))), 0);
+                const subTotal = items.reduce((sum, i) => sum + (i.itemTotal !== undefined && i.itemTotal !== null ? Number(i.itemTotal) : ((i.quantity || 0) * (i.sellingPrice || 0))), 0);
+                const totalDiscount = items.reduce((sum, i) => sum + (Number(i.discountAmount) || 0), 0);
+                const grandTotal = items.reduce((sum, i) => sum + (i.netTotal !== undefined && i.netTotal !== null ? Number(i.netTotal) : ((i.quantity || 0) * (i.sellingPrice || 0) - (Number(i.discountAmount) || 0))), 0);
                 const uniqueProducts = new Set(items.map(i => String(i.productId)));
                 return {
                     _id: h._id,
@@ -595,7 +596,10 @@ const stockOutController = {
                 // Check transaction date belongs to current month and <= today
                 const docDateStr = moment(h.date || h.createdAt).format("YYYY-MM-DD");
                 if (docDateStr >= fromDateStr && docDateStr <= toDateStr) {
-                    const docNetTotal = Number(h.grandTotal || 0);
+                    let docNetTotal = Number(h.grandTotal ?? 0);
+                    if (isNaN(docNetTotal) || (h.totalDiscount > 0 && h.grandTotal === h.subTotal && h.subTotal > 0)) {
+                        docNetTotal = Math.round(((h.subTotal || 0) - (h.totalDiscount || 0)) * 100) / 100;
+                    }
                     totalExpense += docNetTotal;
                     matchingDocs.push({
                         docNo: h.docNo,
@@ -645,9 +649,9 @@ const stockOutController = {
             const doctorName = locationObj?.doctorName || "";
             const trainerName = locationObj?.trainerName || "";
 
-            const subTotal = items.reduce((sum, item) => sum + (item.itemTotal !== undefined && item.itemTotal !== 0 ? item.itemTotal : ((item.quantity || 0) * (item.sellingPrice || 0))), 0);
-            const totalDiscount = items.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
-            const grandTotal = items.reduce((sum, item) => sum + (item.netTotal !== undefined && item.netTotal !== 0 ? item.netTotal : ((item.quantity || 0) * (item.sellingPrice || 0) - (item.discountAmount || 0))), 0);
+            const subTotal = items.reduce((sum, item) => sum + (item.itemTotal !== undefined && item.itemTotal !== null ? Number(item.itemTotal) : ((item.quantity || 0) * (item.sellingPrice || 0))), 0);
+            const totalDiscount = items.reduce((sum, item) => sum + (Number(item.discountAmount) || 0), 0);
+            const grandTotal = items.reduce((sum, item) => sum + (item.netTotal !== undefined && item.netTotal !== null ? Number(item.netTotal) : ((item.quantity || 0) * (item.sellingPrice || 0) - (Number(item.discountAmount) || 0))), 0);
 
             const formatted = [{
                 _id: { docNo: header.docNo },
@@ -659,9 +663,9 @@ const stockOutController = {
                 totalDiscount: Math.round(totalDiscount * 100) / 100,
                 grandTotal: Math.round(grandTotal * 100) / 100,
                 doc: items.map(item => {
-                    const iTotal = item.itemTotal !== undefined && item.itemTotal !== 0 ? item.itemTotal : ((item.quantity || 0) * (item.sellingPrice || 0));
-                    const dAmt = item.discountAmount || 0;
-                    const nTotal = item.netTotal !== undefined && item.netTotal !== 0 ? item.netTotal : (iTotal - dAmt);
+                    const iTotal = item.itemTotal !== undefined && item.itemTotal !== null ? Number(item.itemTotal) : ((item.quantity || 0) * (item.sellingPrice || 0));
+                    const dAmt = Number(item.discountAmount) || 0;
+                    const nTotal = item.netTotal !== undefined && item.netTotal !== null ? Number(item.netTotal) : (iTotal - dAmt);
                     return {
                         _id: item._id,
                         docNo: header.docNo,

@@ -277,17 +277,17 @@ const StockOutDetails = () => {
 
   const getSubTotal = () => {
     if (!stockOutData || !stockOutData.doc) return 0;
-    return stockOutData.doc.reduce((sum, item) => sum + (item.itemTotal !== undefined && item.itemTotal !== 0 ? item.itemTotal : (Math.abs(item.quantity || 0) * Number(item.sellingPrice || 0))), 0);
+    return stockOutData.doc.reduce((sum, item) => sum + (item.itemTotal !== undefined && item.itemTotal !== null ? Number(item.itemTotal) : (Math.abs(item.quantity || 0) * Number(item.sellingPrice || 0))), 0);
   };
 
   const getTotalDiscount = () => {
     if (!stockOutData || !stockOutData.doc) return 0;
-    return stockOutData.doc.reduce((sum, item) => sum + (item.discountAmount || 0), 0);
+    return stockOutData.doc.reduce((sum, item) => sum + (Number(item.discountAmount) || 0), 0);
   };
 
   const getGrandTotal = () => {
     if (!stockOutData || !stockOutData.doc) return 0;
-    return stockOutData.doc.reduce((sum, item) => sum + (item.netTotal !== undefined && item.netTotal !== 0 ? item.netTotal : ((Math.abs(item.quantity || 0) * Number(item.sellingPrice || 0)) - (item.discountAmount || 0))), 0);
+    return stockOutData.doc.reduce((sum, item) => sum + (item.netTotal !== undefined && item.netTotal !== null ? Number(item.netTotal) : ((Math.abs(item.quantity || 0) * Number(item.sellingPrice || 0)) - (Number(item.discountAmount) || 0))), 0);
   };
 
   const getLocationName = () => {
