@@ -64,13 +64,11 @@ const Addproducts = () => {
   const accessToken = getToken();
   const isAdmin = (getUserInfo()?.role || '').toLowerCase() === 'admin';
 
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm({
+  const { register, handleSubmit, reset, setValue, formState: { errors } } = useForm({
     defaultValues: {
       requiresExpiry: true
     }
   });
-
-  const selectedUnit = watch('unit');
 
   const fetchProducts = useCallback(() => {
     return axios
@@ -168,7 +166,7 @@ const Addproducts = () => {
   const handleEdit = (product) => {
     setEditingId(product._id);
     setValue('name', product.name);
-    setValue('unit', product.unit || '');
+    setValue('unit', product.unit || '', { shouldValidate: true });
     setValue('type', product.type || '');
     setValue('companyName', product.companyName || '');
     setValue('requiresExpiry', product.requiresExpiry !== false);
@@ -480,24 +478,13 @@ const Addproducts = () => {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="unit" className="text-xs font-semibold text-[var(--ph-text)]">Unit *</Label>
-                <select
+                <Label htmlFor="unit" className="text-xs font-semibold text-[var(--ph-text)]">Unit / Pack Size *</Label>
+                <Input
                   id="unit"
-                  {...register('unit', { required: 'Unit is required' })}
-                  className="flex h-9.5 w-full rounded-lg border border-[var(--ph-border)] bg-[var(--ph-surface)] px-3 py-1.5 text-sm text-[var(--ph-text)] focus:outline-none focus:ring-2 focus:ring-[var(--ph-navy)]"
-                >
-                  <option value="">Select unit</option>
-                  <option value="Kg">Kg</option>
-                  <option value="Liter">Liter</option>
-                  <option value="ML">ML</option>
-                  <option value="Pieces">Pieces</option>
-                  <option value="Box">Box</option>
-                  <option value="Bottle">Bottle</option>
-                  <option value="Packet">Packet</option>
-                  {selectedUnit && !['Kg', 'Liter', 'ML', 'Pieces', 'Box', 'Bottle', 'Packet'].includes(selectedUnit) && (
-                    <option value={selectedUnit}>{selectedUnit}</option>
-                  )}
-                </select>
+                  {...register('unit', { required: 'Unit / Pack Size is required' })}
+                  placeholder="e.g. 500 ML, 100 ML, 10 Tablets"
+                  className="h-9.5 text-sm"
+                />
                 {errors.unit && (
                   <p className="text-xs text-rose-600 font-medium">{errors.unit.message}</p>
                 )}
@@ -613,7 +600,7 @@ const Addproducts = () => {
                     />
                   </TableHead>
                   <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Product Name</TableHead>
-                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Unit</TableHead>
+                  <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Unit / Pack Size</TableHead>
                   <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Type / Group</TableHead>
                   <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Manufacturer</TableHead>
                   <TableHead className="font-semibold text-xs text-[var(--ph-text)]">Registered By</TableHead>
