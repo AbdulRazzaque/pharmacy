@@ -891,28 +891,25 @@ const Reports = () => {
         ws[cellRef] = { v: val, t: type, s: style };
       };
 
-      // Merge Title across A1:F1 (6 columns: Date, Doc No, Description, Qty, Unit Price, Net Total)
+      // Merge Title across A1:E1 (5 columns: Date, Description, Qty, Unit Price, Net Total)
       setCell('A1', titleText, 's', titleStyle);
       ws['B1'] = { s: titleStyle };
       ws['C1'] = { s: titleStyle };
       ws['D1'] = { s: titleStyle };
       ws['E1'] = { s: titleStyle };
-      ws['F1'] = { s: titleStyle };
 
-      // Headers (A2:F2) — No Discount column in Excel
+      // Headers (A2:E2) — 5 columns: Date | Description of Items | Qty | Unit Price | Net Total
       setCell('A2', 'Date', 's', headerStyle);
-      setCell('B2', 'Doc No', 's', headerStyle);
-      setCell('C2', 'Description of Items', 's', headerStyle);
-      setCell('D2', 'Qty', 's', headerStyle);
-      setCell('E2', 'Unit Price', 's', headerStyle);
-      setCell('F2', 'Net Total', 's', headerStyle);
+      setCell('B2', 'Description of Items', 's', headerStyle);
+      setCell('C2', 'Qty', 's', headerStyle);
+      setCell('D2', 'Unit Price', 's', headerStyle);
+      setCell('E2', 'Net Total', 's', headerStyle);
 
       // Data Rows — only non-discounted items
       let curRow = 3;
       const exportLocItems = [...filteredItems].reverse();
       exportLocItems.forEach((item) => {
         const formattedDate = item.date ? moment(item.date).format('DD-MM-YYYY') : '';
-        const docNoStr = item.docNo ? `#${item.docNo}` : '-';
         const descText = item.productName || '';
         const qty = item.quantity ?? 0;
         const rate = item.rate ?? 0;
@@ -928,34 +925,28 @@ const Reports = () => {
         );
 
         setCell(`A${curRow}`, formattedDate, 's', cellCenter);
-        setCell(`B${curRow}`, docNoStr, 's', cellCenter);
-        setCell(`C${curRow}`, descText, 's', cellLeft);
-        setCell(`D${curRow}`, qty, 'n', cellCenter);
-        setCell(`E${curRow}`, rate, 'n', cellRight);
+        setCell(`B${curRow}`, descText, 's', cellLeft);
+        setCell(`C${curRow}`, qty, 'n', cellCenter);
+        setCell(`D${curRow}`, rate, 'n', cellRight);
+        ws[`D${curRow}`].z = '#,##0.00';
+        setCell(`E${curRow}`, net, 'n', cellRight);
         ws[`E${curRow}`].z = '#,##0.00';
-        setCell(`F${curRow}`, net, 'n', cellRight);
-        ws[`F${curRow}`].z = '#,##0.00';
 
         curRow++;
       });
 
-      // Total Row — calculated from filtered (non-discounted) items only
+      // Total Row — calculated from filtered (non-discounted) items only (Qty total removed)
       setCell(`A${curRow}`, '', 's', totalStyle);
       setCell(`B${curRow}`, '', 's', totalStyle);
-      setCell(`C${curRow}`, '', 's', totalStyle);
-      const totalLocQty = filteredItems.reduce((s, r) => s + (r.quantity ?? 0), 0);
-      setCell(`D${curRow}`, totalLocQty, 'n', {
-        ...totalStyle,
-        alignment: { horizontal: 'center', vertical: 'center' }
-      });
+      setCell(`C${curRow}`, '', 's', totalStyle); // Qty total removed!
 
-      // Total label inside Unit Price column (E)
-      setCell(`E${curRow}`, 'Total', 's', {
+      // Total label inside Unit Price column (D)
+      setCell(`D${curRow}`, 'Total QR:', 's', {
         ...totalStyle,
         alignment: { horizontal: 'right', vertical: 'center' }
       });
 
-      // Grand Total (F) — sum of filtered items net only
+      // Grand Total (E) — sum of filtered items net only (NO QR text!)
       const grandTotal = filteredItems.reduce((s, r) => {
         const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
         const net = Number(
@@ -970,49 +961,44 @@ const Reports = () => {
         return s + net;
       }, 0);
 
-      setCell(`F${curRow}`, grandTotal, 'n', {
+      setCell(`E${curRow}`, grandTotal, 'n', {
         ...totalStyle,
         alignment: { horizontal: 'right', vertical: 'center' }
       });
-      ws[`F${curRow}`].z = '#,##0.00';
+      ws[`E${curRow}`].z = '#,##0.00';
 
       curRow++; // Leave a blank row after Total
       curRow++;
 
       // Footer - Notes
-      setCell(`A${curRow}`, `Note: ${`We removed Collecting needle and Tubes.` || ''}`, 's', footerLabelStyle);
+      setCell(`A${curRow}`, 'Note: We removed Collecting needle and Tubes.', 's', footerLabelStyle);
 
-      curRow++; // Leave blank row before signature labels
-      curRow++;
-
+      curRow += 2;
       // Footer - Labels
       setCell(`A${curRow}`, `Trainer Name: ${trainerName}`, 's', footerLabelStyle);
-      setCell(`D${curRow}`, `Veterinarian name: `, 's', footerLabelStyle);
+      setCell(`D${curRow}`, 'Veterinarian name: ', 's', footerLabelStyle);
 
-      curRow++; // Gap for signature
-      curRow++;
-
+      curRow += 2;
       // Footer - Signatures
       setCell(`A${curRow}`, 'Signature :', 's', footerLabelStyle);
       setCell(`D${curRow}`, 'Signature :', 's', footerLabelStyle);
 
-      // Columns Width — 6 columns (no Discount column)
+      // Columns Width — 5 columns (no Doc No, no Discount)
       ws['!cols'] = [
         { wch: 14 }, // Date
-        { wch: 10 }, // Doc No
-        { wch: 44 }, // Description of Items
+        { wch: 48 }, // Description of Items
         { wch: 10 }, // Qty
         { wch: 14 }, // Unit Price
         { wch: 16 }  // Net Total
       ];
 
-      // Merges — A1:F1
+      // Merges — A1:E1
       ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } } // A1:F1
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } } // A1:E1
       ];
 
       // Range limits
-      ws['!ref'] = `A1:F${curRow}`;
+      ws['!ref'] = `A1:E${curRow}`;
 
       // Row Heights
       const rowsHeight = [
@@ -1047,80 +1033,162 @@ const Reports = () => {
   const exportMonthlyPdf = () => {
     if (monthlyData.length === 0) { showAlert('No data to export', 'error'); return; }
 
-    // PDF: exclude products with discount > 0%
-    const exportData = [...monthlyData]
-      .reverse()
-      .filter((row) => {
-        const qty = row.quantity ?? 0;
-        const rate = row.rate ?? 0;
-        const gross = Number(row.grossAmount ?? (qty * rate));
-        const discPct = Number(row.discountPercentage ?? row.discountPercent ?? 0);
-        const discAmt = Number(row.discountAmount ?? (gross * discPct / 100));
-        return discPct <= 0 && discAmt <= 0;
-      });
-
-    const doc = new jsPDF({ orientation: 'landscape' });
-    doc.setFontSize(14);
-    doc.text(`Monthly Report — ${monthlyMonth}/${monthlyYear}`, 14, 15);
-
-    const tableData = exportData.map((row) => {
+    // Group monthlyData by location, matching Excel and Print
+    const groups = {};
+    monthlyData.forEach((row) => {
+      // EXCLUDE products with discount > 0%
       const qty = row.quantity ?? 0;
       const rate = row.rate ?? 0;
       const gross = Number(row.grossAmount ?? (qty * rate));
-      const net = Number(
-        row.netTotal !== undefined && row.netTotal !== null
-          ? row.netTotal
-          : row.netAmount !== undefined && row.netAmount !== null
-            ? row.netAmount
-            : row.totalAmount !== undefined && row.totalAmount !== null
-              ? row.totalAmount
-              : gross
-      );
+      const discPct = Number(row.discountPercentage ?? row.discountPercent ?? 0);
+      const discAmt = Number(row.discountAmount ?? (gross * discPct / 100));
+      if (discPct > 0 || discAmt > 0) return;
 
-      return [
-        row.date ? moment(row.date).format('DD/MM/YYYY') : '',
-        row.docNo ? `#${row.docNo}` : '-',
-        row.locationName || row.location?.name || '-',
-        row.doctorName || row.location?.doctorName || '-',
-        row.trainerName || row.location?.trainerName || '-',
-        row.productName || '',
-        row.companyName || '',
-        row.size || row.unit || '',
-        qty,
-        `QR ${rate.toFixed(2)}`,
-        `QR ${net.toFixed(2)}`,
+      const locKey = row.locationId || 'default';
+      if (!groups[locKey]) {
+        groups[locKey] = [];
+      }
+      groups[locKey].push(row);
+    });
+
+    const groupKeys = Object.keys(groups);
+    if (groupKeys.length === 0) {
+      showAlert('No non-discounted products to export in PDF', 'error');
+      return;
+    }
+
+    const doc = new jsPDF({ orientation: 'portrait' });
+    const monthName = moment().month(parseInt(monthlyMonth, 10) - 1).format('MMMM');
+    const lastDay = moment(`${monthlyYear}-${monthlyMonth}`, 'YYYY-MM').daysInMonth();
+    const dateRangeStr = `from 1 ${monthName} ${monthlyYear} to ${lastDay} ${monthName} ${monthlyYear}`;
+
+    groupKeys.forEach((locKey, gIdx) => {
+      if (gIdx > 0) {
+        doc.addPage();
+      }
+
+      const locItems = groups[locKey];
+      const sample = locItems[0];
+      const locName = sample.locationName || 'Monthly Report';
+      const trainerName = sample.trainerName || '';
+      const personInfo = (trainerName || '').toUpperCase();
+      const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `( ${personInfo}) ` : ''}${dateRangeStr}`;
+
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageMargin = 14;
+      const contentWidth = pageWidth - (pageMargin * 2);
+
+      // Title Banner (Yellow background, centered bold text, black border)
+      doc.setFillColor(255, 255, 0); // Yellow
+      doc.setDrawColor(0, 0, 0);
+      doc.rect(pageMargin, 12, contentWidth, 8, 'FD');
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text(titleText, pageWidth / 2, 17.5, { align: 'center', maxWidth: contentWidth - 4 });
+
+      const exportLocItems = [...locItems].reverse();
+      const tableData = exportLocItems.map((item) => {
+        const qty = item.quantity ?? 0;
+        const rate = item.rate ?? 0;
+        const gross = Number(item.grossAmount ?? (qty * rate));
+        const net = Number(
+          item.netTotal !== undefined && item.netTotal !== null
+            ? item.netTotal
+            : item.netAmount !== undefined && item.netAmount !== null
+              ? item.netAmount
+              : item.totalAmount !== undefined && item.totalAmount !== null
+                ? item.totalAmount
+                : gross
+        );
+
+        return [
+          item.date ? moment(item.date).format('DD-MM-YYYY') : '',
+          item.productName || '',
+          qty,
+          rate.toFixed(2),
+          net.toFixed(2)
+        ];
+      });
+
+      const grandTotal = locItems.reduce((s, r) => {
+        const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
+        const net = Number(
+          r.netTotal !== undefined && r.netTotal !== null
+            ? r.netTotal
+            : r.netAmount !== undefined && r.netAmount !== null
+              ? r.netAmount
+              : r.totalAmount !== undefined && r.totalAmount !== null
+                ? r.totalAmount
+                : gross
+        );
+        return s + net;
+      }, 0);
+
+      // Bottom Total Row — only Net Total total, no QR text, no Qty total
+      const footData = [
+        ['', '', '', 'Total:', grandTotal.toFixed(2)]
       ];
+
+      doc.autoTable({
+        head: [['Date', 'Description of Items', 'Qty', 'Unit Price', 'Net Total']],
+        body: tableData,
+        foot: footData,
+        startY: 23,
+        margin: { left: pageMargin, right: pageMargin },
+        styles: {
+          fontSize: 8.5,
+          cellPadding: 2.5,
+          lineColor: [0, 0, 0],
+          lineWidth: 0.1,
+          textColor: [0, 0, 0]
+        },
+        headStyles: {
+          fillColor: [242, 242, 242],
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        footStyles: {
+          fillColor: [255, 255, 0], // Yellow
+          textColor: [0, 0, 0],
+          fontStyle: 'bold'
+        },
+        columnStyles: {
+          0: { halign: 'center', cellWidth: 26 }, // Date
+          1: { halign: 'left' },                  // Description of Items
+          2: { halign: 'center', cellWidth: 16 }, // Qty
+          3: { halign: 'right', cellWidth: 24 },  // Unit Price
+          4: { halign: 'right', cellWidth: 26 }   // Net Total
+        },
+        didParseCell: (data) => {
+          if (data.section === 'foot') {
+            if (data.column.index === 3) {
+              data.cell.styles.halign = 'right';
+            } else if (data.column.index === 4) {
+              data.cell.styles.halign = 'right';
+              data.cell.styles.fontStyle = 'bold';
+            }
+          }
+        }
+      });
+
+      const finalY = (doc.lastAutoTable?.finalY || 100) + 8;
+      doc.setFontSize(8.5);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Note: We removed Collecting needle and Tubes.', pageMargin, finalY);
+
+      const sigY1 = finalY + 12;
+      doc.text(`Trainer Name: ${trainerName}`, pageMargin, sigY1);
+      doc.text('Veterinarian name:', pageMargin + 100, sigY1);
+
+      const sigY2 = sigY1 + 10;
+      doc.text('Signature :', pageMargin, sigY2);
+      doc.text('Signature :', pageMargin + 100, sigY2);
     });
 
-    // Totals from filtered (non-discounted) rows only
-    const totalQty = exportData.reduce((s, r) => s + (r.quantity ?? 0), 0);
-    const totalNet = exportData.reduce((s, r) => {
-      const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
-      const net = Number(
-        r.netTotal !== undefined && r.netTotal !== null
-          ? r.netTotal
-          : r.netAmount !== undefined && r.netAmount !== null
-            ? r.netAmount
-            : r.totalAmount !== undefined && r.totalAmount !== null
-              ? r.totalAmount
-              : gross
-      );
-      return s + net;
-    }, 0);
-
-    const footData = [
-      ['Total', '', '', '', '', `${exportData.length} items`, '', '', totalQty, '', `QR ${totalNet.toFixed(2)}`]
-    ];
-
-    doc.autoTable({
-      head: [['Date', 'Doc No', 'Location', 'Doctor', 'Trainer', 'Product Name', 'Company', 'Size', 'Qty', 'Unit Price', 'Net Total']],
-      body: tableData,
-      foot: footData,
-      startY: 22,
-      styles: { fontSize: 7 }
-    });
     doc.save(`monthly-report-${monthlyYear}-${monthlyMonth}.pdf`);
-    showAlert('PDF exported', 'success');
+    showAlert('PDF exported successfully! 📄', 'success');
   };
 
 
@@ -1624,7 +1692,6 @@ const Reports = () => {
 
             const titleText = `MEDICINE DELIVERED TO ${(locName || '').toUpperCase()} ${personInfo ? `( ${personInfo}) ` : ''}from 1 ${monthName} ${monthlyYear} to ${lastDayInMonth} ${monthName} ${monthlyYear}`;
 
-            const totalLocQty = locItems.reduce((s, r) => s + (r.quantity ?? 0), 0);
             // All items in print are non-discounted, so net = gross
             const grandTotal = locItems.reduce((s, r) => {
               const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
@@ -1646,9 +1713,8 @@ const Reports = () => {
                 <table className="print-report-table">
                   <thead>
                     <tr className='print-table-head'>
-                      <th style={{ width: '13%' }}>Date</th>
-                      <th style={{ width: '10%' }}>Doc No</th>
-                      <th style={{ width: '45%' }}>Description of Items</th>
+                      <th style={{ width: '15%' }}>Date</th>
+                      <th style={{ width: '53%' }}>Description of Items</th>
                       <th style={{ width: '8%' }}>Qty</th>
                       <th style={{ width: '12%' }}>Unit Price</th>
                       <th style={{ width: '12%' }}>Net Total</th>
@@ -1672,21 +1738,19 @@ const Reports = () => {
                       return (
                         <tr key={item._id || idx}>
                           <td className="col-center">{item.date ? moment(item.date).format('DD-MM-YYYY') : ''}</td>
-                          <td className="col-center font-mono">{item.docNo ? `#${item.docNo}` : '-'}</td>
                           <td className="col-left">{item.productName || ''}</td>
                           <td className="col-center">{qty}</td>
-                          <td className="col-right">QR {rate.toFixed(2)}</td>
-                          <td className="col-right font-bold">QR {net.toFixed(2)}</td>
+                          <td className="col-right">{rate.toFixed(2)}</td>
+                          <td className="col-right font-bold">{net.toFixed(2)}</td>
                         </tr>
                       );
                     })}
                     <tr className="print-total-row">
                       <td className="col-center"></td>
-                      <td className="col-center"></td>
                       <td className="col-left"></td>
-                      <td className="col-center">{totalLocQty}</td>
-                      <td className="col-right">Total:</td>
-                      <td className="col-right font-bold">QR {grandTotal.toFixed(2)}</td>
+                      <td className="col-center"></td>
+                      <td className="col-right font-bold">Total QR:</td>
+                      <td className="col-right font-bold">{grandTotal.toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>
