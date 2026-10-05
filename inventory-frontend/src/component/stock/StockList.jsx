@@ -55,10 +55,12 @@ const StockList = () => {
           const baseSlug = product.slug;
           const baseProductId = product._id || stock.productId || stock.product || null;
 
+          const productSellingPrice = Number(product.sellingPrice || stock.sellingPrice || 0);
+
           if (stock.expiryArray && stock.expiryArray.length > 0) {
             stock.expiryArray.forEach((expiryItem) => {
               const expiryDate = expiryItem.expiry ? moment(expiryItem.expiry).format('YYYY-MM-DD') : 'no-expiry';
-              const mapKey = `${baseName}_${expiryDate}`;
+              const mapKey = `${baseProductId || baseName}_${expiryDate}`;
 
               if (expiryMap.has(mapKey)) {
                 const existing = expiryMap.get(mapKey);
@@ -78,7 +80,7 @@ const StockList = () => {
                   companyName: baseCompanyName,
                   quantity: expiryItem.quantity || 0,
                   purchasingPrice: batchPurchasing(expiryItem),
-                  sellingPrice: batchSelling(expiryItem),
+                  sellingPrice: productSellingPrice > 0 ? productSellingPrice : batchSelling(expiryItem),
                   expiry: expiryItem.expiry || '',
                   expiryArray: stock.expiryArray,
                   location: stock.location || '',
@@ -88,7 +90,7 @@ const StockList = () => {
               }
             });
           } else {
-            const mapKey = `${baseName}_no-expiry`;
+            const mapKey = `${baseProductId || baseName}_no-expiry`;
             if (expiryMap.has(mapKey)) {
               const existing = expiryMap.get(mapKey);
               existing.quantity += stock.totalQuantity || stock.quantity || 0;
@@ -107,7 +109,7 @@ const StockList = () => {
                 companyName: baseCompanyName,
                 quantity: stock.totalQuantity || stock.quantity || 0,
                 purchasingPrice: 0,
-                sellingPrice: 0,
+                sellingPrice: productSellingPrice > 0 ? productSellingPrice : (stock.sellingPrice || 0),
                 expiry: stock.expiry || '',
                 expiryArray: stock.expiryArray || [],
                 location: stock.location || '',

@@ -37,9 +37,18 @@ async function recordSellingPriceChangeIfModified({
     const roundedOld = Math.round(oldPrice * 100) / 100;
     const roundedNew = Math.round(priceNum * 100) / 100;
 
-    // Check if price actually changed!
-    if (roundedOld === roundedNew && productDoc.sellingPrice === roundedNew) {
-        return null; // No price change, skip history creation
+    // Check if price actually changed on product level
+    const priceChanged = (roundedOld !== roundedNew) || (productDoc.sellingPrice !== roundedNew);
+
+    // ALWAYS synchronize ALL StockBalance records for this exact productId to roundedNew
+    await StockBalance.updateMany(
+        { productId: productDoc._id },
+        { $set: { sellingPrice: roundedNew } },
+        session ? { session } : {}
+    );
+
+    if (!priceChanged) {
+        return null; // No price change on product level, skip creating duplicate history entry
     }
 
     // Update Product's current selling price
@@ -47,13 +56,6 @@ async function recordSellingPriceChangeIfModified({
     if (userObj._id) productDoc.updatedBy = userObj._id;
     if (userObj.role) productDoc.updatedByRole = userObj.role;
     await productDoc.save(session ? { session } : {});
-
-    // Update all StockBalance documents for this product
-    await StockBalance.updateMany(
-        { productId: productDoc._id },
-        { $set: { sellingPrice: roundedNew } },
-        session ? { session } : {}
-    );
 
     // Resolve expiry date if not explicitly passed
     let expDate = expiryDate;

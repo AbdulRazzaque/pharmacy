@@ -3,6 +3,7 @@ const Product = require("../models/ProductModule")
 const StockBalance = require("../models/StockBalanceModule")
 const SellingPriceHistory = require("../models/SellingPriceHistoryModule")
 const { recordSellingPriceChangeIfModified } = require("../utils/sellingPriceHistoryHelper")
+const { withTransaction } = require("../utils/transactionHelper");
 const bcrypt = require('bcrypt');
 const jwt = require("jsonwebtoken")
 const _ = require("lodash")
@@ -650,7 +651,7 @@ class ProductController {
         }
     }
 
-    // Update Selling Price for a product
+    // Update Selling Price for a product (atomic transaction if supported)
     async updateSellingPrice(req, res) {
         try {
             const { productId, newSellingPrice } = req.body;
@@ -669,38 +670,48 @@ class ProductController {
                 return res.status(400).send({ msg: "error", error: "Selling price cannot be negative" });
             }
 
-            const product = await Product.findById(id);
-            if (!product) {
-                return res.status(404).send({ msg: "error", error: "Product not found" });
-            }
-
-            // Determine current/old selling price
             const userObj = req.user || req.userDetails || {};
-            const historyRecord = await recordSellingPriceChangeIfModified({
-                productId: product._id,
-                newSellingPrice: priceNum,
-                source: "Selling Price Update",
-                userObj
+
+            const { product, historyRecord } = await withTransaction(async (session) => {
+                const pId = new mongoose.Types.ObjectId(String(id));
+                const prod = await Product.findById(pId).session(session);
+                if (!prod) {
+                    const err = new Error("Product not found");
+                    err.statusCode = 404;
+                    throw err;
+                }
+
+                const history = await recordSellingPriceChangeIfModified({
+                    productId: prod._id,
+                    newSellingPrice: priceNum,
+                    source: "Selling Price Update",
+                    userObj,
+                    session
+                });
+
+                const roundedPrice = Math.round(priceNum * 100) / 100;
+                await StockBalance.updateMany(
+                    { productId: prod._id },
+                    { $set: { sellingPrice: roundedPrice } },
+                    session ? { session } : {}
+                );
+
+                return { product: prod, historyRecord: history };
             });
 
-            if (!historyRecord) {
-                return res.status(200).send({
-                    msg: "unchanged",
-                    message: "Price is unchanged. No history entry created.",
-                    result: product
-                });
-            }
+            const updatedProduct = await Product.findById(product._id).lean();
 
             return res.status(200).send({
                 msg: "success",
-                message: "Selling price updated successfully",
-                result: product,
+                message: "Selling price updated successfully across all batches",
+                result: updatedProduct,
                 history: historyRecord
             });
 
         } catch (error) {
             console.error("updateSellingPrice error:", error);
-            return res.status(500).send({ msg: "error", error: error.message });
+            const status = error.statusCode || 500;
+            return res.status(status).send({ msg: "error", error: error.message });
         }
     }
 
@@ -780,7 +791,7 @@ class ProductController {
         }
     }
 
-    // Bulk Update Selling Prices
+    // Bulk Update Selling Prices (atomic transaction if supported)
     async bulkUpdateSellingPrices(req, res) {
         try {
             const { updates } = req.body; // Array of { productId, newSellingPrice }
@@ -789,32 +800,53 @@ class ProductController {
             }
 
             const userObj = req.user || req.userDetails || {};
-            const userName = userObj.userName || "Admin";
-            const userId = userObj._id || null;
-            const userRole = userObj.role || "admin";
 
-            const results = [];
-            const historyRecords = [];
-            let skippedCount = 0;
+            const { results, historyRecords, skippedCount } = await withTransaction(async (session) => {
+                const resList = [];
+                const histList = [];
+                let skipCount = 0;
 
-            for (const item of updates) {
-                const { productId, newSellingPrice } = item;
-                if (!productId) continue;
+                for (const item of updates) {
+                    const { productId, newSellingPrice } = item;
+                    if (!productId) continue;
 
-                const historyRecord = await recordSellingPriceChangeIfModified({
-                    productId,
-                    newSellingPrice,
-                    source: "Selling Price Update",
-                    userObj
-                });
+                    const priceNum = parseFloat(newSellingPrice);
+                    if (newSellingPrice === undefined || newSellingPrice === null || newSellingPrice === "" || isNaN(priceNum) || priceNum < 0) {
+                        continue;
+                    }
 
-                if (historyRecord) {
-                    results.push({ productId, oldPrice: historyRecord.oldSellingPrice, newPrice: historyRecord.newSellingPrice });
-                    historyRecords.push(historyRecord);
-                } else {
-                    skippedCount++;
+                    const pId = new mongoose.Types.ObjectId(String(productId));
+                    const product = await Product.findById(pId).session(session);
+                    if (!product) continue;
+
+                    const roundedPrice = Math.round(priceNum * 100) / 100;
+
+                    const historyRecord = await recordSellingPriceChangeIfModified({
+                        productId: product._id,
+                        newSellingPrice: priceNum,
+                        source: "Selling Price Update",
+                        userObj,
+                        session
+                    });
+
+                    // Always ensure ALL StockBalance batches for this exact productId are updated to the new selling price
+                    await StockBalance.updateMany(
+                        { productId: product._id },
+                        { $set: { sellingPrice: roundedPrice } },
+                        session ? { session } : {}
+                    );
+
+                    if (historyRecord) {
+                        resList.push({ productId, oldPrice: historyRecord.oldSellingPrice, newPrice: historyRecord.newSellingPrice });
+                        histList.push(historyRecord);
+                    } else {
+                        resList.push({ productId, oldPrice: roundedPrice, newPrice: roundedPrice });
+                        skipCount++;
+                    }
                 }
-            }
+
+                return { results: resList, historyRecords: histList, skippedCount: skipCount };
+            });
 
             return res.status(200).send({
                 msg: "success",

@@ -89,17 +89,25 @@ const updateStockBalanceAndTransaction = async ({
     const previousBalance = balance ? Number(balance.quantity || 0) : 0;
     const newBalance = previousBalance + Number(quantityDelta);
 
+    let effectivePrice = sellingPrice;
+    if (!effectivePrice || effectivePrice <= 0) {
+        const prod = await Product.findById(productId).session(session);
+        if (prod && prod.sellingPrice > 0) {
+            effectivePrice = prod.sellingPrice;
+        }
+    }
+
     if (!balance) {
         balance = new StockBalance({
             ...filter,
             quantity: Math.max(0, newBalance),
             purchasingPrice: unitCost,
-            sellingPrice
+            sellingPrice: effectivePrice || 0
         });
     } else {
         balance.quantity = Math.max(0, newBalance);
         if (unitCost) balance.purchasingPrice = unitCost;
-        if (sellingPrice) balance.sellingPrice = sellingPrice;
+        if (effectivePrice) balance.sellingPrice = effectivePrice;
     }
     await balance.save(session ? { session } : {});
 

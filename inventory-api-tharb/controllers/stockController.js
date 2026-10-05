@@ -21,15 +21,21 @@ class stockController {
                 // so the frontend can show them when the toggle is OFF
                 const balances = await StockBalance.find({ productId: p._id }).lean();
                 const totalQuantity = balances.reduce((sum, b) => sum + (b.quantity || 0), 0);
-                // Determine effective selling price: prioritize valid selling price from StockBalance batch if present, otherwise Product sellingPrice
+                // Selling price belongs to the PRODUCT, not independently to each old stock batch.
+                // Product.sellingPrice is authoritative. Fallback to balance price only if product sellingPrice is not set.
+                const productSellingPrice = Number(p.sellingPrice || 0);
                 const balanceWithPrice = balances.find(b => b.sellingPrice && b.sellingPrice > 0);
-                const effectiveSellingPrice = balanceWithPrice ? balanceWithPrice.sellingPrice : (p.sellingPrice || 0);
+                const effectiveSellingPrice = productSellingPrice > 0
+                    ? productSellingPrice
+                    : (balanceWithPrice ? balanceWithPrice.sellingPrice : 0);
 
                 const expiryArray = balances.map(b => ({
+                    _id: b._id,
+                    stockBalanceId: b._id,
                     expiry: b.expiry,
                     quantity: b.quantity || 0,
                     purchasingPrice: b.purchasingPrice || 0,
-                    sellingPrice: b.sellingPrice || effectiveSellingPrice,
+                    sellingPrice: effectiveSellingPrice,
                     batchNumber: b.batchNumber || ""
                 }));
 

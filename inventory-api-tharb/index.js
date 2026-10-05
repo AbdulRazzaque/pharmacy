@@ -12,8 +12,14 @@ const libre = require('libreoffice-convert');
 libre.convertAsync = require('util').promisify(libre.convert);
 
 mongoose.connect(process.env.MONGODB)
-    .then(res => {
-        console.log("connection successful")
+    .then(async res => {
+        console.log("connection successful");
+        try {
+            const syncStockBalancePrices = require('./utils/syncStockBalancePrices');
+            await syncStockBalancePrices();
+        } catch (syncErr) {
+            console.error("Startup syncStockBalancePrices error:", syncErr);
+        }
     })
     .catch(err => {
         console.log(err)

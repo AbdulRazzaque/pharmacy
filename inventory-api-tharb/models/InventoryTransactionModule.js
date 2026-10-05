@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const inventoryTransactionSchema = new mongoose.Schema(
   {
     productId: { type: mongoose.Types.ObjectId, ref: "Product", required: true },
+    stockBalanceId: { type: mongoose.Types.ObjectId, ref: "StockBalance", default: null },
     locationId: { type: mongoose.Types.ObjectId, ref: "Location" },
     batchNumber: { type: String, default: "" },
     expiry: { type: Date, default: null },
@@ -32,6 +33,7 @@ const inventoryTransactionSchema = new mongoose.Schema(
 
 // Indexes
 inventoryTransactionSchema.index({ productId: 1 });
+inventoryTransactionSchema.index({ stockBalanceId: 1 });
 inventoryTransactionSchema.index({ locationId: 1 });
 inventoryTransactionSchema.index({ expiry: 1 });
 inventoryTransactionSchema.index({ batchNumber: 1 });

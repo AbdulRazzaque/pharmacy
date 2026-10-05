@@ -138,25 +138,26 @@ const StockOutDocExcelEdit = () => {
               const productId = String(stock.product?._id || stock.product || stock._id);
               const productName = stock.name || stock.product?.name || 'Unknown';
               const expiryDate = expiryItem.expiry ? moment(expiryItem.expiry).format('YYYY-MM-DD') : 'no-expiry';
-              const mapKey = `${productId}_${expiryDate}`;
-              if (stockMap.has(mapKey)) {
-                const existing = stockMap.get(mapKey);
-                existing.quantity += expiryItem.quantity || 0;
-              } else {
-                stockMap.set(mapKey, {
-                  _id: `${stock._id}_${expiryDate}`,
-                  originalStockId: stock._id,
-                  productName,
-                  companyName: stock.product?.companyName || '',
-                  type: stock.product?.type || '',
-                  unit: stock.product?.unit || '',
-                  quantity: expiryItem.quantity || 0,
-                  purchasingPrice: expiryItem.purchasingPrice ?? 0,
-                  sellingPrice: expiryItem.sellingPrice ?? 0,
-                  productId: productId,
-                  expiry: expiryItem.expiry || null,
-                });
-              }
+              const stockBalId = expiryItem.stockBalanceId || expiryItem._id;
+              const mapKey = stockBalId ? String(stockBalId) : `${productId}_${expiryDate}_${expiryItem.batchNumber || ''}`;
+
+              const productPrice = Number(stock.product?.sellingPrice ?? stock.sellingPrice ?? 0);
+              const effectivePrice = productPrice > 0 ? productPrice : (expiryItem.sellingPrice ?? 0);
+              stockMap.set(mapKey, {
+                _id: mapKey,
+                stockBalanceId: stockBalId,
+                batchNumber: expiryItem.batchNumber || '',
+                originalStockId: stock._id,
+                productName,
+                companyName: stock.product?.companyName || '',
+                type: stock.product?.type || '',
+                unit: stock.product?.unit || '',
+                quantity: expiryItem.quantity || 0,
+                purchasingPrice: expiryItem.purchasingPrice ?? 0,
+                sellingPrice: effectivePrice,
+                productId: productId,
+                expiry: expiryItem.expiry || null,
+              });
             });
           }
         });
@@ -371,6 +372,8 @@ const StockOutDocExcelEdit = () => {
 
     updated[targetIdx].productId = stockEntry.productId;
     updated[targetIdx].stockId = stockEntry.stockId;   // needed by bulkUpdate to deduct correct batch
+    updated[targetIdx].stockBalanceId = stockEntry.stockBalanceId;
+    updated[targetIdx].batchNumber = stockEntry.batchNumber || '';
     updated[targetIdx].name = stockEntry.name;
     updated[targetIdx].companyName = stockEntry.companyName || '-';
     updated[targetIdx].unit = stockEntry.unit || '-';

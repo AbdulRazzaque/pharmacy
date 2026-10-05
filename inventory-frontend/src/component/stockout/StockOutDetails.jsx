@@ -94,27 +94,26 @@ const StockOutDetails = () => {
                 const expiryDate = expiryItem.expiry
                   ? moment(expiryItem.expiry).format('YYYY-MM-DD')
                   : 'no-expiry';
-                const mapKey = `${productId}_${expiryDate}`;
-                if (stockMap.has(mapKey)) {
-                  const existing = stockMap.get(mapKey);
-                  existing.quantity += expiryItem.quantity || 0;
-                  existing.stockIds.push(stock._id);
-                } else {
-                  stockMap.set(mapKey, {
-                    _id: `${stock._id}_${expiryDate}`,
-                    originalStockId: stock._id,
-                    stockIds: [stock._id],
-                    productName,
-                    companyName: stock.product?.companyName || '',
-                    type: stock.product?.type || '',
-                    unit: stock.product?.unit || '',
-                    quantity: expiryItem.quantity || 0,
-                    sellingPrice: expiryItem.sellingPrice ?? 0,
-                    productId: productId,
-                    expiry: expiryItem.expiry,
-                    expiryArray: stock.expiryArray || []
-                  });
-                }
+                const stockBalId = expiryItem.stockBalanceId || expiryItem._id;
+                const mapKey = stockBalId ? String(stockBalId) : `${productId}_${expiryDate}_${expiryItem.batchNumber || ''}`;
+                const productPrice = Number(stock.product?.sellingPrice ?? stock.sellingPrice ?? 0);
+                const effectivePrice = productPrice > 0 ? productPrice : (expiryItem.sellingPrice ?? 0);
+                stockMap.set(mapKey, {
+                  _id: mapKey,
+                  stockBalanceId: stockBalId,
+                  batchNumber: expiryItem.batchNumber || '',
+                  originalStockId: stock._id,
+                  stockIds: [stock._id],
+                  productName,
+                  companyName: stock.product?.companyName || '',
+                  type: stock.product?.type || '',
+                  unit: stock.product?.unit || '',
+                  quantity: expiryItem.quantity || 0,
+                  sellingPrice: effectivePrice,
+                  productId: productId,
+                  expiry: expiryItem.expiry,
+                  expiryArray: stock.expiryArray || []
+                });
               }
             });
           }
@@ -362,6 +361,9 @@ const StockOutDetails = () => {
     const newItem = {
       id: Date.now(),
       stockId: selectedStock.originalStockId || selectedStock._id,
+      productId: selectedStock.productId || selectedStock.originalStockId || selectedStock._id,
+      stockBalanceId: selectedStock.stockBalanceId || null,
+      batchNumber: selectedStock.batchNumber || '',
       productName: selectedStock.productName,
       companyName: selectedStock.companyName || '',
       type: selectedStock.type,
@@ -412,9 +414,12 @@ const StockOutDetails = () => {
         items: pendingOutItems.map((item) => ({
           stockId: item.stockId,
           productId: item.productId || item.stockId,
+          stockBalanceId: item.stockBalanceId || null,
+          batchNumber: item.batchNumber || '',
           locationId: item.locationId,
           quantity: item.quantity,
           sellingPrice: item.sellingPrice,
+          expiry: item.expiry || null,
           doctorName: item.doctorName || '',
           trainerName: item.trainerName || ''
         }))
