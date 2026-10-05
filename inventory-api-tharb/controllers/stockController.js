@@ -6,6 +6,7 @@ const StockInItem = require("../models/StockInItemModule");
 const StockOutItem = require("../models/StockOutItemModule");
 const StockAdjustmentItem = require("../models/StockAdjustmentItemModule");
 const moment = require("moment");
+const { normalizeExpiryDate, consolidateAllStockBalances } = require("../utils/stockBalanceHelper");
 
 class stockController {
 
@@ -29,15 +30,33 @@ class stockController {
                     ? productSellingPrice
                     : (balanceWithPrice ? balanceWithPrice.sellingPrice : 0);
 
-                const expiryArray = balances.map(b => ({
-                    _id: b._id,
-                    stockBalanceId: b._id,
-                    expiry: b.expiry,
-                    quantity: b.quantity || 0,
-                    purchasingPrice: b.purchasingPrice || 0,
-                    sellingPrice: effectiveSellingPrice,
-                    batchNumber: b.batchNumber || ""
-                }));
+                // Group balances by (normalizedExpiry, batchNumber) for consistency
+                const batchMap = new Map();
+                for (const b of balances) {
+                    const normExp = normalizeExpiryDate(b.expiry);
+                    const expKey = normExp ? normExp.toISOString().slice(0, 10) : 'no-expiry';
+                    const batchKey = (b.batchNumber || '').trim();
+                    const groupKey = `${expKey}__${batchKey}`;
+
+                    if (!batchMap.has(groupKey)) {
+                        batchMap.set(groupKey, {
+                            _id: b._id,
+                            stockBalanceId: b._id,
+                            expiry: normExp || b.expiry,
+                            quantity: Number(b.quantity) || 0,
+                            purchasingPrice: b.purchasingPrice || 0,
+                            sellingPrice: effectiveSellingPrice,
+                            batchNumber: batchKey
+                        });
+                    } else {
+                        const existing = batchMap.get(groupKey);
+                        existing.quantity += (Number(b.quantity) || 0);
+                        if (!existing.purchasingPrice && b.purchasingPrice) {
+                            existing.purchasingPrice = b.purchasingPrice;
+                        }
+                    }
+                }
+                const expiryArray = Array.from(batchMap.values());
 
                 return {
                     _id: p._id,
@@ -155,7 +174,12 @@ class stockController {
     }
 
     async mergeDuplicateStocks(req, res) {
-        return res.status(200).send({ msg: "success", result: "No duplicates found" });
+        try {
+            const result = await consolidateAllStockBalances();
+            return res.status(200).send({ msg: "success", result });
+        } catch (err) {
+            return res.status(500).send({ msg: "error", error: err.message });
+        }
     }
 }
 

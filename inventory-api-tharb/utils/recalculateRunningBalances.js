@@ -24,17 +24,20 @@ const recalculateRunningBalances = async (productId, session = null) => {
     await t.save(session ? { session } : {});
   }
 
-  // Group by (batchNumber, expiry) across all transactions to update StockBalances
+  const { normalizeExpiryDate } = require("./stockBalanceHelper");
+
+  // Group by (batchNumber, normalized expiry) across all transactions to update StockBalances
   const batchMap = new Map();
   for (const t of txns) {
-    const expKey = t.expiry ? new Date(t.expiry).toISOString() : 'no-expiry';
-    const batchKey = t.batchNumber || '';
+    const normExp = normalizeExpiryDate(t.expiry);
+    const expKey = normExp ? normExp.toISOString().slice(0, 10) : 'no-expiry';
+    const batchKey = (t.batchNumber || '').trim();
     const key = `${batchKey}|${expKey}`;
 
     if (!batchMap.has(key)) {
       batchMap.set(key, {
         batchNumber: batchKey,
-        expiry: t.expiry || null,
+        expiry: normExp,
         quantity: 0,
         purchasingPrice: t.unitCost || 0,
         sellingPrice: t.sellingPrice || 0
@@ -56,21 +59,23 @@ const recalculateRunningBalances = async (productId, session = null) => {
   const existingBalances = await StockBalance.find({ productId: pId }).session(session);
   const matchedBalanceIds = new Set();
 
-  for (const item of batchMap.values()) {
+  for (const [key, item] of batchMap.entries()) {
     const finalPrice = authoritativeSellingPrice > 0 ? authoritativeSellingPrice : (item.sellingPrice || 0);
 
-    // Find existing balance for this batch & expiry
+    // Find existing balance for this batch & normalized expiry
     let existingBal = existingBalances.find(b => {
-      const bBatch = b.batchNumber || '';
-      const iBatch = item.batchNumber || '';
-      const bExp = b.expiry ? new Date(b.expiry).getTime() : null;
-      const iExp = item.expiry ? new Date(item.expiry).getTime() : null;
-      return bBatch === iBatch && bExp === iExp;
+      const bBatch = (b.batchNumber || '').trim();
+      const bExp = normalizeExpiryDate(b.expiry);
+      const bExpKey = bExp ? bExp.toISOString().slice(0, 10) : 'no-expiry';
+      const targetExpKey = item.expiry ? item.expiry.toISOString().slice(0, 10) : 'no-expiry';
+      return bBatch === item.batchNumber && bExpKey === targetExpKey && !matchedBalanceIds.has(String(b._id));
     });
 
     if (existingBal) {
       matchedBalanceIds.add(String(existingBal._id));
       existingBal.quantity = Math.max(0, item.quantity);
+      existingBal.expiry = item.expiry;
+      existingBal.batchNumber = item.batchNumber;
       existingBal.purchasingPrice = item.purchasingPrice || existingBal.purchasingPrice || 0;
       existingBal.sellingPrice = finalPrice;
       await existingBal.save(session ? { session } : {});
@@ -91,9 +96,9 @@ const recalculateRunningBalances = async (productId, session = null) => {
     }
   }
 
-  // Remove zero-quantity or orphaned duplicate balances that were not in active batches
+  // Remove zero-quantity or duplicate balances that were not matched to any active batch
   for (const b of existingBalances) {
-    if (!matchedBalanceIds.has(String(b._id)) && (b.quantity || 0) <= 0) {
+    if (!matchedBalanceIds.has(String(b._id))) {
       await StockBalance.findByIdAndDelete(b._id, session ? { session } : {});
     }
   }

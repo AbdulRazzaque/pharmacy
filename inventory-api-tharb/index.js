@@ -15,6 +15,12 @@ mongoose.connect(process.env.MONGODB)
     .then(async res => {
         console.log("connection successful");
         try {
+            const { consolidateAllStockBalances } = require('./utils/stockBalanceHelper');
+            await consolidateAllStockBalances();
+        } catch (mergeErr) {
+            console.error("Startup consolidateAllStockBalances error:", mergeErr);
+        }
+        try {
             const syncStockBalancePrices = require('./utils/syncStockBalancePrices');
             await syncStockBalancePrices();
         } catch (syncErr) {

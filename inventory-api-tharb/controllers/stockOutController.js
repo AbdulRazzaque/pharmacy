@@ -8,6 +8,7 @@ const Product = require("../models/ProductModule");
 const Location = require("../models/LocationModule");
 const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
+const { findMatchingStockBalance, normalizeExpiryDate } = require("../utils/stockBalanceHelper");
 
 const peekNextStockOutDocNo = async (session = null) => {
     let query = StockOutHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 }).select('docNo');
@@ -328,17 +329,9 @@ const stockOutController = {
                 // Check if user selected an exact batch / StockBalance
                 let targetStockBalanceId = item.stockBalanceId;
                 if (!targetStockBalanceId && item.expiry) {
-                    const expDate = new Date(item.expiry);
-                    if (!isNaN(expDate.getTime())) {
-                        const matchBal = await StockBalance.findOne({
-                            productId: new mongoose.Types.ObjectId(pId),
-                            expiry: expDate,
-                            quantity: { $gt: 0 },
-                            ...(item.batchNumber ? { batchNumber: item.batchNumber } : {})
-                        }).session(session);
-                        if (matchBal) {
-                            targetStockBalanceId = matchBal._id;
-                        }
+                    const matchBal = await findMatchingStockBalance(pId, item.expiry, item.batchNumber, item.locationId, session);
+                    if (matchBal && (matchBal.quantity || 0) > 0) {
+                        targetStockBalanceId = matchBal._id;
                     }
                 }
 
@@ -1085,16 +1078,8 @@ const stockOutController = {
                     // Check if exact stockBalanceId / batch is specified
                     let targetStockBalanceId = update.stockBalanceId;
                     if (!targetStockBalanceId && update.expiry) {
-                        const expDate = new Date(update.expiry);
-                        if (!isNaN(expDate.getTime())) {
-                            const matchBal = await StockBalance.findOne({
-                                productId: mongoose.Types.ObjectId(pId),
-                                expiry: expDate,
-                                quantity: { $gt: 0 },
-                                ...(update.batchNumber ? { batchNumber: update.batchNumber } : {})
-                            }).session(session);
-                            if (matchBal) targetStockBalanceId = matchBal._id;
-                        }
+                        const matchBal = await findMatchingStockBalance(pId, update.expiry, update.batchNumber, update.locationId, session);
+                        if (matchBal && (matchBal.quantity || 0) > 0) targetStockBalanceId = matchBal._id;
                     }
 
                     if (targetStockBalanceId) {
@@ -1255,10 +1240,7 @@ const stockOutController = {
                             bal = await StockBalance.findById(item.stockBalanceId).session(session);
                         }
                         if (!bal && oldExpiry) {
-                            bal = await StockBalance.findOne({
-                                productId: oldProductId,
-                                expiry: oldExpiry
-                            }).session(session);
+                            bal = await findMatchingStockBalance(oldProductId, oldExpiry, item.batchNumber, item.locationId, session);
                         }
                         if (!bal) {
                             bal = await StockBalance.findOne({ productId: oldProductId }).sort({ createdAt: -1 }).session(session);
@@ -1271,7 +1253,8 @@ const stockOutController = {
                             await StockBalance.create(
                                 [{
                                     productId: oldProductId,
-                                    expiry: oldExpiry || null,
+                                    expiry: normalizeExpiryDate(oldExpiry),
+                                    batchNumber: item.batchNumber || null,
                                     quantity: oldQty,
                                     purchasingPrice: item.purchasingPrice || 0,
                                     sellingPrice: item.sellingPrice || 0
@@ -1293,10 +1276,7 @@ const stockOutController = {
                         // Return old product quantity to old product stock balance
                         let oldBal = null;
                         if (oldExpiry) {
-                            oldBal = await StockBalance.findOne({
-                                productId: oldProductId,
-                                expiry: oldExpiry
-                            }).session(session);
+                            oldBal = await findMatchingStockBalance(oldProductId, oldExpiry, item.batchNumber, item.locationId, session);
                         }
                         if (!oldBal) {
                             oldBal = await StockBalance.findOne({ productId: oldProductId }).sort({ createdAt: -1 }).session(session);
@@ -1308,7 +1288,8 @@ const stockOutController = {
                             await StockBalance.create(
                                 [{
                                     productId: oldProductId,
-                                    expiry: oldExpiry || null,
+                                    expiry: normalizeExpiryDate(oldExpiry),
+                                    batchNumber: item.batchNumber || null,
                                     quantity: oldQty,
                                     purchasingPrice: item.purchasingPrice || 0,
                                     sellingPrice: item.sellingPrice || 0
@@ -1662,6 +1643,7 @@ const stockOutController = {
                 if (returnQty <= 0) continue;
 
                 // Match exact stockBalanceId first if available
+                // Match exact stockBalanceId first if available
                 let bal = null;
                 if (item.stockBalanceId) {
                     bal = await StockBalance.findOne({
@@ -1669,18 +1651,8 @@ const stockOutController = {
                         productId: productId
                     }).session(session);
                 }
-                if (!bal && item.batchNumber && item.expiry) {
-                    bal = await StockBalance.findOne({
-                        productId: productId,
-                        batchNumber: item.batchNumber,
-                        expiry: item.expiry
-                    }).session(session);
-                }
                 if (!bal && item.expiry) {
-                    bal = await StockBalance.findOne({
-                        productId: productId,
-                        expiry: item.expiry
-                    }).session(session);
+                    bal = await findMatchingStockBalance(productId, item.expiry, item.batchNumber, item.locationId, session);
                 }
                 if (!bal && item.batchNumber) {
                     bal = await StockBalance.findOne({
@@ -1700,7 +1672,7 @@ const stockOutController = {
                     await StockBalance.create(
                         [{
                             productId: productId,
-                            expiry: item.expiry || null,
+                            expiry: normalizeExpiryDate(item.expiry),
                             batchNumber: item.batchNumber || "",
                             quantity: returnQty,
                             purchasingPrice: item.purchasingPrice || 0,

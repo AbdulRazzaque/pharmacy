@@ -8,6 +8,11 @@ const Product = require("../models/ProductModule");
 const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
 const { recordSellingPriceChangeIfModified } = require("../utils/sellingPriceHistoryHelper");
+const {
+    normalizeExpiryDate,
+    buildStockBalanceFilter,
+    findMatchingStockBalance
+} = require("../utils/stockBalanceHelper");
 
 const isAdminRole = (role) => (role || '').toLowerCase() === 'admin';
 
@@ -78,14 +83,10 @@ const updateStockBalanceAndTransaction = async ({
     remarks = "",
     session = null
 }) => {
-    const filter = {
-        productId: new mongoose.Types.ObjectId(String(productId)),
-        locationId: locationId ? new mongoose.Types.ObjectId(String(locationId)) : null,
-        batchNumber: batchNumber || "",
-        expiry: expiry ? new Date(expiry) : null
-    };
+    const normalizedExpiry = normalizeExpiryDate(expiry);
+    const cleanBatch = (batchNumber || "").trim();
 
-    let balance = await StockBalance.findOne(filter).session(session);
+    let balance = await findMatchingStockBalance(productId, normalizedExpiry, cleanBatch, locationId, session);
     const previousBalance = balance ? Number(balance.quantity || 0) : 0;
     const newBalance = previousBalance + Number(quantityDelta);
 
@@ -99,13 +100,18 @@ const updateStockBalanceAndTransaction = async ({
 
     if (!balance) {
         balance = new StockBalance({
-            ...filter,
+            productId: new mongoose.Types.ObjectId(String(productId)),
+            locationId: locationId ? new mongoose.Types.ObjectId(String(locationId)) : null,
+            batchNumber: cleanBatch,
+            expiry: normalizedExpiry,
             quantity: Math.max(0, newBalance),
             purchasingPrice: unitCost,
             sellingPrice: effectivePrice || 0
         });
     } else {
         balance.quantity = Math.max(0, newBalance);
+        if (normalizedExpiry) balance.expiry = normalizedExpiry;
+        balance.batchNumber = cleanBatch;
         if (unitCost) balance.purchasingPrice = unitCost;
         if (effectivePrice) balance.sellingPrice = effectivePrice;
     }
@@ -113,14 +119,15 @@ const updateStockBalanceAndTransaction = async ({
 
     const txn = new InventoryTransaction({
         productId,
+        stockBalanceId: balance._id,
         locationId,
-        batchNumber,
-        expiry,
+        batchNumber: cleanBatch,
+        expiry: normalizedExpiry,
         quantityDelta,
         previousBalance,
         newBalance: Math.max(0, newBalance),
         unitCost,
-        sellingPrice,
+        sellingPrice: effectivePrice || sellingPrice,
         transactionType,
         referenceType,
         referenceId,
@@ -131,7 +138,7 @@ const updateStockBalanceAndTransaction = async ({
     });
     await txn.save(session ? { session } : {});
 
-    return { previousBalance, newBalance };
+    return { previousBalance, newBalance, balance };
 };
 
 const updateStockInItemHelper = async ({
@@ -166,10 +173,7 @@ const updateStockInItemHelper = async ({
     if (productChanged || expiryChanged || qtyChanged || priceChanged || remarks !== undefined) {
         // 1. Deduct old quantity from old product/expiry StockBalance batch
         if (oldExpiry) {
-            let oldBalance = await StockBalance.findOne({
-                productId: oldProductId,
-                expiry: oldExpiry
-            }).session(session);
+            let oldBalance = await findMatchingStockBalance(oldProductId, oldExpiry, item.batchNumber, item.locationId, session);
             if (oldBalance) {
                 oldBalance.quantity = Math.max(0, (oldBalance.quantity || 0) - oldQty);
                 await oldBalance.save(session ? { session } : {});
@@ -177,22 +181,23 @@ const updateStockInItemHelper = async ({
         }
 
         // 2. Find or create StockBalance for new product and new expiry date
-        let newBalance = await StockBalance.findOne({
-            productId: newProductId,
-            expiry: newExpiry
-        }).session(session);
+        const normalizedNewExpiry = normalizeExpiryDate(newExpiry);
+        const cleanBatch = (item.batchNumber || "").trim();
+        let newBalance = await findMatchingStockBalance(newProductId, normalizedNewExpiry, cleanBatch, item.locationId, session);
 
         if (!newBalance) {
             newBalance = new StockBalance({
                 productId: newProductId,
-                expiry: newExpiry,
-                batchNumber: item.batchNumber || "",
+                expiry: normalizedNewExpiry,
+                batchNumber: cleanBatch,
                 quantity: newQty,
                 purchasingPrice: newPurchasingPrice,
                 sellingPrice: newSellingPrice
             });
         } else {
             newBalance.quantity = (newBalance.quantity || 0) + newQty;
+            if (normalizedNewExpiry) newBalance.expiry = normalizedNewExpiry;
+            newBalance.batchNumber = cleanBatch;
             newBalance.purchasingPrice = newPurchasingPrice;
             newBalance.sellingPrice = newSellingPrice;
         }
@@ -320,7 +325,8 @@ const stockInController = {
                     quantity: parsedQty,
                     purchasingPrice: parsedPurchasing,
                     sellingPrice: parsedSelling,
-                    expiry: new Date(expiry),
+                    expiry: normalizeExpiryDate(expiry),
+                    batchNumber: (entry.batchNumber || "").trim(),
                     unit,
                     remarks: entryRemarks || remarks || ""
                 });
@@ -390,6 +396,7 @@ const stockInController = {
                     purchasingPrice: entry.purchasingPrice,
                     sellingPrice: entry.sellingPrice,
                     expiry: entry.expiry,
+                    batchNumber: entry.batchNumber || "",
                     unit: entry.unit,
                     remarks: entry.remarks
                 };
@@ -408,6 +415,7 @@ const stockInController = {
                     unitCost: entry.purchasingPrice,
                     sellingPrice: entry.sellingPrice,
                     expiry: entry.expiry,
+                    batchNumber: entry.batchNumber || "",
                     transactionType: "STOCK_IN",
                     referenceType: "StockIn",
                     referenceId: item._id,
@@ -618,7 +626,8 @@ const stockInController = {
                         quantityDelta: Number(quantity || 0),
                         unitCost: Number(purchasingPrice || 0),
                         sellingPrice: Number(sellingPrice || 0),
-                        expiry: expiry ? new Date(expiry) : null,
+                        expiry: normalizeExpiryDate(expiry),
+                        batchNumber: (update.batchNumber || "").trim(),
                         transactionType: "STOCK_IN",
                         referenceType: "StockIn",
                         referenceId: item._id,
@@ -633,7 +642,7 @@ const stockInController = {
                             productId,
                             newSellingPrice: Number(sellingPrice),
                             source: "Stock In",
-                            expiryDate: expiry ? new Date(expiry) : null,
+                            expiryDate: normalizeExpiryDate(expiry),
                             userObj: req.user,
                             session
                         });
@@ -647,10 +656,7 @@ const stockInController = {
 
                     if (isDeleted) {
                         if (item.expiry) {
-                            let oldBal = await StockBalance.findOne({
-                                productId: item.productId,
-                                expiry: item.expiry
-                            }).session(session);
+                            let oldBal = await findMatchingStockBalance(item.productId, item.expiry, item.batchNumber, item.locationId, session);
                             if (oldBal) {
                                 oldBal.quantity = Math.max(0, (oldBal.quantity || 0) - (item.quantity || 0));
                                 await oldBal.save(session ? { session } : {});
@@ -776,15 +782,12 @@ const stockInController = {
 
     async deleteStockIn(req, res) {
         try {
-            const { id, docNo } = req.body || req.params || {};
+            const { id, docNo } = req.body || req.params;
             if (id) {
                 const item = await StockInItem.findById(id);
                 if (item) {
                     if (item.expiry) {
-                        let oldBal = await StockBalance.findOne({
-                            productId: item.productId,
-                            expiry: item.expiry
-                        });
+                        let oldBal = await findMatchingStockBalance(item.productId, item.expiry, item.batchNumber, item.locationId);
                         if (oldBal) {
                             oldBal.quantity = Math.max(0, (oldBal.quantity || 0) - (item.quantity || 0));
                             await oldBal.save();
@@ -800,10 +803,7 @@ const stockInController = {
                     const items = await StockInItem.find({ stockInHeaderId: header._id });
                     for (const item of items) {
                         if (item.expiry) {
-                            let oldBal = await StockBalance.findOne({
-                                productId: item.productId,
-                                expiry: item.expiry
-                            });
+                            let oldBal = await findMatchingStockBalance(item.productId, item.expiry, item.batchNumber, item.locationId);
                             if (oldBal) {
                                 oldBal.quantity = Math.max(0, (oldBal.quantity || 0) - (item.quantity || 0));
                                 await oldBal.save();
