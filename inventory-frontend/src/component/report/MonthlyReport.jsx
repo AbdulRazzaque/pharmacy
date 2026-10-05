@@ -318,26 +318,26 @@ const MonthlyReport = ({
                 {loading ? <RefreshCw className="h-4 w-4 reports-icon-spin" /> : <Search className="h-4 w-4" />}
                 {loading ? 'Loading...' : 'Apply filters'}
               </button>
-            <button type="button" className="reports-btn-secondary" onClick={onClearFilters}>
-              <Trash2 className="h-4 w-4" /> Clear filters
-            </button>
-            {data.length > 0 && (
-              <>
-                <button type="button" className="reports-btn-secondary" onClick={onExportExcel}>
-                  <FileSpreadsheet className="h-4 w-4" /> Excel
-                </button>
-                <button type="button" className="reports-btn-secondary" onClick={onExportPdf}>
-                  <Download className="h-4 w-4" /> PDF
-                </button>
-                <button type="button" className="reports-btn-secondary" onClick={onPrint}>
-                  <Printer className="h-4 w-4" /> Print
-                </button>
-              </>
-            )}
+              <button type="button" className="reports-btn-secondary" onClick={onClearFilters}>
+                <Trash2 className="h-4 w-4" /> Clear filters
+              </button>
+              {data.length > 0 && (
+                <>
+                  <button type="button" className="reports-btn-secondary" onClick={onExportExcel}>
+                    <FileSpreadsheet className="h-4 w-4" /> Excel
+                  </button>
+                  <button type="button" className="reports-btn-secondary" onClick={onExportPdf}>
+                    <Download className="h-4 w-4" /> PDF
+                  </button>
+                  <button type="button" className="reports-btn-secondary" onClick={onPrint}>
+                    <Printer className="h-4 w-4" /> Print
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
 
       {loading && (
         <div className="reports-loading-overlay">

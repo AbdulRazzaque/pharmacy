@@ -96,7 +96,7 @@ const reportController = {
 
             // Fetch StockOutPdf records for docNo level overrides/fallbacks
             const docNos = Array.from(new Set(txns.map(t => Number(t.docNo)).filter(Boolean)));
-            const pdfRecords = docNos.length > 0 
+            const pdfRecords = docNos.length > 0
                 ? await StockOutPdf.find({ docNo: { $in: docNos } }).lean()
                 : [];
             const pdfMap = new Map();

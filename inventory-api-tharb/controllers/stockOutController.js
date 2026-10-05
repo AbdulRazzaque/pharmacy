@@ -722,7 +722,7 @@ const stockOutController = {
                 .lean();
 
             const docNos = headers.map(h => Number(h.docNo)).filter(Boolean);
-            const pdfRecords = docNos.length > 0 
+            const pdfRecords = docNos.length > 0
                 ? await StockOutPdf.find({ docNo: { $in: docNos } }).lean()
                 : [];
             const pdfMap = new Map();
@@ -1222,7 +1222,7 @@ const stockOutController = {
                                 referenceType: "StockOut",
                                 referenceId: outItem._id,
                                 docNo: parsedDocNo,
-                               createdBy: req.user?._id,
+                                createdBy: req.user?._id,
                                 date: header.date || new Date(),
                                 remarks: remarks || "Stock Out added via bulk update"
                             });
