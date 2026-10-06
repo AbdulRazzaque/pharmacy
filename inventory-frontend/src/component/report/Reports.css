@@ -886,7 +886,7 @@
 
 .reports-table th.col-mr-trainer,
 .reports-table td.col-mr-trainer {
-  width: 90px;
+  /* width: 90px; */
   min-width: 80px;
   max-width: 110px;
   font-size: 0.75rem;

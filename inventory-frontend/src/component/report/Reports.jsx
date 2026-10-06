@@ -45,6 +45,15 @@ const getDatePresets = () => {
 
 const isUserRole = () => (getUserInfo()?.role || '').toLowerCase() === 'user';
 
+const formatMonthlyItemName = (item) => {
+  if (!item) return '';
+  const name = (item.productName || item.productId?.name || '').trim();
+  const company = (item.companyName || item.productId?.companyName || '').trim();
+  const unit = (item.unit || item.size || item.productId?.unit || '').trim();
+  const parts = [name, unit, company].filter(Boolean);
+  return parts.length > 0 ? parts.join(' - ') : (name || '');
+};
+
 const Reports = () => {
   const [searchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState(TAB_STOCK_IN);
@@ -910,7 +919,7 @@ const Reports = () => {
       const exportLocItems = [...filteredItems].reverse();
       exportLocItems.forEach((item) => {
         const formattedDate = item.date ? moment(item.date).format('DD-MM-YYYY') : '';
-        const descText = item.productName || '';
+        const descText = formatMonthlyItemName(item);
         const qty = item.quantity ?? 0;
         const rate = item.rate ?? 0;
         const gross = Number(item.grossAmount ?? (qty * rate));
@@ -1104,7 +1113,7 @@ const Reports = () => {
 
         return [
           item.date ? moment(item.date).format('DD-MM-YYYY') : '',
-          item.productName || '',
+          formatMonthlyItemName(item),
           qty,
           rate.toFixed(2),
           net.toFixed(2)
@@ -1738,7 +1747,7 @@ const Reports = () => {
                       return (
                         <tr key={item._id || idx}>
                           <td className="col-center">{item.date ? moment(item.date).format('DD-MM-YYYY') : ''}</td>
-                          <td className="col-left">{item.productName || ''}</td>
+                          <td className="col-left">{formatMonthlyItemName(item)}</td>
                           <td className="col-center">{qty}</td>
                           <td className="col-right">{rate.toFixed(2)}</td>
                           <td className="col-right font-bold">{net.toFixed(2)}</td>

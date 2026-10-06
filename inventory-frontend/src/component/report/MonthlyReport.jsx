@@ -477,12 +477,13 @@ const MonthlyReport = ({
                                 background: row.trainerName ? '#f0fdf4' : '#f8fafc',
                                 color: row.trainerName ? '#166534' : '#64748b',
                                 fontWeight: row.trainerName ? 600 : 400,
-                                border: row.trainerName ? '1px solid #bbf7d0' : '1px solid #e2e8f0',
+                                border: row.trainerName
+                                  ? '1px solid #bbf7d0'
+                                  : '1px solid #e2e8f0',
                                 fontSize: '0.75rem',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                maxWidth: '100px',
+                                whiteSpace: 'normal',
+                                wordBreak: 'break-word',
+                                overflowWrap: 'anywhere',
                               }}
                               title={row.trainerName || row.location?.trainerName || ''}
                             >
