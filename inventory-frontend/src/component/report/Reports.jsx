@@ -50,7 +50,7 @@ const formatMonthlyItemName = (item) => {
   const name = (item.productName || item.productId?.name || '').trim();
   const company = (item.companyName || item.productId?.companyName || '').trim();
   const unit = (item.unit || item.size || item.productId?.unit || '').trim();
-  const parts = [name, unit, company].filter(Boolean);
+  const parts = [name, unit ? `(${unit})` : '', company].filter(Boolean);
   return parts.length > 0 ? parts.join(' - ') : (name || '');
 };
 
@@ -1749,8 +1749,8 @@ const Reports = () => {
                           <td className="col-center">{item.date ? moment(item.date).format('DD-MM-YYYY') : ''}</td>
                           <td className="col-left">{formatMonthlyItemName(item)}</td>
                           <td className="col-center">{qty}</td>
-                          <td className="col-right">{rate.toFixed(2)}</td>
-                          <td className="col-right font-bold">{net.toFixed(2)}</td>
+                          <td className="col-center">{rate.toFixed(2)}</td>
+                          <td className="col-center font-bold">{net.toFixed(2)}</td>
                         </tr>
                       );
                     })}
@@ -1758,8 +1758,8 @@ const Reports = () => {
                       <td className="col-center"></td>
                       <td className="col-left"></td>
                       <td className="col-center"></td>
-                      <td className="col-right font-bold">Total QR:</td>
-                      <td className="col-right font-bold">{grandTotal.toFixed(2)}</td>
+                      <td className="col-center font-bold">Total QR:</td>
+                      <td className="col-center font-bold">{grandTotal.toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>

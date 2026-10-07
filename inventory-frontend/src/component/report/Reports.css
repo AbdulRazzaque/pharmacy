@@ -1261,10 +1261,11 @@
   .print-report-table th,
   .print-report-table td {
     border: 1px solid #000000 !important;
-    padding: 8px 10px !important;
+    padding: 6px 5px !important;
     font-size: 10pt;
     vertical-align: middle;
     box-sizing: border-box;
+
   }
 
   .print-report-table thead,
@@ -1279,6 +1280,7 @@
     print-color-adjust: exact !important;
     color-adjust: exact !important;
     text-align: center;
+
   }
 
   .print-report-table tr {
@@ -1310,6 +1312,7 @@
     print-color-adjust: exact !important;
     color-adjust: exact !important;
     font-weight: bold;
+
   }
 
   /* Footer Style */
