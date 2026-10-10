@@ -7,8 +7,9 @@ const Product = require("../models/ProductModule");
 const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
 const moment = require('moment');
+const { findMatchingStockBalance, normalizeExpiryDate } = require("../utils/stockBalanceHelper");
 
-const normalizeExpiry = (expiry) => (expiry ? new Date(expiry) : null);
+const normalizeExpiry = (expiry) => normalizeExpiryDate(expiry) || (expiry ? new Date(expiry) : null);
 
 const getNextAdjustmentDocNo = async (session = null) => {
     let query = StockAdjustmentHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 });
@@ -91,26 +92,26 @@ const applySingleAdjustmentLine = async ({ item, reqUser, docNo, note, locationI
     const product = await Product.findById(productId).session(session);
     if (!product) throw new Error("Product not found for adjustment");
 
-    const filter = {
-        productId: mongoose.Types.ObjectId(String(productId)),
-        locationId: locationId ? mongoose.Types.ObjectId(String(locationId)) : null,
-        batchNumber,
-        expiry: requestedExpiry
-    };
+    const cleanBatch = (batchNumber || "").trim();
 
-    let balance = await StockBalance.findOne(filter).session(session);
+    let balance = await findMatchingStockBalance(productId, requestedExpiry, cleanBatch, locationId, session);
     const previousBalance = balance ? Number(balance.quantity || 0) : 0;
     const newBalance = previousBalance + delta;
 
     if (!balance) {
         balance = new StockBalance({
-            ...filter,
-            quantity: newBalance,
+            productId: new mongoose.Types.ObjectId(String(productId)),
+            locationId: locationId ? new mongoose.Types.ObjectId(String(locationId)) : null,
+            batchNumber: cleanBatch,
+            expiry: requestedExpiry,
+            quantity: Math.max(0, newBalance),
             purchasingPrice: price,
             sellingPrice: price
         });
     } else {
-        balance.quantity = newBalance;
+        balance.quantity = Math.max(0, newBalance);
+        if (requestedExpiry) balance.expiry = requestedExpiry;
+        balance.batchNumber = cleanBatch;
         if (price) {
             balance.purchasingPrice = price;
             balance.sellingPrice = price;
@@ -122,12 +123,12 @@ const applySingleAdjustmentLine = async ({ item, reqUser, docNo, note, locationI
         productId,
         productName: product.name,
         expiry: requestedExpiry,
-        batchNumber,
+        batchNumber: cleanBatch,
         price,
         quantityDelta: delta,
         previousQuantity: previousBalance,
-        newQuantity: newBalance,
-        runningBalance: newBalance,
+        newQuantity: Math.max(0, newBalance),
+        runningBalance: Math.max(0, newBalance),
         reason
     };
 };

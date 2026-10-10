@@ -258,7 +258,11 @@ const Stockout = () => {
   }, []);
 
   const handleOpenEditModal = (item) => {
-    const matchedStock = stocks.find(s => s._id === item.stockId || s.originalStockId === item.stockId) || null;
+    const matchedStock = stocks.find(s =>
+      (item.stockBalanceId && (s.stockBalanceId === item.stockBalanceId || s._id === item.stockBalanceId)) ||
+      s._id === item.stockId ||
+      s.originalStockId === item.stockId
+    ) || null;
     setEditingItem(item);
     setEditFormData({
       stockId: item.stockId || '',
@@ -323,13 +327,16 @@ const Stockout = () => {
     ) {
       errors.quantity = 'Please enter a valid quantity (positive whole number)';
     } else if (editSelectedStock) {
-      // Account for other staged items of the same product (excluding the item being edited)
+      // Account for other staged items of the same batch (excluding the item being edited)
       const alreadyStagedQty = stockOutItems
         .filter(i => {
           if (i.id === editingItem.id) return false; // exclude the current item
+          if (editSelectedStock.stockBalanceId && i.stockBalanceId) {
+            return String(i.stockBalanceId) === String(editSelectedStock.stockBalanceId);
+          }
           const iProductId = i.productId || i.stockId;
           const selectedProductId = editSelectedStock.productId || editSelectedStock.originalStockId || editSelectedStock._id;
-          return String(iProductId) === String(selectedProductId);
+          return String(iProductId) === String(selectedProductId) && String(i.expiry || '') === String(editSelectedStock.expiry || '');
         })
         .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
 
@@ -446,6 +453,28 @@ const Stockout = () => {
                   expiryArray: stock.expiryArray || []
                 });
               }
+            });
+          } else if (stock.totalQuantity > 0) {
+            const productId = String(stock.product?._id || stock.product || stock._id);
+            const productName = stock.name || (stock.product?.name) || 'Unknown Product';
+            const mapKey = `${productId}_no-batch`;
+            const productPrice = Number(stock.product?.sellingPrice ?? stock.sellingPrice ?? 0);
+            stockMap.set(mapKey, {
+              _id: mapKey,
+              stockBalanceId: null,
+              batchNumber: '',
+              originalStockId: stock._id,
+              stockIds: [stock._id],
+              productName: productName,
+              companyName: stock.product?.companyName || '',
+              type: stock.product?.type || '',
+              unit: stock.product?.unit || '',
+              quantity: stock.totalQuantity || 0,
+              purchasingPrice: stock.purchasingPrice ?? 0,
+              sellingPrice: productPrice > 0 ? productPrice : (stock.sellingPrice || 0),
+              productId: productId,
+              expiry: null,
+              expiryArray: []
             });
           }
         });

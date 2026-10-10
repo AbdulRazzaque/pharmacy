@@ -12,6 +12,7 @@ const recalculateRunningBalances = async (productId, session = null) => {
     .session(session);
 
   if (!txns || txns.length === 0) {
+    await StockBalance.deleteMany({ productId: pId }, session ? { session } : {});
     return;
   }
 
@@ -48,6 +49,27 @@ const recalculateRunningBalances = async (productId, session = null) => {
     item.quantity += t.quantityDelta;
     if (t.unitCost) item.purchasingPrice = t.unitCost;
     if (t.sellingPrice) item.sellingPrice = t.sellingPrice;
+  }
+
+  // If any batch ended up with negative balance (e.g. from an unbatched/mismatched stock out),
+  // offset that deficit against positive batches so total StockBalance strictly equals total transaction quantity
+  let negativeDeficit = 0;
+  for (const item of batchMap.values()) {
+    if (item.quantity < 0) {
+      negativeDeficit += Math.abs(item.quantity);
+      item.quantity = 0;
+    }
+  }
+
+  if (negativeDeficit > 0) {
+    for (const item of batchMap.values()) {
+      if (item.quantity > 0) {
+        const deduct = Math.min(item.quantity, negativeDeficit);
+        item.quantity -= deduct;
+        negativeDeficit -= deduct;
+        if (negativeDeficit === 0) break;
+      }
+    }
   }
 
   // Fetch authoritative Product selling price

@@ -80,6 +80,7 @@ const updateStockBalanceAndTransaction = async ({
     referenceId,
     docNo,
     createdBy,
+    date = null,
     remarks = "",
     session = null
 }) => {
@@ -133,7 +134,7 @@ const updateStockBalanceAndTransaction = async ({
         referenceId,
         docNo,
         createdBy,
-        date: new Date(),
+        date: date ? new Date(date) : new Date(),
         remarks
     });
     await txn.save(session ? { session } : {});
@@ -421,6 +422,7 @@ const stockInController = {
                     referenceId: item._id,
                     docNo: parsedDocNo,
                     createdBy: req.user?._id,
+                    date: header.date,
                     remarks: entry.remarks || "Stock In",
                     session
                 });
@@ -437,6 +439,12 @@ const stockInController = {
                 }
 
                 createdItems.push(item);
+            }
+
+            // Recalculate running balances for all touched products
+            const touchedProductIds = new Set(processedEntries.map(e => String(e.productId)));
+            for (const pId of touchedProductIds) {
+                await recalculateRunningBalances(pId, session);
             }
 
             return { header, items: createdItems, docNo: parsedDocNo };

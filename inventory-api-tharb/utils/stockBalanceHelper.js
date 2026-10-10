@@ -138,9 +138,7 @@ async function consolidateAllStockBalances() {
       const normExp = normalizeExpiryDate(b.expiry);
       const expKey = normExp ? normExp.toISOString().slice(0, 10) : 'no-expiry';
       const batchKey = (b.batchNumber || '').trim();
-      const locKey = b.locationId ? String(b.locationId) : 'no-loc';
-
-      const key = `${pId}__${expKey}__${batchKey}__${locKey}`;
+      const key = `${pId}__${expKey}__${batchKey}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(b);
     }

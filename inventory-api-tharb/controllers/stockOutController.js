@@ -8,7 +8,7 @@ const Product = require("../models/ProductModule");
 const Location = require("../models/LocationModule");
 const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
-const { findMatchingStockBalance, normalizeExpiryDate } = require("../utils/stockBalanceHelper");
+const { findMatchingStockBalance, normalizeExpiryDate, buildStockBalanceFilter } = require("../utils/stockBalanceHelper");
 
 const peekNextStockOutDocNo = async (session = null) => {
     let query = StockOutHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 }).select('docNo');
@@ -199,10 +199,14 @@ const stockOutController = {
                     }
                     const pId = String(item.productId || item.stockId);
                     const productDoc = productDocMap.get(pId);
-                    const bal = await StockBalance.findOne({
+                    let bal = await StockBalance.findOne({
                         _id: item.stockBalanceId,
                         productId: new mongoose.Types.ObjectId(pId)
                     }).session(session);
+
+                    if (!bal && item.expiry) {
+                        bal = await findMatchingStockBalance(pId, item.expiry, item.batchNumber, null, session);
+                    }
 
                     if (!bal) {
                         const err = new Error(`Selected stock batch not found for "${productDoc?.name || pId}"`);
@@ -211,11 +215,18 @@ const stockOutController = {
                     }
 
                     const requestedForBatch = batchTotalRequested.get(String(item.stockBalanceId)) || Number(item.quantity);
-                    if ((bal.quantity || 0) < requestedForBatch) {
-                        const err = new Error(`Insufficient stock for "${productDoc?.name || 'Product'}" batch (Expiry: ${bal.expiry ? moment(bal.expiry).format('DD/MM/YYYY') : 'None'}). Requested: ${requestedForBatch}, Available: ${bal.quantity || 0}`);
+
+                    // Check total available for this specific batch identity (in case of split location records)
+                    const normExp = normalizeExpiryDate(bal.expiry || item.expiry);
+                    const cleanBatch = (bal.batchNumber || item.batchNumber || "").trim();
+                    const batchBalances = await StockBalance.find(buildStockBalanceFilter(pId, normExp, cleanBatch)).session(session);
+                    const batchAvailable = batchBalances.reduce((sum, b) => sum + (Number(b.quantity) || 0), 0);
+
+                    if (batchAvailable < requestedForBatch) {
+                        const err = new Error(`Insufficient stock for "${productDoc?.name || 'Product'}" batch (Expiry: ${bal.expiry ? moment(bal.expiry).format('DD/MM/YYYY') : 'None'}). Requested: ${requestedForBatch}, Available: ${batchAvailable}`);
                         err.statusCode = 409;
                         err.code = 'INSUFFICIENT_STOCK';
-                        err.availableQuantity = bal.quantity || 0;
+                        err.availableQuantity = batchAvailable;
                         err.requestedQuantity = requestedForBatch;
                         err.productName = productDoc?.name;
                         err.productId = pId;
@@ -329,18 +340,42 @@ const stockOutController = {
                 // Check if user selected an exact batch / StockBalance
                 let targetStockBalanceId = item.stockBalanceId;
                 if (!targetStockBalanceId && item.expiry) {
-                    const matchBal = await findMatchingStockBalance(pId, item.expiry, item.batchNumber, item.locationId, session);
+                    const matchBal = await findMatchingStockBalance(pId, item.expiry, item.batchNumber, null, session);
                     if (matchBal && (matchBal.quantity || 0) > 0) {
                         targetStockBalanceId = matchBal._id;
                     }
                 }
 
                 if (targetStockBalanceId) {
-                    // Exact batch deduction: ONLY deduct from the specified StockBalance record
-                    const bal = await StockBalance.findOne({
+                    // Exact batch deduction: deduct from the specified StockBalance record
+                    let bal = await StockBalance.findOne({
                         _id: targetStockBalanceId,
                         productId: new mongoose.Types.ObjectId(pId)
                     }).session(session);
+
+                    if (!bal && item.expiry) {
+                        bal = await findMatchingStockBalance(pId, item.expiry, item.batchNumber, null, session);
+                    }
+
+                    // If this single record does not have enough but sibling records for this batch exist, consolidate them
+                    if (bal && (bal.quantity || 0) < requestedQty) {
+                        const normExp = normalizeExpiryDate(bal.expiry || item.expiry);
+                        const cleanBatch = (bal.batchNumber || item.batchNumber || "").trim();
+                        const siblings = await StockBalance.find({
+                            ...buildStockBalanceFilter(pId, normExp, cleanBatch),
+                            _id: { $ne: bal._id }
+                        }).session(session);
+
+                        if (siblings.length > 0) {
+                            let added = 0;
+                            for (const sib of siblings) {
+                                added += (sib.quantity || 0);
+                                await StockBalance.findByIdAndDelete(sib._id, session ? { session } : {});
+                            }
+                            bal.quantity = (bal.quantity || 0) + added;
+                            await bal.save(session ? { session } : {});
+                        }
+                    }
 
                     if (!bal || (bal.quantity || 0) < requestedQty) {
                         const avail = bal ? (bal.quantity || 0) : 0;
