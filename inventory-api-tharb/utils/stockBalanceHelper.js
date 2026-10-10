@@ -88,8 +88,6 @@ function buildStockBalanceFilter(productId, expiry, batchNumber = "", locationId
 
   if (locationId) {
     filter.locationId = new mongoose.Types.ObjectId(String(locationId));
-  } else {
-    filter.locationId = { $in: [null, undefined] };
   }
 
   const cleanBatch = (batchNumber || "").trim();

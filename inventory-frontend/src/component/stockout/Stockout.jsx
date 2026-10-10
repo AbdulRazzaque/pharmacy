@@ -8,6 +8,33 @@ import moment from 'moment';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '../../components/ui/page-header';
 
+// Authoritative batch identity comparator
+export const isSameBatch = (a, b) => {
+  if (!a || !b) return false;
+  // 1. Direct stockBalanceId match if available on both
+  if (a.stockBalanceId && b.stockBalanceId && String(a.stockBalanceId) === String(b.stockBalanceId)) {
+    return true;
+  }
+  // 2. Direct _id match if both share the exact same id/key
+  if (a._id && b._id && String(a._id) === String(b._id)) {
+    return true;
+  }
+  // 3. Product match
+  const aProd = String(a.productId || a.stockId || a.originalStockId || a._id || '');
+  const bProd = String(b.productId || b.stockId || b.originalStockId || b._id || '');
+  if (aProd && bProd && aProd !== bProd) return false;
+
+  // 4. Normalized expiry match (YYYY-MM-DD)
+  const aExp = a.expiry ? moment(a.expiry).format('YYYY-MM-DD') : '';
+  const bExp = b.expiry ? moment(b.expiry).format('YYYY-MM-DD') : '';
+  if (aExp !== bExp) return false;
+
+  // 5. Batch number match
+  const aBatch = (a.batchNumber || '').trim().toLowerCase();
+  const bBatch = (b.batchNumber || '').trim().toLowerCase();
+  return aBatch === bBatch;
+};
+
 const Stockout = () => {
   const navigate = useNavigate();
   const [stocks, setStocks] = useState([]);
@@ -57,6 +84,19 @@ const Stockout = () => {
   const [stockDropdownOpen, setStockDropdownOpen] = useState(false);
   const stockAutocompleteRef = useRef(null);
   const [activeStockSugIdx, setActiveStockSugIdx] = useState(0);
+
+  const getStagedQtyForBatch = useCallback((batch, excludeItemId = null) => {
+    if (!batch) return 0;
+    return stockOutItems
+      .filter(i => (excludeItemId ? i.id !== excludeItemId : true) && isSameBatch(i, batch))
+      .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+  }, [stockOutItems]);
+
+  const getEffectiveAvailable = useCallback((batch, excludeItemId = null) => {
+    if (!batch) return 0;
+    const staged = getStagedQtyForBatch(batch, excludeItemId);
+    return Math.max(0, (Number(batch.quantity) || 0) - staged);
+  }, [getStagedQtyForBatch]);
 
   const stockSuggestions = useMemo(() => {
     const q = (stockQuery || '').trim().toLowerCase();
@@ -258,7 +298,7 @@ const Stockout = () => {
   }, []);
 
   const handleOpenEditModal = (item) => {
-    const matchedStock = stocks.find(s =>
+    const matchedStock = stocks.find(s => isSameBatch(item, s)) || stocks.find(s =>
       (item.stockBalanceId && (s.stockBalanceId === item.stockBalanceId || s._id === item.stockBalanceId)) ||
       s._id === item.stockId ||
       s.originalStockId === item.stockId
@@ -328,22 +368,11 @@ const Stockout = () => {
       errors.quantity = 'Please enter a valid quantity (positive whole number)';
     } else if (editSelectedStock) {
       // Account for other staged items of the same batch (excluding the item being edited)
-      const alreadyStagedQty = stockOutItems
-        .filter(i => {
-          if (i.id === editingItem.id) return false; // exclude the current item
-          if (editSelectedStock.stockBalanceId && i.stockBalanceId) {
-            return String(i.stockBalanceId) === String(editSelectedStock.stockBalanceId);
-          }
-          const iProductId = i.productId || i.stockId;
-          const selectedProductId = editSelectedStock.productId || editSelectedStock.originalStockId || editSelectedStock._id;
-          return String(iProductId) === String(selectedProductId) && String(i.expiry || '') === String(editSelectedStock.expiry || '');
-        })
-        .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
-
+      const alreadyStagedQty = getStagedQtyForBatch(editSelectedStock, editingItem.id);
       const effectiveAvailable = (editSelectedStock.quantity || 0) - alreadyStagedQty;
       if (qty > effectiveAvailable) {
         errors.quantity = effectiveAvailable <= 0
-          ? `No remaining stock — all ${editSelectedStock.quantity} units are already staged`
+          ? `No remaining stock — all ${editSelectedStock.quantity} units are already staged in other items`
           : `Insufficient stock. Only ${effectiveAvailable} units available (${editSelectedStock.quantity} total − ${alreadyStagedQty} already staged)`;
       }
     }
@@ -517,28 +546,33 @@ const Stockout = () => {
     }
   };
 
-  const getStockDisplayLabel = (stock) =>
-    `${stock.productName}${stock.companyName ? ` (${stock.companyName})` : ''}${stock.unit ? ` [Unit: ${stock.unit}]` : ''}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Available: ${stock.quantity})`;
+  const getStockDisplayLabel = useCallback((stock) => {
+    if (!stock) return '';
+    const avail = getEffectiveAvailable(stock);
+    return `${stock.productName}${stock.companyName ? ` (${stock.companyName})` : ''}${stock.unit ? ` [Unit: ${stock.unit}]` : ''}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Available: ${avail})`;
+  }, [getEffectiveAvailable]);
 
   const handleSelectStock = (stock) => {
     const sellingPrice = stock.sellingPrice ?? 0;
     setFormData(prev => ({
       ...prev,
       stockId: stock._id,
-      sellingPrice: String(sellingPrice)
+      sellingPrice: String(sellingPrice),
+      quantity: '' // reset quantity to avoid retaining stale state from previous batch
     }));
     setSelectedStock(stock);
     setStockQuery(getStockDisplayLabel(stock));
     setStockDropdownOpen(false);
-    if (formErrors.stockId) setFormErrors(prev => ({ ...prev, stockId: '' }));
+    setFormErrors(prev => ({ ...prev, stockId: '', quantity: '' }));
     setTimeout(() => document.getElementById('quantity')?.focus(), 50);
   };
 
   const clearStock = () => {
-    setFormData(prev => ({ ...prev, stockId: '', sellingPrice: '' }));
+    setFormData(prev => ({ ...prev, stockId: '', quantity: '', sellingPrice: '' }));
     setSelectedStock(null);
     setStockQuery('');
     setStockDropdownOpen(false);
+    setFormErrors(prev => ({ ...prev, stockId: '', quantity: '' }));
     document.getElementById('stock-input')?.focus();
   };
 
@@ -562,21 +596,11 @@ const Stockout = () => {
       errors.quantity = 'Please enter a valid quantity (positive whole number)';
     } else if (selectedStock) {
       // Account for quantity of the same exact batch already staged in this document
-      const alreadyStagedQty = stockOutItems
-        .filter(i => {
-          if (selectedStock.stockBalanceId && i.stockBalanceId) {
-            return String(i.stockBalanceId) === String(selectedStock.stockBalanceId);
-          }
-          const iProductId = i.productId || i.stockId;
-          const selectedProductId = selectedStock.productId || selectedStock.originalStockId || selectedStock._id;
-          return String(iProductId) === String(selectedProductId) && String(i.expiry || '') === String(selectedStock.expiry || '');
-        })
-        .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
-
+      const alreadyStagedQty = getStagedQtyForBatch(selectedStock);
       const effectiveAvailable = (selectedStock.quantity || 0) - alreadyStagedQty;
       if (qty > effectiveAvailable) {
         errors.quantity = effectiveAvailable <= 0
-          ? `No stock remaining — ${selectedStock.quantity} units are already staged in this document`
+          ? `No stock remaining — all ${selectedStock.quantity} units of this batch are already staged in this document`
           : `Insufficient stock. Only ${effectiveAvailable} units available (${selectedStock.quantity} total − ${alreadyStagedQty} already staged)`;
       }
     }
@@ -1095,9 +1119,21 @@ const Stockout = () => {
                             </div>
                             <div className="flex flex-wrap items-center sm:justify-end gap-1.5 shrink-0">
                               {/* Stock Quantity only */}
-                              <span className="inline-flex items-center text-[10px] sm:text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 shadow-xs">
-                                Available:&nbsp;<span className="font-extrabold">{s.quantity}</span>
-                              </span>
+                              {(() => {
+                                const bAvail = getEffectiveAvailable(s);
+                                return (
+                                  <span className={`inline-flex items-center text-[10px] sm:text-[11px] font-semibold px-2.5 py-0.5 rounded-full border shadow-xs ${
+                                    bAvail > 0
+                                      ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60'
+                                      : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800/60'
+                                  }`}>
+                                    Available:&nbsp;<span className="font-extrabold">{bAvail}</span>
+                                    {bAvail !== s.quantity && (
+                                      <span className="text-[10px] opacity-75 font-normal">&nbsp;(lot: {s.quantity})</span>
+                                    )}
+                                  </span>
+                                );
+                              })()}
 
                               {/* Unit / Pack Size only */}
                               {s.unit ? (
@@ -1133,18 +1169,8 @@ const Stockout = () => {
                 Quantity *
               </label>
               {(() => {
-                // Compute effective available (total minus already-staged for same product)
-                let effectiveAvail = selectedStock?.quantity || 0;
-                if (selectedStock) {
-                  const staged = stockOutItems
-                    .filter(i => {
-                      const iId = i.productId || i.stockId;
-                      const sId = selectedStock.productId || selectedStock.originalStockId || selectedStock._id;
-                      return String(iId) === String(sId);
-                    })
-                    .reduce((s, i) => s + (Number(i.quantity) || 0), 0);
-                  effectiveAvail = Math.max(0, (selectedStock.quantity || 0) - staged);
-                }
+                // Compute effective available for this exact batch (total lot minus already-staged in this document)
+                const effectiveAvail = selectedStock ? getEffectiveAvailable(selectedStock) : 0;
                 const enteredQty = Number(formData.quantity);
                 const isOverLimit = selectedStock && formData.quantity !== '' && Number.isFinite(enteredQty) && enteredQty > effectiveAvail;
                 return (
@@ -1234,17 +1260,20 @@ const Stockout = () => {
           </div>
 
           {/* Stock Info Bar */}
-          {selectedStock && (
-            <div className="mt-3 p-2.5 bg-[var(--ph-navy)]/5 border border-[var(--ph-navy)]/15 rounded-lg text-xs flex flex-wrap items-center gap-4 text-[var(--ph-text)]">
-              <span>Type: <strong>{selectedStock.type || 'N/A'}</strong></span>
-              <span>Unit: <strong>{selectedStock.unit || 'N/A'}</strong></span>
-              <span>Price: <strong>QR {(formData.sellingPrice || selectedStock.sellingPrice || 0)}</strong></span>
-              <span>Available in Lot: <strong className="text-[var(--ph-teal)]">{selectedStock.quantity}</strong></span>
-              {selectedStock.expiry && (
-                <span>Batch Expiry (FIFO): <strong className="text-amber-600 dark:text-amber-400">{moment(selectedStock.expiry).format('DD/MM/YYYY')}</strong></span>
-              )}
-            </div>
-          )}
+          {selectedStock && (() => {
+            const bAvail = getEffectiveAvailable(selectedStock);
+            return (
+              <div className="mt-3 p-2.5 bg-[var(--ph-navy)]/5 border border-[var(--ph-navy)]/15 rounded-lg text-xs flex flex-wrap items-center gap-4 text-[var(--ph-text)]">
+                <span>Type: <strong>{selectedStock.type || 'N/A'}</strong></span>
+                <span>Unit: <strong>{selectedStock.unit || 'N/A'}</strong></span>
+                <span>Price: <strong>QR {(formData.sellingPrice || selectedStock.sellingPrice || 0)}</strong></span>
+                <span>Available in Lot: <strong className="text-[var(--ph-teal)]">{bAvail}</strong>{bAvail !== selectedStock.quantity ? <span className="text-[11px] text-[var(--ph-muted)] font-normal"> (lot total: {selectedStock.quantity})</span> : null}</span>
+                {selectedStock.expiry && (
+                  <span>Batch Expiry (FIFO): <strong className="text-amber-600 dark:text-amber-400">{moment(selectedStock.expiry).format('DD/MM/YYYY')}</strong></span>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Action Ribbon */}
           <div className="mt-4 pt-3.5 border-t border-[var(--ph-border)] flex flex-wrap items-center justify-between gap-3">

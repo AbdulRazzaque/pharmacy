@@ -25,6 +25,7 @@ import {
   Package
 } from 'lucide-react';
 import moment from 'moment';
+import { isSameBatch } from './Stockout';
 
 const StockOutDetails = () => {
   const { docNo } = useParams();
@@ -304,8 +305,24 @@ const StockOutDetails = () => {
     return stockOutData.doc[0].trainerName || 'N/A';
   };
 
-  const getOutStockDisplayLabel = (stock) =>
-    `${stock.productName}${stock.companyName ? ` (${stock.companyName})` : ''}${stock.unit ? ` [Unit: ${stock.unit}]` : ''}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Available: ${stock.quantity})`;
+  const getPendingQtyForBatch = (batch) => {
+    if (!batch) return 0;
+    return pendingOutItems
+      .filter(i => isSameBatch(i, batch))
+      .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+  };
+
+  const getEffectiveOutAvailable = (batch) => {
+    if (!batch) return 0;
+    const pending = getPendingQtyForBatch(batch);
+    return Math.max(0, (Number(batch.quantity) || 0) - pending);
+  };
+
+  const getOutStockDisplayLabel = (stock) => {
+    if (!stock) return '';
+    const avail = getEffectiveOutAvailable(stock);
+    return `${stock.productName}${stock.companyName ? ` (${stock.companyName})` : ''}${stock.unit ? ` [Unit: ${stock.unit}]` : ''}${stock.expiry ? ` | Exp: ${moment(stock.expiry).format('DD/MM/YY')}` : ''} (Available: ${avail})`;
+  };
 
   const handleOutChange = (field, value) => {
     setOutFormData((prev) => ({ ...prev, [field]: value }));
@@ -315,19 +332,25 @@ const StockOutDetails = () => {
   };
 
   const handleSelectOutStock = (stock) => {
-    setOutFormData((prev) => ({ ...prev, stockId: stock._id, sellingPrice: stock.sellingPrice ?? '' }));
+    setOutFormData((prev) => ({
+      ...prev,
+      stockId: stock._id,
+      sellingPrice: stock.sellingPrice ?? '',
+      quantity: '' // reset to prevent retaining stale value from previous batch
+    }));
     setOutSelectedStock(stock);
     setOutStockQuery(getOutStockDisplayLabel(stock));
     setOutStockDropdownOpen(false);
-    if (outFormErrors.stockId) setOutFormErrors((prev) => ({ ...prev, stockId: '' }));
+    setOutFormErrors((prev) => ({ ...prev, stockId: '', quantity: '' }));
     setTimeout(() => document.getElementById('sod-quantity')?.focus(), 50);
   };
 
   const clearOutStock = () => {
-    setOutFormData((prev) => ({ ...prev, stockId: '', sellingPrice: '' }));
+    setOutFormData((prev) => ({ ...prev, stockId: '', quantity: '', sellingPrice: '' }));
     setOutSelectedStock(null);
     setOutStockQuery('');
     setOutStockDropdownOpen(false);
+    setOutFormErrors((prev) => ({ ...prev, stockId: '', quantity: '' }));
     document.getElementById('sod-stock-input')?.focus();
   };
 
@@ -342,8 +365,14 @@ const StockOutDetails = () => {
       errors.sellingPrice = 'Please enter valid selling price';
     }
     const selected = outSelectedStock || groupedStocks.find((s) => s._id === outFormData.stockId);
-    if (selected && Number(outFormData.quantity) > selected.quantity) {
-      errors.quantity = `Only ${selected.quantity} units available`;
+    if (selected) {
+      const avail = getEffectiveOutAvailable(selected);
+      if (Number(outFormData.quantity) > avail) {
+        const pending = getPendingQtyForBatch(selected);
+        errors.quantity = avail <= 0
+          ? `No stock remaining — all ${selected.quantity} units are already added in this document`
+          : `Only ${avail} units available (${selected.quantity} total − ${pending} already added)`;
+      }
     }
     setOutFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -1022,9 +1051,21 @@ const StockOutDetails = () => {
                                       )}
                                     </div>
                                     <div className="flex flex-wrap items-center sm:justify-end gap-1.5 shrink-0">
-                                      <span className="inline-flex items-center text-[10px] sm:text-[11px] font-semibold bg-emerald-50 text-emerald-700 px-2.5 py-0.5 rounded-full border border-emerald-200 shadow-xs">
-                                        Available:&nbsp;<span className="font-extrabold">{stock.quantity}</span>
-                                      </span>
+                                      {(() => {
+                                        const bAvail = getEffectiveOutAvailable(stock);
+                                        return (
+                                          <span className={`inline-flex items-center text-[10px] sm:text-[11px] font-semibold px-2.5 py-0.5 rounded-full border shadow-xs ${
+                                            bAvail > 0
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                                          }`}>
+                                            Available:&nbsp;<span className="font-extrabold">{bAvail}</span>
+                                            {bAvail !== stock.quantity && (
+                                              <span className="text-[10px] opacity-75 font-normal">&nbsp;(lot: {stock.quantity})</span>
+                                            )}
+                                          </span>
+                                        );
+                                      })()}
                                       {stock.unit ? (
                                         <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full border border-slate-200">
                                           Unit:&nbsp;<span className="font-semibold text-slate-800">{stock.unit}</span>

@@ -144,18 +144,27 @@ const stockOutController = {
                 }
             }
 
-            // 1.2 Group requested quantities by product AND by stockBalanceId
+            // 1.2 Group requested quantities by product AND by batch identity
             const productTotalRequested = new Map();
             const batchTotalRequested = new Map();
+
+            const getBatchGroupKey = (item) => {
+                if (item.stockBalanceId) return `sb_${item.stockBalanceId}`;
+                const pId = String(item.productId || item.stockId || '');
+                const normExp = normalizeExpiryDate(item.expiry);
+                const expStr = normExp ? normExp.toISOString().slice(0, 10) : 'no-expiry';
+                const cleanBatch = (item.batchNumber || '').trim();
+                return `batch_${pId}_${expStr}_${cleanBatch}`;
+            };
 
             for (const item of items) {
                 const pId = String(item.productId || item.stockId);
                 const qty = Number(item.quantity);
                 productTotalRequested.set(pId, (productTotalRequested.get(pId) || 0) + qty);
 
-                if (item.stockBalanceId) {
-                    const sbKey = String(item.stockBalanceId);
-                    batchTotalRequested.set(sbKey, (batchTotalRequested.get(sbKey) || 0) + qty);
+                if (item.stockBalanceId || item.expiry) {
+                    const bKey = getBatchGroupKey(item);
+                    batchTotalRequested.set(bKey, (batchTotalRequested.get(bKey) || 0) + qty);
                 }
             }
 
@@ -189,49 +198,57 @@ const stockOutController = {
                 }
             }
 
-            // 1.4 Validate batch-specific stock availability if stockBalanceId is provided
+            // 1.4 Validate batch-specific stock availability if batch identity (stockBalanceId or expiry) is provided
             for (const item of items) {
-                if (item.stockBalanceId) {
-                    if (!mongoose.Types.ObjectId.isValid(item.stockBalanceId)) {
-                        const err = new Error(`Invalid StockBalance ID: ${item.stockBalanceId}`);
-                        err.statusCode = 400;
-                        throw err;
-                    }
+                if (item.stockBalanceId || item.expiry) {
                     const pId = String(item.productId || item.stockId);
                     const productDoc = productDocMap.get(pId);
-                    let bal = await StockBalance.findOne({
-                        _id: item.stockBalanceId,
-                        productId: new mongoose.Types.ObjectId(pId)
-                    }).session(session);
+                    let bal = null;
+
+                    if (item.stockBalanceId) {
+                        if (!mongoose.Types.ObjectId.isValid(item.stockBalanceId)) {
+                            const err = new Error(`Invalid StockBalance ID: ${item.stockBalanceId}`);
+                            err.statusCode = 400;
+                            throw err;
+                        }
+                        bal = await StockBalance.findOne({
+                            _id: item.stockBalanceId,
+                            productId: new mongoose.Types.ObjectId(pId)
+                        }).session(session);
+                    }
 
                     if (!bal && item.expiry) {
                         bal = await findMatchingStockBalance(pId, item.expiry, item.batchNumber, null, session);
                     }
 
-                    if (!bal) {
+                    if (!bal && item.stockBalanceId) {
                         const err = new Error(`Selected stock batch not found for "${productDoc?.name || pId}"`);
                         err.statusCode = 404;
                         throw err;
                     }
 
-                    const requestedForBatch = batchTotalRequested.get(String(item.stockBalanceId)) || Number(item.quantity);
+                    if (bal) {
+                        const bKey = getBatchGroupKey(item);
+                        const altKey = `sb_${bal._id}`;
+                        const requestedForBatch = batchTotalRequested.get(bKey) || batchTotalRequested.get(altKey) || Number(item.quantity);
 
-                    // Check total available for this specific batch identity (in case of split location records)
-                    const normExp = normalizeExpiryDate(bal.expiry || item.expiry);
-                    const cleanBatch = (bal.batchNumber || item.batchNumber || "").trim();
-                    const batchBalances = await StockBalance.find(buildStockBalanceFilter(pId, normExp, cleanBatch)).session(session);
-                    const batchAvailable = batchBalances.reduce((sum, b) => sum + (Number(b.quantity) || 0), 0);
+                        // Check total available for this specific batch identity (in case of split location records)
+                        const normExp = normalizeExpiryDate(bal.expiry || item.expiry);
+                        const cleanBatch = (bal.batchNumber || item.batchNumber || "").trim();
+                        const batchBalances = await StockBalance.find(buildStockBalanceFilter(pId, normExp, cleanBatch)).session(session);
+                        const batchAvailable = batchBalances.reduce((sum, b) => sum + (Number(b.quantity) || 0), 0);
 
-                    if (batchAvailable < requestedForBatch) {
-                        const err = new Error(`Insufficient stock for "${productDoc?.name || 'Product'}" batch (Expiry: ${bal.expiry ? moment(bal.expiry).format('DD/MM/YYYY') : 'None'}). Requested: ${requestedForBatch}, Available: ${batchAvailable}`);
-                        err.statusCode = 409;
-                        err.code = 'INSUFFICIENT_STOCK';
-                        err.availableQuantity = batchAvailable;
-                        err.requestedQuantity = requestedForBatch;
-                        err.productName = productDoc?.name;
-                        err.productId = pId;
-                        err.stockBalanceId = String(bal._id);
-                        throw err;
+                        if (batchAvailable < requestedForBatch) {
+                            const err = new Error(`Insufficient stock for "${productDoc?.name || 'Product'}" batch (Expiry: ${bal.expiry ? moment(bal.expiry).format('DD/MM/YYYY') : 'None'}). Requested: ${requestedForBatch}, Available: ${batchAvailable}`);
+                            err.statusCode = 409;
+                            err.code = 'INSUFFICIENT_STOCK';
+                            err.availableQuantity = batchAvailable;
+                            err.requestedQuantity = requestedForBatch;
+                            err.productName = productDoc?.name;
+                            err.productId = pId;
+                            err.stockBalanceId = String(bal._id);
+                            throw err;
+                        }
                     }
                 }
             }
@@ -402,6 +419,11 @@ const stockOutController = {
                         const err = new Error(`Stock for "${productDoc.name}" batch changed concurrently. Available: ${avail}, Requested: ${requestedQty}`);
                         err.statusCode = 409;
                         err.code = 'INSUFFICIENT_STOCK';
+                        err.availableQuantity = avail;
+                        err.requestedQuantity = requestedQty;
+                        err.productName = productDoc.name;
+                        err.productId = pId;
+                        err.stockBalanceId = String(bal._id);
                         throw err;
                     }
 
