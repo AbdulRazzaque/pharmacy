@@ -4,6 +4,7 @@ const InventoryTransaction = require("../models/InventoryTransactionModule");
 const StockInHeader = require("../models/StockInHeaderModule");
 const StockInItem = require("../models/StockInItemModule");
 const StockOutItem = require("../models/StockOutItemModule");
+const StockOutHeader = require("../models/StockOutHeaderModule");
 const Product = require("../models/ProductModule");
 const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
@@ -228,11 +229,59 @@ const updateStockInItemHelper = async ({
                 { $set: { sellingPrice: newSellingPrice } },
                 session ? { session } : {}
             );
-            await StockOutItem.updateMany(
-                { productId: newProductId, expiry: newExpiry },
-                { $set: { sellingPrice: newSellingPrice } },
-                session ? { session } : {}
-            );
+
+            // Synchronize matching StockOutItem records and update line totals and header totals
+            let itemQuery = StockOutItem.find({ productId: newProductId, expiry: newExpiry });
+            if (session) itemQuery = itemQuery.session(session);
+            const affectedItems = await itemQuery;
+
+            const affectedHeaderIds = new Set();
+            for (const outItem of affectedItems) {
+                const qty = Number(outItem.quantity || 0);
+                const discPct = Number(outItem.discountPercentage || 0);
+                const itemTotal = Math.round((qty * newSellingPrice) * 100) / 100;
+                const discountAmount = discPct > 0
+                    ? Math.round((itemTotal * discPct / 100) * 100) / 100
+                    : (outItem.discountAmount ? Math.min(itemTotal, Math.round(Number(outItem.discountAmount) * 100) / 100) : 0);
+                const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
+
+                outItem.sellingPrice = newSellingPrice;
+                outItem.itemTotal = itemTotal;
+                outItem.discountAmount = discountAmount;
+                outItem.netTotal = netTotal;
+                await outItem.save(session ? { session } : {});
+
+                if (outItem.stockOutHeaderId) {
+                    affectedHeaderIds.add(String(outItem.stockOutHeaderId));
+                }
+            }
+
+            for (const headerId of affectedHeaderIds) {
+                const header = await StockOutHeader.findById(headerId).session(session);
+                if (header) {
+                    const hItems = await StockOutItem.find({ stockOutHeaderId: header._id }).session(session);
+                    const subTotal = hItems.reduce((sum, i) => {
+                        const q = Number(i.quantity || 0);
+                        const p = Number(i.sellingPrice || 0);
+                        return sum + Math.round(q * p * 100) / 100;
+                    }, 0);
+                    const totalDiscount = hItems.reduce((sum, i) => {
+                        const q = Number(i.quantity || 0);
+                        const p = Number(i.sellingPrice || 0);
+                        const gross = Math.round(q * p * 100) / 100;
+                        const dPct = Number(i.discountPercentage || 0);
+                        const dAmt = (i.discountAmount !== undefined && i.discountAmount !== null && dPct === 0)
+                            ? Number(i.discountAmount)
+                            : Math.round(gross * dPct / 100 * 100) / 100;
+                        return sum + dAmt;
+                    }, 0);
+                    header.subTotal = Math.round(subTotal * 100) / 100;
+                    header.totalDiscount = Math.round(totalDiscount * 100) / 100;
+                    header.grandTotal = Math.round((subTotal - totalDiscount) * 100) / 100;
+                    await header.save(session ? { session } : {});
+                }
+            }
+
             await InventoryTransaction.updateMany(
                 { productId: newProductId, expiry: newExpiry },
                 { $set: { sellingPrice: newSellingPrice } },

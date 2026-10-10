@@ -424,20 +424,29 @@ const Reports = () => {
 
   const monthlyKpis = useMemo(() => {
     const totalQty = monthlyData.reduce((s, r) => s + (r.quantity ?? 0), 0);
-    const totalDiscount = monthlyData.reduce((s, r) => s + Number(r.discountAmount ?? 0), 0);
-    const totalNet = monthlyData.reduce((s, r) => {
-      const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
-      const discAmt = Number(r.discountAmount ?? 0);
-      const net = Number(
-        r.netTotal !== undefined && r.netTotal !== null
-          ? r.netTotal
-          : r.netAmount !== undefined && r.netAmount !== null
-            ? r.netAmount
-            : r.totalAmount !== undefined && r.totalAmount !== null
-              ? r.totalAmount
-              : gross - discAmt
+    const totalDiscount = monthlyData.reduce((s, r) => {
+      const qty = r.quantity ?? 0;
+      const rate = r.rate ?? r.sellingPrice ?? 0;
+      const gross = Math.round(qty * rate * 100) / 100;
+      const discPct = Number(r.discountPercentage ?? r.discountPercent ?? 0);
+      const discAmt = Number(
+        r.discountAmount !== undefined && r.discountAmount !== null && (discPct === 0 || r.discountAmount > 0)
+          ? r.discountAmount
+          : (gross * discPct / 100)
       );
-      return s + net;
+      return s + discAmt;
+    }, 0);
+    const totalNet = monthlyData.reduce((s, r) => {
+      const qty = r.quantity ?? 0;
+      const rate = r.rate ?? r.sellingPrice ?? 0;
+      const gross = Math.round(qty * rate * 100) / 100;
+      const discPct = Number(r.discountPercentage ?? r.discountPercent ?? 0);
+      const discAmt = Number(
+        r.discountAmount !== undefined && r.discountAmount !== null && (discPct === 0 || r.discountAmount > 0)
+          ? r.discountAmount
+          : (gross * discPct / 100)
+      );
+      return s + Math.round((gross - discAmt) * 100) / 100;
     }, 0);
     const roundedDiscount = Math.round(totalDiscount * 100) / 100;
     const roundedNet = Math.round(totalNet * 100) / 100;
@@ -802,10 +811,14 @@ const Reports = () => {
       // EXCEL: exclude any product with discount > 0%
       const filteredItems = locItems.filter((item) => {
         const qty = item.quantity ?? 0;
-        const rate = item.rate ?? 0;
-        const gross = Number(item.grossAmount ?? (qty * rate));
+        const rate = item.rate ?? item.sellingPrice ?? 0;
+        const gross = Math.round(qty * rate * 100) / 100;
         const discPct = Number(item.discountPercentage ?? item.discountPercent ?? 0);
-        const discAmt = Number(item.discountAmount ?? (gross * discPct / 100));
+        const discAmt = Number(
+          item.discountAmount !== undefined && item.discountAmount !== null && (discPct === 0 || item.discountAmount > 0)
+            ? item.discountAmount
+            : (gross * discPct / 100)
+        );
         return discPct <= 0 && discAmt <= 0;
       });
 
@@ -921,17 +934,15 @@ const Reports = () => {
         const formattedDate = item.date ? moment(item.date).format('DD-MM-YYYY') : '';
         const descText = formatMonthlyItemName(item);
         const qty = item.quantity ?? 0;
-        const rate = item.rate ?? 0;
-        const gross = Number(item.grossAmount ?? (qty * rate));
-        const net = Number(
-          item.netTotal !== undefined && item.netTotal !== null
-            ? item.netTotal
-            : item.netAmount !== undefined && item.netAmount !== null
-              ? item.netAmount
-              : item.totalAmount !== undefined && item.totalAmount !== null
-                ? item.totalAmount
-                : gross
+        const rate = item.rate ?? item.sellingPrice ?? 0;
+        const gross = Math.round(qty * rate * 100) / 100;
+        const discPct = Number(item.discountPercentage ?? item.discountPercent ?? 0);
+        const discAmt = Number(
+          item.discountAmount !== undefined && item.discountAmount !== null && (discPct === 0 || item.discountAmount > 0)
+            ? item.discountAmount
+            : (gross * discPct / 100)
         );
+        const net = Math.round((gross - discAmt) * 100) / 100;
 
         setCell(`A${curRow}`, formattedDate, 's', cellCenter);
         setCell(`B${curRow}`, descText, 's', cellLeft);
@@ -957,16 +968,16 @@ const Reports = () => {
 
       // Grand Total (E) — sum of filtered items net only (NO QR text!)
       const grandTotal = filteredItems.reduce((s, r) => {
-        const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
-        const net = Number(
-          r.netTotal !== undefined && r.netTotal !== null
-            ? r.netTotal
-            : r.netAmount !== undefined && r.netAmount !== null
-              ? r.netAmount
-              : r.totalAmount !== undefined && r.totalAmount !== null
-                ? r.totalAmount
-                : gross
+        const qty = r.quantity ?? 0;
+        const rate = r.rate ?? r.sellingPrice ?? 0;
+        const gross = Math.round(qty * rate * 100) / 100;
+        const discPct = Number(r.discountPercentage ?? r.discountPercent ?? 0);
+        const discAmt = Number(
+          r.discountAmount !== undefined && r.discountAmount !== null && (discPct === 0 || r.discountAmount > 0)
+            ? r.discountAmount
+            : (gross * discPct / 100)
         );
+        const net = Math.round((gross - discAmt) * 100) / 100;
         return s + net;
       }, 0);
 
@@ -1047,10 +1058,14 @@ const Reports = () => {
     monthlyData.forEach((row) => {
       // EXCLUDE products with discount > 0%
       const qty = row.quantity ?? 0;
-      const rate = row.rate ?? 0;
-      const gross = Number(row.grossAmount ?? (qty * rate));
+      const rate = row.rate ?? row.sellingPrice ?? 0;
+      const gross = Math.round(qty * rate * 100) / 100;
       const discPct = Number(row.discountPercentage ?? row.discountPercent ?? 0);
-      const discAmt = Number(row.discountAmount ?? (gross * discPct / 100));
+      const discAmt = Number(
+        row.discountAmount !== undefined && row.discountAmount !== null && (discPct === 0 || row.discountAmount > 0)
+          ? row.discountAmount
+          : (gross * discPct / 100)
+      );
       if (discPct > 0 || discAmt > 0) return;
 
       const locKey = row.locationId || 'default';
@@ -1099,17 +1114,15 @@ const Reports = () => {
       const exportLocItems = [...locItems].reverse();
       const tableData = exportLocItems.map((item) => {
         const qty = item.quantity ?? 0;
-        const rate = item.rate ?? 0;
-        const gross = Number(item.grossAmount ?? (qty * rate));
-        const net = Number(
-          item.netTotal !== undefined && item.netTotal !== null
-            ? item.netTotal
-            : item.netAmount !== undefined && item.netAmount !== null
-              ? item.netAmount
-              : item.totalAmount !== undefined && item.totalAmount !== null
-                ? item.totalAmount
-                : gross
+        const rate = item.rate ?? item.sellingPrice ?? 0;
+        const gross = Math.round(qty * rate * 100) / 100;
+        const discPct = Number(item.discountPercentage ?? item.discountPercent ?? 0);
+        const discAmt = Number(
+          item.discountAmount !== undefined && item.discountAmount !== null && (discPct === 0 || item.discountAmount > 0)
+            ? item.discountAmount
+            : (gross * discPct / 100)
         );
+        const net = Math.round((gross - discAmt) * 100) / 100;
 
         return [
           item.date ? moment(item.date).format('DD-MM-YYYY') : '',
@@ -1440,10 +1453,14 @@ const Reports = () => {
     monthlyData.forEach((row) => {
       // PRINT: exclude products with discount > 0%
       const qty = row.quantity ?? 0;
-      const rate = row.rate ?? 0;
-      const gross = Number(row.grossAmount ?? (qty * rate));
+      const rate = row.rate ?? row.sellingPrice ?? 0;
+      const gross = Math.round(qty * rate * 100) / 100;
       const discPct = Number(row.discountPercentage ?? row.discountPercent ?? 0);
-      const discAmt = Number(row.discountAmount ?? (gross * discPct / 100));
+      const discAmt = Number(
+        row.discountAmount !== undefined && row.discountAmount !== null && (discPct === 0 || row.discountAmount > 0)
+          ? row.discountAmount
+          : (gross * discPct / 100)
+      );
       if (discPct > 0 || discAmt > 0) return; // skip discounted products in print
 
       const locKey = row.locationId || 'default';
@@ -1732,17 +1749,15 @@ const Reports = () => {
                   <tbody>
                     {[...locItems].reverse().map((item, idx) => {
                       const qty = item.quantity ?? 0;
-                      const rate = item.rate ?? 0;
-                      const gross = Number(item.grossAmount ?? (qty * rate));
-                      const net = Number(
-                        item.netTotal !== undefined && item.netTotal !== null
-                          ? item.netTotal
-                          : item.netAmount !== undefined && item.netAmount !== null
-                            ? item.netAmount
-                            : item.totalAmount !== undefined && item.totalAmount !== null
-                              ? item.totalAmount
-                              : gross
+                      const rate = item.rate ?? item.sellingPrice ?? 0;
+                      const gross = Math.round(qty * rate * 100) / 100;
+                      const discPct = Number(item.discountPercentage ?? item.discountPercent ?? 0);
+                      const discAmt = Number(
+                        item.discountAmount !== undefined && item.discountAmount !== null && (discPct === 0 || item.discountAmount > 0)
+                          ? item.discountAmount
+                          : (gross * discPct / 100)
                       );
+                      const net = Math.round((gross - discAmt) * 100) / 100;
 
                       return (
                         <tr key={item._id || idx}>

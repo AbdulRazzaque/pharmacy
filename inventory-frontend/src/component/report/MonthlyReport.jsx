@@ -447,19 +447,15 @@ const MonthlyReport = ({
                   <tbody>
                     {paginated.map((row, idx) => {
                       const qty = row.quantity ?? 0;
-                      const rate = row.rate ?? 0;
-                      const gross = Number(row.grossAmount ?? (qty * rate));
+                      const rate = row.rate ?? row.sellingPrice ?? 0;
+                      const gross = Math.round(qty * rate * 100) / 100;
                       const discPct = Number(row.discountPercentage ?? row.discountPercent ?? 0);
-                      const discAmt = Number(row.discountAmount ?? (gross * discPct / 100));
-                      const net = Number(
-                        row.netTotal !== undefined && row.netTotal !== null
-                          ? row.netTotal
-                          : row.netAmount !== undefined && row.netAmount !== null
-                            ? row.netAmount
-                            : row.totalAmount !== undefined && row.totalAmount !== null
-                              ? row.totalAmount
-                              : gross - discAmt
+                      const discAmt = Number(
+                        row.discountAmount !== undefined && row.discountAmount !== null && (discPct === 0 || row.discountAmount > 0)
+                          ? row.discountAmount
+                          : (gross * discPct / 100)
                       );
+                      const net = Math.round((gross - discAmt) * 100) / 100;
                       const hasDiscount = discPct > 0 || discAmt > 0;
 
                       return (
@@ -534,17 +530,16 @@ const MonthlyReport = ({
                         </td>
                         <td className="col-mr-total text-right font-mono font-bold text-blue-900" style={{ fontSize: '0.8125rem' }}>
                           QR {paginated.reduce((s, r) => {
-                            const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
-                            const discAmt = Number(r.discountAmount ?? 0);
-                            const net = Number(
-                              r.netTotal !== undefined && r.netTotal !== null
-                                ? r.netTotal
-                                : r.netAmount !== undefined && r.netAmount !== null
-                                  ? r.netAmount
-                                  : r.totalAmount !== undefined && r.totalAmount !== null
-                                    ? r.totalAmount
-                                    : gross - discAmt
+                            const qty = r.quantity ?? 0;
+                            const rate = r.rate ?? r.sellingPrice ?? 0;
+                            const gross = Math.round(qty * rate * 100) / 100;
+                            const discPct = Number(r.discountPercentage ?? r.discountPercent ?? 0);
+                            const discAmt = Number(
+                              r.discountAmount !== undefined && r.discountAmount !== null && (discPct === 0 || r.discountAmount > 0)
+                                ? r.discountAmount
+                                : (gross * discPct / 100)
                             );
+                            const net = Math.round((gross - discAmt) * 100) / 100;
                             return s + net;
                           }, 0).toFixed(2)}
                         </td>
@@ -559,17 +554,16 @@ const MonthlyReport = ({
                         </td>
                         <td className="col-mr-total text-right font-mono font-bold text-blue-900" style={{ fontSize: '0.875rem' }}>
                           QR {filtered.reduce((s, r) => {
-                            const gross = Number(r.grossAmount ?? ((r.quantity ?? 0) * (r.rate ?? 0)));
-                            const discAmt = Number(r.discountAmount ?? 0);
-                            const net = Number(
-                              r.netTotal !== undefined && r.netTotal !== null
-                                ? r.netTotal
-                                : r.netAmount !== undefined && r.netAmount !== null
-                                  ? r.netAmount
-                                  : r.totalAmount !== undefined && r.totalAmount !== null
-                                    ? r.totalAmount
-                                    : gross - discAmt
+                            const qty = r.quantity ?? 0;
+                            const rate = r.rate ?? r.sellingPrice ?? 0;
+                            const gross = Math.round(qty * rate * 100) / 100;
+                            const discPct = Number(r.discountPercentage ?? r.discountPercent ?? 0);
+                            const discAmt = Number(
+                              r.discountAmount !== undefined && r.discountAmount !== null && (discPct === 0 || r.discountAmount > 0)
+                                ? r.discountAmount
+                                : (gross * discPct / 100)
                             );
+                            const net = Math.round((gross - discAmt) * 100) / 100;
                             return s + net;
                           }, 0).toFixed(2)}
                         </td>

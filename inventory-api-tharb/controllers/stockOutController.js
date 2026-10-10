@@ -32,12 +32,25 @@ const updateHeaderTotals = async (headerId, session = null) => {
     const header = await StockOutHeader.findById(headerId).session(session);
     if (!header) return;
     const items = await StockOutItem.find({ stockOutHeaderId: header._id }).session(session);
-    const subTotal = items.reduce((sum, i) => sum + (i.itemTotal !== undefined && i.itemTotal !== null ? Number(i.itemTotal) : ((i.quantity || 0) * (i.sellingPrice || 0))), 0);
-    const totalDiscount = items.reduce((sum, i) => sum + (Number(i.discountAmount) || 0), 0);
-    const grandTotal = items.reduce((sum, i) => sum + (i.netTotal !== undefined && i.netTotal !== null ? Number(i.netTotal) : ((i.quantity || 0) * (i.sellingPrice || 0) - (Number(i.discountAmount) || 0))), 0);
+    const subTotal = items.reduce((sum, i) => {
+        const q = Number(i.quantity || 0);
+        const p = Number(i.sellingPrice || 0);
+        return sum + Math.round(q * p * 100) / 100;
+    }, 0);
+    const totalDiscount = items.reduce((sum, i) => {
+        const q = Number(i.quantity || 0);
+        const p = Number(i.sellingPrice || 0);
+        const gross = Math.round(q * p * 100) / 100;
+        const dPct = Number(i.discountPercentage || 0);
+        const dAmt = (i.discountAmount !== undefined && i.discountAmount !== null && dPct === 0)
+            ? Number(i.discountAmount)
+            : Math.round(gross * dPct / 100 * 100) / 100;
+        return sum + dAmt;
+    }, 0);
+    const grandTotal = Math.round((subTotal - totalDiscount) * 100) / 100;
     header.subTotal = Math.round(subTotal * 100) / 100;
     header.totalDiscount = Math.round(totalDiscount * 100) / 100;
-    header.grandTotal = Math.round(grandTotal * 100) / 100;
+    header.grandTotal = grandTotal;
     await header.save(session ? { session } : {});
 };
 
@@ -856,9 +869,22 @@ const stockOutController = {
             const doctorName = locationObj?.doctorName || "";
             const trainerName = locationObj?.trainerName || "";
 
-            const subTotal = items.reduce((sum, item) => sum + (item.itemTotal !== undefined && item.itemTotal !== null ? Number(item.itemTotal) : ((item.quantity || 0) * (item.sellingPrice || 0))), 0);
-            const totalDiscount = items.reduce((sum, item) => sum + (Number(item.discountAmount) || 0), 0);
-            const grandTotal = items.reduce((sum, item) => sum + (item.netTotal !== undefined && item.netTotal !== null ? Number(item.netTotal) : ((item.quantity || 0) * (item.sellingPrice || 0) - (Number(item.discountAmount) || 0))), 0);
+            const subTotal = items.reduce((sum, item) => {
+                const q = Number(item.quantity || 0);
+                const p = Number(item.sellingPrice || 0);
+                return sum + Math.round(q * p * 100) / 100;
+            }, 0);
+            const totalDiscount = items.reduce((sum, item) => {
+                const q = Number(item.quantity || 0);
+                const p = Number(item.sellingPrice || 0);
+                const gross = Math.round(q * p * 100) / 100;
+                const dPct = Number(item.discountPercentage || 0);
+                const dAmt = (item.discountAmount !== undefined && item.discountAmount !== null && dPct === 0)
+                    ? Number(item.discountAmount)
+                    : Math.round(gross * dPct / 100 * 100) / 100;
+                return sum + dAmt;
+            }, 0);
+            const grandTotal = Math.round((subTotal - totalDiscount) * 100) / 100;
 
             const formatted = [{
                 _id: { docNo: header.docNo },
@@ -870,9 +896,14 @@ const stockOutController = {
                 totalDiscount: Math.round(totalDiscount * 100) / 100,
                 grandTotal: Math.round(grandTotal * 100) / 100,
                 doc: items.map(item => {
-                    const iTotal = item.itemTotal !== undefined && item.itemTotal !== null ? Number(item.itemTotal) : ((item.quantity || 0) * (item.sellingPrice || 0));
-                    const dAmt = Number(item.discountAmount) || 0;
-                    const nTotal = item.netTotal !== undefined && item.netTotal !== null ? Number(item.netTotal) : (iTotal - dAmt);
+                    const q = Number(item.quantity || 0);
+                    const p = Number(item.sellingPrice || 0);
+                    const gross = Math.round(q * p * 100) / 100;
+                    const dPct = Number(item.discountPercentage || 0);
+                    const dAmt = (item.discountAmount !== undefined && item.discountAmount !== null && dPct === 0)
+                        ? Number(item.discountAmount)
+                        : Math.round(gross * dPct / 100 * 100) / 100;
+                    const nTotal = Math.round((gross - dAmt) * 100) / 100;
                     return {
                         _id: item._id,
                         docNo: header.docNo,
@@ -887,11 +918,11 @@ const stockOutController = {
                         product: item.productId,
                         quantity: item.quantity,
                         unit: item.productId?.unit || "",
-                        sellingPrice: item.sellingPrice,
+                        sellingPrice: p,
                         purchasingPrice: item.purchasingPrice,
-                        discountPercentage: item.discountPercentage || 0,
+                        discountPercentage: dPct,
                         discountAmount: dAmt,
-                        itemTotal: iTotal,
+                        itemTotal: gross,
                         netTotal: nTotal,
                         prevQuantity: 0,
                         expiry: item.expiry,
@@ -1963,4 +1994,5 @@ const stockOutController = {
     }
 };
 
+stockOutController.updateHeaderTotals = updateHeaderTotals;
 module.exports = stockOutController;

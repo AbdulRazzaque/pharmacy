@@ -129,7 +129,6 @@ const reportController = {
 
             let rows = txns.map(t => {
                 const qty = Math.abs(t.quantityDelta || 0);
-                const rate = Number(t.sellingPrice || t.unitCost || 0);
                 const locObj = (t.locationId && typeof t.locationId === 'object') ? t.locationId : null;
                 const locIdStr = String(locObj?._id || t.locationId || '');
                 const fallbackLoc = locationMap.get(locIdStr) || null;
@@ -141,43 +140,30 @@ const reportController = {
                 const resolvedDoctorName = locObj?.doctorName || fallbackLoc?.doctorName || pdfObj?.veterinarian || '';
                 const resolvedTrainerName = locObj?.trainerName || fallbackLoc?.trainerName || pdfObj?.trainerName || '';
 
-                // Authoritative financial calculations from saved database records
+                // Authoritative financial calculations
+                const itemPrice = Number(stockItem?.sellingPrice !== undefined && stockItem?.sellingPrice !== null && !isNaN(Number(stockItem.sellingPrice)) ? stockItem.sellingPrice : (t.sellingPrice || t.unitCost || 0));
+                const rate = itemPrice;
                 let grossAmount = Math.round((qty * rate) * 100) / 100;
-                let discountPercentage = 0;
-                let discountAmount = 0;
-                let netTotal = grossAmount;
 
-                if (stockItem) {
-                    if (stockItem.itemTotal !== undefined && stockItem.itemTotal !== null) {
-                        grossAmount = Number(stockItem.itemTotal);
-                    }
-                    if (stockItem.discountPercentage !== undefined && stockItem.discountPercentage !== null) {
-                        discountPercentage = Number(stockItem.discountPercentage);
-                    }
-                    if (stockItem.discountAmount !== undefined && stockItem.discountAmount !== null) {
-                        discountAmount = Number(stockItem.discountAmount);
-                    } else if (discountPercentage > 0) {
-                        discountAmount = Math.round((grossAmount * discountPercentage / 100) * 100) / 100;
-                    }
-                    if (stockItem.netTotal !== undefined && stockItem.netTotal !== null) {
-                        netTotal = Number(stockItem.netTotal);
-                    } else {
-                        netTotal = Math.round((grossAmount - discountAmount) * 100) / 100;
-                    }
+                let discountPercentage = 0;
+                if (stockItem && stockItem.discountPercentage !== undefined && stockItem.discountPercentage !== null) {
+                    discountPercentage = Number(stockItem.discountPercentage);
                 } else if (pdfObj && Array.isArray(pdfObj.items)) {
                     const pdfItem = pdfObj.items.find(pi => String(pi.productId) === String(t.productId?._id || t.productId));
-                    if (pdfItem) {
-                        discountPercentage = Number(pdfItem.discountPercentage || 0);
-                        discountAmount = Number(pdfItem.discountAmount || 0);
-                        grossAmount = Number(pdfItem.itemTotal || (qty * rate));
-                        netTotal = Number(pdfItem.netTotal !== undefined ? pdfItem.netTotal : (grossAmount - discountAmount));
+                    if (pdfItem && pdfItem.discountPercentage !== undefined && pdfItem.discountPercentage !== null) {
+                        discountPercentage = Number(pdfItem.discountPercentage);
                     }
                 }
+                if (isNaN(discountPercentage) || discountPercentage < 0) discountPercentage = 0;
 
-                // Final safety round
-                grossAmount = Math.round(grossAmount * 100) / 100;
-                discountAmount = Math.round(discountAmount * 100) / 100;
-                netTotal = Math.round(netTotal * 100) / 100;
+                let discountAmount = 0;
+                if (discountPercentage > 0) {
+                    discountAmount = Math.round((grossAmount * discountPercentage / 100) * 100) / 100;
+                } else if (stockItem?.discountAmount !== undefined && stockItem?.discountAmount !== null && Number(stockItem.discountAmount) > 0) {
+                    discountAmount = Math.min(grossAmount, Math.round(Number(stockItem.discountAmount) * 100) / 100);
+                }
+
+                let netTotal = Math.round((grossAmount - discountAmount) * 100) / 100;
 
                 return {
                     _id: t._id,
@@ -432,37 +418,27 @@ const reportController = {
 
             const rows = txns.map(t => {
                 const qty = Math.abs(t.quantityDelta || 0);
-                const price = Number(t.sellingPrice || t.unitCost || 0);
                 const locObj = t.locationId || {};
                 const stockItem = t.referenceId ? itemMap.get(String(t.referenceId)) : null;
 
+                const itemPrice = Number(stockItem?.sellingPrice !== undefined && stockItem?.sellingPrice !== null && !isNaN(Number(stockItem.sellingPrice)) ? stockItem.sellingPrice : (t.sellingPrice || t.unitCost || 0));
+                const price = itemPrice;
                 let grossAmount = Math.round((qty * price) * 100) / 100;
-                let discountPercentage = 0;
-                let discountAmount = 0;
-                let netTotal = grossAmount;
 
-                if (stockItem) {
-                    if (stockItem.itemTotal !== undefined && stockItem.itemTotal !== null) {
-                        grossAmount = Number(stockItem.itemTotal);
-                    }
-                    if (stockItem.discountPercentage !== undefined && stockItem.discountPercentage !== null) {
-                        discountPercentage = Number(stockItem.discountPercentage);
-                    }
-                    if (stockItem.discountAmount !== undefined && stockItem.discountAmount !== null) {
-                        discountAmount = Number(stockItem.discountAmount);
-                    } else if (discountPercentage > 0) {
-                        discountAmount = Math.round((grossAmount * discountPercentage / 100) * 100) / 100;
-                    }
-                    if (stockItem.netTotal !== undefined && stockItem.netTotal !== null) {
-                        netTotal = Number(stockItem.netTotal);
-                    } else {
-                        netTotal = Math.round((grossAmount - discountAmount) * 100) / 100;
-                    }
+                let discountPercentage = 0;
+                if (stockItem && stockItem.discountPercentage !== undefined && stockItem.discountPercentage !== null) {
+                    discountPercentage = Number(stockItem.discountPercentage);
+                }
+                if (isNaN(discountPercentage) || discountPercentage < 0) discountPercentage = 0;
+
+                let discountAmount = 0;
+                if (discountPercentage > 0) {
+                    discountAmount = Math.round((grossAmount * discountPercentage / 100) * 100) / 100;
+                } else if (stockItem?.discountAmount !== undefined && stockItem?.discountAmount !== null && Number(stockItem.discountAmount) > 0) {
+                    discountAmount = Math.min(grossAmount, Math.round(Number(stockItem.discountAmount) * 100) / 100);
                 }
 
-                grossAmount = Math.round(grossAmount * 100) / 100;
-                discountAmount = Math.round(discountAmount * 100) / 100;
-                netTotal = Math.round(netTotal * 100) / 100;
+                let netTotal = Math.round((grossAmount - discountAmount) * 100) / 100;
 
                 return {
                     _id: t._id,
@@ -567,20 +543,21 @@ const reportController = {
                 const locKey = String(locObj._id || 'unassigned');
                 const locName = locObj.name || 'Unassigned Location';
                 const qty = Math.abs(t.quantityDelta || 0);
-                const rate = Number(t.sellingPrice || t.unitCost || 0);
                 const stockItem = t.referenceId ? itemMap.get(String(t.referenceId)) : null;
+                const rate = Number(stockItem?.sellingPrice !== undefined && stockItem?.sellingPrice !== null && !isNaN(Number(stockItem.sellingPrice)) ? stockItem.sellingPrice : (t.sellingPrice || t.unitCost || 0));
 
-                let netAmt = qty * rate;
-                if (stockItem) {
-                    if (stockItem.netTotal !== undefined && stockItem.netTotal !== null) {
-                        netAmt = Number(stockItem.netTotal);
-                    } else {
-                        const iTot = Number(stockItem.itemTotal ?? (qty * rate));
-                        const dAmt = Number(stockItem.discountAmount ?? 0);
-                        netAmt = iTot - dAmt;
-                    }
+                const gross = Math.round((qty * rate) * 100) / 100;
+                let discPct = Number(stockItem?.discountPercentage || 0);
+                if (isNaN(discPct) || discPct < 0) discPct = 0;
+
+                let discAmt = 0;
+                if (discPct > 0) {
+                    discAmt = Math.round((gross * discPct / 100) * 100) / 100;
+                } else if (stockItem?.discountAmount !== undefined && stockItem?.discountAmount !== null && Number(stockItem.discountAmount) > 0) {
+                    discAmt = Math.min(gross, Math.round(Number(stockItem.discountAmount) * 100) / 100);
                 }
-                const amt = Math.round(netAmt * 100) / 100;
+
+                const netAmt = Math.round((gross - discAmt) * 100) / 100;
 
                 if (!locMap.has(locKey)) {
                     locMap.set(locKey, {
@@ -595,7 +572,7 @@ const reportController = {
                 }
                 const entry = locMap.get(locKey);
                 entry.totalQuantity += qty;
-                entry.grandTotal += amt;
+                entry.grandTotal = Math.round((entry.grandTotal + netAmt) * 100) / 100;
             });
 
             const summaryRows = Array.from(locMap.values());

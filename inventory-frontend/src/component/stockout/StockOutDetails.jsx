@@ -639,11 +639,13 @@ const StockOutDetails = () => {
                   <TableBody>
                     {stockOutData.doc.map((item, index) => {
                       const qty = Math.abs(item.quantity) || 0;
-                      const price = item.sellingPrice || 0;
-                      const itemTotal = item.itemTotal !== undefined ? item.itemTotal : (qty * price);
-                      const discPct = item.discountPercentage || 0;
-                      const discAmt = item.discountAmount !== undefined ? item.discountAmount : ((itemTotal * discPct) / 100);
-                      const netTotal = item.netTotal !== undefined ? item.netTotal : (itemTotal - discAmt);
+                      const price = Number(item.sellingPrice || 0);
+                      const itemTotal = Math.round(qty * price * 100) / 100;
+                      const discPct = Number(item.discountPercentage || 0);
+                      const discAmt = (item.discountAmount !== undefined && item.discountAmount !== null && discPct === 0)
+                        ? Number(item.discountAmount)
+                        : Math.round(itemTotal * discPct / 100 * 100) / 100;
+                      const netTotal = Math.round((itemTotal - discAmt) * 100) / 100;
 
                       return (
                         <TableRow key={item._id || index}>
