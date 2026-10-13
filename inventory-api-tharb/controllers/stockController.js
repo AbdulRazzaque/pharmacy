@@ -6,7 +6,7 @@ const StockInItem = require("../models/StockInItemModule");
 const StockOutItem = require("../models/StockOutItemModule");
 const StockAdjustmentItem = require("../models/StockAdjustmentItemModule");
 const moment = require("moment");
-const { normalizeExpiryDate, consolidateAllStockBalances } = require("../utils/stockBalanceHelper");
+const { normalizeExpiryDate, consolidateAllStockBalances, groupStockBalances } = require("../utils/stockBalanceHelper");
 
 class stockController {
 
@@ -30,33 +30,11 @@ class stockController {
                     ? productSellingPrice
                     : (balanceWithPrice ? balanceWithPrice.sellingPrice : 0);
 
-                // Group balances by (normalizedExpiry, batchNumber) for consistency
-                const batchMap = new Map();
-                for (const b of balances) {
-                    const normExp = normalizeExpiryDate(b.expiry);
-                    const expKey = normExp ? normExp.toISOString().slice(0, 10) : 'no-expiry';
-                    const batchKey = (b.batchNumber || '').trim();
-                    const groupKey = `${expKey}__${batchKey}`;
-
-                    if (!batchMap.has(groupKey)) {
-                        batchMap.set(groupKey, {
-                            _id: b._id,
-                            stockBalanceId: b._id,
-                            expiry: normExp || b.expiry,
-                            quantity: Number(b.quantity) || 0,
-                            purchasingPrice: b.purchasingPrice || 0,
-                            sellingPrice: effectiveSellingPrice,
-                            batchNumber: batchKey
-                        });
-                    } else {
-                        const existing = batchMap.get(groupKey);
-                        existing.quantity += (Number(b.quantity) || 0);
-                        if (!existing.purchasingPrice && b.purchasingPrice) {
-                            existing.purchasingPrice = b.purchasingPrice;
-                        }
-                    }
-                }
-                const expiryArray = Array.from(batchMap.values());
+                // Group balances by normalized calendar expiry while preserving all underlying lot details
+                const expiryArray = groupStockBalances(balances, {
+                    ...p,
+                    sellingPrice: effectiveSellingPrice
+                });
 
                 return {
                     _id: p._id,

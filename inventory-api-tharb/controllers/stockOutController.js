@@ -8,7 +8,13 @@ const Product = require("../models/ProductModule");
 const Location = require("../models/LocationModule");
 const Sequence = require("../models/SequenceModule");
 const recalculateRunningBalances = require("../utils/recalculateRunningBalances");
-const { findMatchingStockBalance, normalizeExpiryDate, buildStockBalanceFilter } = require("../utils/stockBalanceHelper");
+const {
+    findMatchingStockBalance,
+    normalizeExpiryDate,
+    buildStockBalanceFilter,
+    resolveEligibleBalances,
+    buildLogicalGroupKey
+} = require("../utils/stockBalanceHelper");
 
 const peekNextStockOutDocNo = async (session = null) => {
     let query = StockOutHeader.findOne({ docNo: { $exists: true, $ne: null } }).sort({ docNo: -1 }).select('docNo');
@@ -157,17 +163,16 @@ const stockOutController = {
                 }
             }
 
-            // 1.2 Group requested quantities by product AND by batch identity
+            // 1.2 Group requested quantities by product AND by logical inventory group
             const productTotalRequested = new Map();
-            const batchTotalRequested = new Map();
+            const groupTotalRequested = new Map();
 
-            const getBatchGroupKey = (item) => {
-                if (item.stockBalanceId) return `sb_${item.stockBalanceId}`;
+            const getItemLogicalGroupKey = (item) => {
                 const pId = String(item.productId || item.stockId || '');
                 const normExp = normalizeExpiryDate(item.expiry);
                 const expStr = normExp ? normExp.toISOString().slice(0, 10) : 'no-expiry';
-                const cleanBatch = (item.batchNumber || '').trim();
-                return `batch_${pId}_${expStr}_${cleanBatch}`;
+                const locStr = item.locationId || location || '';
+                return `grp_${pId}_${expStr}_${locStr}`;
             };
 
             for (const item of items) {
@@ -175,9 +180,9 @@ const stockOutController = {
                 const qty = Number(item.quantity);
                 productTotalRequested.set(pId, (productTotalRequested.get(pId) || 0) + qty);
 
-                if (item.stockBalanceId || item.expiry) {
-                    const bKey = getBatchGroupKey(item);
-                    batchTotalRequested.set(bKey, (batchTotalRequested.get(bKey) || 0) + qty);
+                if (item.stockBalanceIds?.length > 0 || item.stockBalanceId || item.expiry) {
+                    const gKey = getItemLogicalGroupKey(item);
+                    groupTotalRequested.set(gKey, (groupTotalRequested.get(gKey) || 0) + qty);
                 }
             }
 
@@ -211,57 +216,41 @@ const stockOutController = {
                 }
             }
 
-            // 1.4 Validate batch-specific stock availability if batch identity (stockBalanceId or expiry) is provided
+            // 1.4 Validate logical group stock availability (pooling all underlying lots with same expiry)
+            const validatedGroupKeys = new Set();
             for (const item of items) {
-                if (item.stockBalanceId || item.expiry) {
+                if (item.stockBalanceIds?.length > 0 || item.stockBalanceId || item.expiry) {
                     const pId = String(item.productId || item.stockId);
                     const productDoc = productDocMap.get(pId);
-                    let bal = null;
+                    const gKey = getItemLogicalGroupKey(item);
 
-                    if (item.stockBalanceId) {
-                        if (!mongoose.Types.ObjectId.isValid(item.stockBalanceId)) {
-                            const err = new Error(`Invalid StockBalance ID: ${item.stockBalanceId}`);
-                            err.statusCode = 400;
-                            throw err;
-                        }
-                        bal = await StockBalance.findOne({
-                            _id: item.stockBalanceId,
-                            productId: new mongoose.Types.ObjectId(pId)
-                        }).session(session);
-                    }
+                    if (validatedGroupKeys.has(gKey)) continue;
+                    validatedGroupKeys.add(gKey);
 
-                    if (!bal && item.expiry) {
-                        bal = await findMatchingStockBalance(pId, item.expiry, item.batchNumber, null, session);
-                    }
+                    const requestedForGroup = groupTotalRequested.get(gKey) || Number(item.quantity);
 
-                    if (!bal && item.stockBalanceId) {
-                        const err = new Error(`Selected stock batch not found for "${productDoc?.name || pId}"`);
-                        err.statusCode = 404;
+                    const { eligibleBalances, totalAvailable: groupAvailable } = await resolveEligibleBalances({
+                        productId: pId,
+                        expiry: item.expiry,
+                        stockBalanceId: item.stockBalanceId,
+                        stockBalanceIds: item.stockBalanceIds,
+                        locationId: item.locationId || null,
+                        session,
+                        StockBalanceModel: StockBalance
+                    });
+
+                    if (groupAvailable < requestedForGroup) {
+                        const normExp = normalizeExpiryDate(item.expiry);
+                        const expFormatted = normExp ? moment(normExp).format('DD/MM/YYYY') : 'None';
+                        const err = new Error(`Insufficient stock for "${productDoc?.name || 'Product'}" (Expiry: ${expFormatted}). Requested: ${requestedForGroup}, Available: ${groupAvailable}`);
+                        err.statusCode = 409;
+                        err.code = 'INSUFFICIENT_STOCK';
+                        err.availableQuantity = groupAvailable;
+                        err.requestedQuantity = requestedForGroup;
+                        err.productName = productDoc?.name;
+                        err.productId = pId;
+                        err.expiry = expFormatted;
                         throw err;
-                    }
-
-                    if (bal) {
-                        const bKey = getBatchGroupKey(item);
-                        const altKey = `sb_${bal._id}`;
-                        const requestedForBatch = batchTotalRequested.get(bKey) || batchTotalRequested.get(altKey) || Number(item.quantity);
-
-                        // Check total available for this specific batch identity (in case of split location records)
-                        const normExp = normalizeExpiryDate(bal.expiry || item.expiry);
-                        const cleanBatch = (bal.batchNumber || item.batchNumber || "").trim();
-                        const batchBalances = await StockBalance.find(buildStockBalanceFilter(pId, normExp, cleanBatch)).session(session);
-                        const batchAvailable = batchBalances.reduce((sum, b) => sum + (Number(b.quantity) || 0), 0);
-
-                        if (batchAvailable < requestedForBatch) {
-                            const err = new Error(`Insufficient stock for "${productDoc?.name || 'Product'}" batch (Expiry: ${bal.expiry ? moment(bal.expiry).format('DD/MM/YYYY') : 'None'}). Requested: ${requestedForBatch}, Available: ${batchAvailable}`);
-                            err.statusCode = 409;
-                            err.code = 'INSUFFICIENT_STOCK';
-                            err.availableQuantity = batchAvailable;
-                            err.requestedQuantity = requestedForBatch;
-                            err.productName = productDoc?.name;
-                            err.productId = pId;
-                            err.stockBalanceId = String(bal._id);
-                            throw err;
-                        }
                     }
                 }
             }
@@ -367,86 +356,74 @@ const stockOutController = {
                 const rawDisc = item.discountPercentage !== undefined ? item.discountPercentage : (body.discountPercentage !== undefined ? body.discountPercentage : 0);
                 const itemDiscPct = Number(rawDisc || 0);
 
-                // Check if user selected an exact batch / StockBalance
-                let targetStockBalanceId = item.stockBalanceId;
-                if (!targetStockBalanceId && item.expiry) {
-                    const matchBal = await findMatchingStockBalance(pId, item.expiry, item.batchNumber, null, session);
-                    if (matchBal && (matchBal.quantity || 0) > 0) {
-                        targetStockBalanceId = matchBal._id;
-                    }
+                // Resolve eligible underlying balances for this line item (pooling same-expiry lots)
+                const { eligibleBalances, totalAvailable } = await resolveEligibleBalances({
+                    productId: pId,
+                    expiry: item.expiry,
+                    stockBalanceId: item.stockBalanceId,
+                    stockBalanceIds: item.stockBalanceIds,
+                    locationId: item.locationId || null,
+                    session,
+                    StockBalanceModel: StockBalance
+                });
+
+                if (totalAvailable < requestedQty) {
+                    const normExp = normalizeExpiryDate(item.expiry);
+                    const expDisplay = normExp ? moment(normExp).format('DD/MM/YYYY') : 'None';
+                    const err = new Error(`Insufficient stock for "${productDoc.name}" (Expiry: ${expDisplay}). Requested: ${requestedQty}, Available: ${totalAvailable}`);
+                    err.statusCode = 409;
+                    err.code = 'INSUFFICIENT_STOCK';
+                    err.availableQuantity = totalAvailable;
+                    err.requestedQuantity = requestedQty;
+                    err.productName = productDoc.name;
+                    err.productId = pId;
+                    err.expiry = expDisplay;
+                    throw err;
                 }
 
-                if (targetStockBalanceId) {
-                    // Exact batch deduction: deduct from the specified StockBalance record
-                    let bal = await StockBalance.findOne({
-                        _id: targetStockBalanceId,
-                        productId: new mongoose.Types.ObjectId(pId)
-                    }).session(session);
+                let remaining = requestedQty;
+                for (const bal of eligibleBalances) {
+                    if (remaining <= 0) break;
+                    const balQty = Number(bal.quantity) || 0;
+                    if (balQty <= 0) continue;
 
-                    if (!bal && item.expiry) {
-                        bal = await findMatchingStockBalance(pId, item.expiry, item.batchNumber, null, session);
-                    }
+                    const takeQty = Math.min(remaining, balQty);
 
-                    // If this single record does not have enough but sibling records for this batch exist, consolidate them
-                    if (bal && (bal.quantity || 0) < requestedQty) {
-                        const normExp = normalizeExpiryDate(bal.expiry || item.expiry);
-                        const cleanBatch = (bal.batchNumber || item.batchNumber || "").trim();
-                        const siblings = await StockBalance.find({
-                            ...buildStockBalanceFilter(pId, normExp, cleanBatch),
-                            _id: { $ne: bal._id }
-                        }).session(session);
-
-                        if (siblings.length > 0) {
-                            let added = 0;
-                            for (const sib of siblings) {
-                                added += (sib.quantity || 0);
-                                await StockBalance.findByIdAndDelete(sib._id, session ? { session } : {});
-                            }
-                            bal.quantity = (bal.quantity || 0) + added;
-                            await bal.save(session ? { session } : {});
-                        }
-                    }
-
-                    if (!bal || (bal.quantity || 0) < requestedQty) {
-                        const avail = bal ? (bal.quantity || 0) : 0;
-                        const err = new Error(`Insufficient stock for "${productDoc.name}" batch ${bal?.batchNumber || ''} (Expiry: ${bal?.expiry ? moment(bal.expiry).format('DD/MM/YYYY') : 'None'}). Requested: ${requestedQty}, Available: ${avail}`);
-                        err.statusCode = 409;
-                        err.code = 'INSUFFICIENT_STOCK';
-                        err.availableQuantity = avail;
-                        err.requestedQuantity = requestedQty;
-                        err.productName = productDoc.name;
-                        err.productId = pId;
-                        throw err;
-                    }
-
-                    const prevQty = bal.quantity;
+                    // Atomic deduction with $gte TOCTOU guard
                     const updatedBal = await StockBalance.findOneAndUpdate(
-                        { _id: bal._id, productId: new mongoose.Types.ObjectId(pId), quantity: { $gte: requestedQty } },
-                        { $inc: { quantity: -requestedQty } },
+                        { _id: bal._id, productId: new mongoose.Types.ObjectId(pId), quantity: { $gte: takeQty } },
+                        { $inc: { quantity: -takeQty } },
                         { new: true, session }
                     );
 
                     if (!updatedBal) {
-                        const recheckBal = await StockBalance.findById(bal._id).session(session);
-                        const avail = recheckBal ? recheckBal.quantity : 0;
-                        const err = new Error(`Stock for "${productDoc.name}" batch changed concurrently. Available: ${avail}, Requested: ${requestedQty}`);
+                        const recheck = await resolveEligibleBalances({
+                            productId: pId,
+                            expiry: item.expiry,
+                            stockBalanceId: item.stockBalanceId,
+                            stockBalanceIds: item.stockBalanceIds,
+                            locationId: item.locationId || null,
+                            session,
+                            StockBalanceModel: StockBalance
+                        });
+                        const err = new Error(`Stock for "${productDoc.name}" batch changed concurrently. Available: ${recheck.totalAvailable}, Requested: ${remaining}`);
                         err.statusCode = 409;
                         err.code = 'INSUFFICIENT_STOCK';
-                        err.availableQuantity = avail;
+                        err.availableQuantity = recheck.totalAvailable;
                         err.requestedQuantity = requestedQty;
                         err.productName = productDoc.name;
                         err.productId = pId;
-                        err.stockBalanceId = String(bal._id);
                         throw err;
                     }
 
+                    const prevQty = balQty;
                     const newQty = updatedBal.quantity;
                     const itemPrice = Number(
                         (item.sellingPrice !== undefined && item.sellingPrice !== null && item.sellingPrice !== '' && !isNaN(Number(item.sellingPrice)))
                             ? Number(item.sellingPrice)
                             : (productDoc?.sellingPrice ?? updatedBal.sellingPrice ?? 0)
                     );
-                    const itemTotal = Math.round((requestedQty * itemPrice) * 100) / 100;
+                    const itemTotal = Math.round((takeQty * itemPrice) * 100) / 100;
                     const discountAmount = Math.round((itemTotal * itemDiscPct / 100) * 100) / 100;
                     const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
 
@@ -455,7 +432,7 @@ const stockOutController = {
                             stockOutHeaderId: header._id,
                             productId: pId,
                             stockBalanceId: updatedBal._id,
-                            quantity: requestedQty,
+                            quantity: takeQty,
                             sellingPrice: itemPrice,
                             purchasingPrice: updatedBal.purchasingPrice || 0,
                             expiry: updatedBal.expiry,
@@ -476,7 +453,7 @@ const stockOutController = {
                         locationId: location,
                         batchNumber: updatedBal.batchNumber || "",
                         expiry: updatedBal.expiry,
-                        quantityDelta: -requestedQty,
+                        quantityDelta: -takeQty,
                         previousBalance: prevQty,
                         newBalance: newQty,
                         unitCost: updatedBal.purchasingPrice || 0,
@@ -492,106 +469,21 @@ const stockOutController = {
                     await txn.save(session ? { session } : {});
 
                     issuedItems.push(outItem);
-                    touchedProductIds.add(pId);
-                } else {
-                    // Fallback to FEFO allocation across available batches when no specific batch is selected
-                    const balances = await StockBalance.find({
-                        productId: new mongoose.Types.ObjectId(pId),
-                        quantity: { $gt: 0 }
-                    }).sort({ expiry: 1, createdAt: 1 }).session(session);
-
-                    let remaining = requestedQty;
-                    for (const bal of balances) {
-                        if (remaining <= 0) break;
-                        const takeQty = Math.min(remaining, bal.quantity);
-
-                        // Atomic deduction with $gte TOCTOU guard
-                        const updatedBal = await StockBalance.findOneAndUpdate(
-                            { _id: bal._id, quantity: { $gte: takeQty } },
-                            { $inc: { quantity: -takeQty } },
-                            { new: true, session }
-                        );
-
-                        if (!updatedBal) {
-                            const recheck = await getAuthoritativeStock(pId, session);
-                            const err = new Error(`Stock for "${productDoc.name}" changed concurrently. Available: ${recheck.totalAvailable}, Requested: ${remaining}`);
-                            err.statusCode = 409;
-                            err.code = 'INSUFFICIENT_STOCK';
-                            err.availableQuantity = recheck.totalAvailable;
-                            err.requestedQuantity = requestedQty;
-                            err.productName = productDoc.name;
-                            throw err;
-                        }
-
-                        const prevQty = bal.quantity;
-                        const newQty = updatedBal.quantity;
-                        const itemPrice = Number(
-                            (item.sellingPrice !== undefined && item.sellingPrice !== null && item.sellingPrice !== '' && !isNaN(Number(item.sellingPrice)))
-                                ? Number(item.sellingPrice)
-                                : (productDoc?.sellingPrice ?? bal.sellingPrice ?? 0)
-                        );
-                        const itemTotal = Math.round((takeQty * itemPrice) * 100) / 100;
-                        const discountAmount = Math.round((itemTotal * itemDiscPct / 100) * 100) / 100;
-                        const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
-
-                        const outItemArr = await StockOutItem.create(
-                            [{
-                                stockOutHeaderId: header._id,
-                                productId: pId,
-                                stockBalanceId: bal._id,
-                                quantity: takeQty,
-                                sellingPrice: itemPrice,
-                                purchasingPrice: bal.purchasingPrice || 0,
-                                expiry: bal.expiry,
-                                batchNumber: bal.batchNumber || "",
-                                remarks: item.remarks || remarks || "",
-                                discountPercentage: itemDiscPct,
-                                discountAmount,
-                                itemTotal,
-                                netTotal
-                            }],
-                            session ? { session } : {}
-                        );
-                        const outItem = outItemArr[0];
-
-                        const txn = new InventoryTransaction({
-                            productId: pId,
-                            stockBalanceId: bal._id,
-                            locationId: location,
-                            batchNumber: bal.batchNumber || "",
-                            expiry: bal.expiry,
-                            quantityDelta: -takeQty,
-                            previousBalance: prevQty,
-                            newBalance: newQty,
-                            unitCost: bal.purchasingPrice || 0,
-                            sellingPrice: itemPrice,
-                            transactionType: "STOCK_OUT",
-                            referenceType: "StockOut",
-                            referenceId: outItem._id,
-                            docNo: parsedDocNo,
-                            createdBy: req.user?._id,
-                            date,
-                            remarks: item.remarks || remarks || "Stock Out"
-                        });
-                        await txn.save(session ? { session } : {});
-
-                        issuedItems.push(outItem);
-                        remaining -= takeQty;
-                    }
-
-                    if (remaining > 0) {
-                        const recheck = await getAuthoritativeStock(pId, session);
-                        const err = new Error(`Insufficient stock remaining for "${productDoc.name}". Available: ${recheck.totalAvailable}, Requested: ${remaining}`);
-                        err.statusCode = 409;
-                        err.code = 'INSUFFICIENT_STOCK';
-                        err.availableQuantity = recheck.totalAvailable;
-                        err.requestedQuantity = requestedQty;
-                        err.productName = productDoc.name;
-                        throw err;
-                    }
-
-                    touchedProductIds.add(pId);
+                    remaining -= takeQty;
                 }
+
+                if (remaining > 0) {
+                    const recheck = await getAuthoritativeStock(pId, session);
+                    const err = new Error(`Insufficient stock remaining for "${productDoc.name}". Available: ${recheck.totalAvailable}, Requested: ${remaining}`);
+                    err.statusCode = 409;
+                    err.code = 'INSUFFICIENT_STOCK';
+                    err.availableQuantity = recheck.totalAvailable;
+                    err.requestedQuantity = requestedQty;
+                    err.productName = productDoc.name;
+                    throw err;
+                }
+
+                touchedProductIds.add(pId);
             }
 
             // Recalculate running balances for all touched products
@@ -983,11 +875,13 @@ const stockOutController = {
 
             // Check stock availability if increasing Stock Out quantity
             if (diff > 0) {
-                const balances = await StockBalance.find({
-                    productId: mongoose.Types.ObjectId(String(productId)),
-                    quantity: { $gt: 0 }
+                const { eligibleBalances, totalAvailable } = await resolveEligibleBalances({
+                    productId,
+                    expiry: item.expiry,
+                    stockBalanceId: item.stockBalanceId,
+                    locationId: item.locationId || null,
+                    StockBalanceModel: StockBalance
                 });
-                const totalAvailable = balances.reduce((sum, b) => sum + (b.quantity || 0), 0);
                 if (totalAvailable < diff) {
                     return res.status(400).json({
                         msg: "error",
@@ -995,10 +889,12 @@ const stockOutController = {
                     });
                 }
                 let remaining = diff;
-                for (const bal of balances) {
+                for (const bal of eligibleBalances) {
                     if (remaining <= 0) break;
-                    const takeQty = Math.min(remaining, bal.quantity);
-                    bal.quantity -= takeQty;
+                    const balQty = Number(bal.quantity) || 0;
+                    if (balQty <= 0) continue;
+                    const takeQty = Math.min(remaining, balQty);
+                    bal.quantity = balQty - takeQty;
                     await bal.save();
                     remaining -= takeQty;
                 }
@@ -1006,11 +902,11 @@ const stockOutController = {
                 // Return stock
                 const returnQty = Math.abs(diff);
                 let bal = null;
-                if (item.expiry) {
-                    bal = await StockBalance.findOne({
-                        productId: item.productId,
-                        expiry: item.expiry
-                    });
+                if (item.stockBalanceId) {
+                    bal = await StockBalance.findById(item.stockBalanceId);
+                }
+                if (!bal && item.expiry) {
+                    bal = await findMatchingStockBalance(item.productId, item.expiry, item.batchNumber, targetLocation);
                 }
                 if (!bal) {
                     bal = await StockBalance.findOne({ productId: item.productId }).sort({ createdAt: -1 });
@@ -1021,7 +917,8 @@ const stockOutController = {
                 } else {
                     await StockBalance.create({
                         productId: item.productId,
-                        expiry: item.expiry || null,
+                        expiry: normalizeExpiryDate(item.expiry),
+                        batchNumber: item.batchNumber || "",
                         quantity: returnQty,
                         purchasingPrice: item.purchasingPrice || 0,
                         sellingPrice: item.sellingPrice || 0
@@ -1163,31 +1060,40 @@ const stockOutController = {
                         throw new Error(`Product not found for ID: ${pId}`);
                     }
 
-                    // Check if exact stockBalanceId / batch is specified
-                    let targetStockBalanceId = update.stockBalanceId;
-                    if (!targetStockBalanceId && update.expiry) {
-                        const matchBal = await findMatchingStockBalance(pId, update.expiry, update.batchNumber, update.locationId, session);
-                        if (matchBal && (matchBal.quantity || 0) > 0) targetStockBalanceId = matchBal._id;
+                    // Resolve eligible underlying balances for this item (pooling same-expiry lots)
+                    const { eligibleBalances, totalAvailable } = await resolveEligibleBalances({
+                        productId: pId,
+                        expiry: update.expiry,
+                        stockBalanceId: update.stockBalanceId,
+                        stockBalanceIds: update.stockBalanceIds,
+                        locationId: header.location,
+                        session,
+                        StockBalanceModel: StockBalance
+                    });
+
+                    if (totalAvailable < requestedQty) {
+                        const normExp = normalizeExpiryDate(update.expiry);
+                        const expFormatted = normExp ? moment(normExp).format('DD/MM/YYYY') : 'None';
+                        throw new Error(`Insufficient stock for "${productDoc.name}" (Expiry: ${expFormatted}). Requested: ${requestedQty}, Available: ${totalAvailable}`);
                     }
 
-                    if (targetStockBalanceId) {
-                        const bal = await StockBalance.findOne({
-                            _id: targetStockBalanceId,
-                            productId: mongoose.Types.ObjectId(pId)
-                        }).session(session);
+                    let remaining = requestedQty;
+                    for (const bal of eligibleBalances) {
+                        if (remaining <= 0) break;
+                        const balQty = Number(bal.quantity) || 0;
+                        if (balQty <= 0) continue;
 
-                        if (!bal || (bal.quantity || 0) < requestedQty) {
-                            const avail = bal ? (bal.quantity || 0) : 0;
-                            throw new Error(`Insufficient stock for "${productDoc.name}" batch ${bal?.batchNumber || ''} (Expiry: ${bal?.expiry ? moment(bal.expiry).format('DD/MM/YYYY') : 'None'}). Requested: ${requestedQty}, Available: ${avail}`);
-                        }
-
-                        const prevQty = bal.quantity;
-                        bal.quantity -= requestedQty;
+                        const takeQty = Math.min(remaining, balQty);
+                        const prevQty = balQty;
+                        bal.quantity -= takeQty;
                         await bal.save(session ? { session } : {});
 
                         const itemDiscPct = Number(update.discountPercentage || 0);
+                        if (isNaN(itemDiscPct) || itemDiscPct < 0 || itemDiscPct > 100) {
+                            throw new Error(`Invalid discount percentage (${update.discountPercentage})`);
+                        }
                         const itemPrice = Number(sellingPrice ?? bal.sellingPrice ?? 0);
-                        const itemTotal = Math.round((requestedQty * itemPrice) * 100) / 100;
+                        const itemTotal = Math.round((takeQty * itemPrice) * 100) / 100;
                         const discountAmount = Math.round((itemTotal * itemDiscPct / 100) * 100) / 100;
                         const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
 
@@ -1196,7 +1102,7 @@ const stockOutController = {
                                 stockOutHeaderId: header._id,
                                 productId: pId,
                                 stockBalanceId: bal._id,
-                                quantity: requestedQty,
+                                quantity: takeQty,
                                 sellingPrice: itemPrice,
                                 purchasingPrice: bal.purchasingPrice || 0,
                                 expiry: bal.expiry,
@@ -1217,7 +1123,7 @@ const stockOutController = {
                             locationId: header.location,
                             batchNumber: bal.batchNumber || "",
                             expiry: bal.expiry,
-                            quantityDelta: -requestedQty,
+                            quantityDelta: -takeQty,
                             previousBalance: prevQty,
                             newBalance: bal.quantity,
                             unitCost: bal.purchasingPrice || 0,
@@ -1231,78 +1137,8 @@ const stockOutController = {
                             remarks: remarks || "Stock Out added via bulk update"
                         });
                         await txn.save(session ? { session } : {});
-                    } else {
-                        // FEFO / FIFO Batch Allocation from StockBalances
-                        const balances = await StockBalance.find({
-                            productId: mongoose.Types.ObjectId(pId),
-                            quantity: { $gt: 0 }
-                        }).sort({ expiry: 1, createdAt: 1 }).session(session);
 
-                        const totalAvailable = balances.reduce((sum, b) => sum + (b.quantity || 0), 0);
-                        if (totalAvailable < requestedQty) {
-                            throw new Error(`Insufficient stock for "${productDoc.name}". Requested: ${requestedQty}, Available: ${totalAvailable}`);
-                        }
-
-                        let remaining = requestedQty;
-                        for (const bal of balances) {
-                            if (remaining <= 0) break;
-                            const takeQty = Math.min(remaining, bal.quantity);
-                            const prevQty = bal.quantity;
-                            bal.quantity -= takeQty;
-                            await bal.save(session ? { session } : {});
-
-                            const itemDiscPct = Number(update.discountPercentage || 0);
-                            if (isNaN(itemDiscPct) || itemDiscPct < 0 || itemDiscPct > 100) {
-                                throw new Error(`Invalid discount percentage (${update.discountPercentage})`);
-                            }
-                            const itemPrice = Number(sellingPrice ?? bal.sellingPrice ?? 0);
-                            const itemTotal = Math.round((takeQty * itemPrice) * 100) / 100;
-                            const discountAmount = Math.round((itemTotal * itemDiscPct / 100) * 100) / 100;
-                            const netTotal = Math.round((itemTotal - discountAmount) * 100) / 100;
-
-                            const outItemArr = await StockOutItem.create(
-                                [{
-                                    stockOutHeaderId: header._id,
-                                    productId: pId,
-                                    stockBalanceId: bal._id,
-                                    quantity: takeQty,
-                                    sellingPrice: itemPrice,
-                                    purchasingPrice: bal.purchasingPrice || 0,
-                                    expiry: bal.expiry,
-                                    batchNumber: bal.batchNumber || "",
-                                    remarks: remarks || "Stock Out added via bulk update",
-                                    discountPercentage: itemDiscPct,
-                                    discountAmount,
-                                    itemTotal,
-                                    netTotal
-                                }],
-                                session ? { session } : {}
-                            );
-                            const outItem = outItemArr[0];
-
-                            const txn = new InventoryTransaction({
-                                productId: pId,
-                                stockBalanceId: bal._id,
-                                locationId: header.location,
-                                batchNumber: bal.batchNumber || "",
-                                expiry: bal.expiry,
-                                quantityDelta: -takeQty,
-                                previousBalance: prevQty,
-                                newBalance: bal.quantity,
-                                unitCost: bal.purchasingPrice || 0,
-                                sellingPrice: Number(sellingPrice ?? bal.sellingPrice ?? 0),
-                                transactionType: "STOCK_OUT",
-                                referenceType: "StockOut",
-                                referenceId: outItem._id,
-                                docNo: parsedDocNo,
-                                createdBy: req.user?._id,
-                                date: header.date || new Date(),
-                                remarks: remarks || "Stock Out added via bulk update"
-                            });
-                            await txn.save(session ? { session } : {});
-
-                            remaining -= takeQty;
-                        }
+                        remaining -= takeQty;
                     }
                     touchedProductIds.add(pId);
                 }

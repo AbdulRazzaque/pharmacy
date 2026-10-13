@@ -60,17 +60,28 @@ const StockList = () => {
           if (stock.expiryArray && stock.expiryArray.length > 0) {
             stock.expiryArray.forEach((expiryItem) => {
               const expiryDate = expiryItem.expiry ? moment(expiryItem.expiry).format('YYYY-MM-DD') : 'no-expiry';
-              const mapKey = `${baseProductId || baseName}_${expiryDate}`;
+              const mapKey = expiryItem.groupId || `${baseProductId || baseName}_${expiryDate}`;
 
               if (expiryMap.has(mapKey)) {
                 const existing = expiryMap.get(mapKey);
                 existing.quantity += expiryItem.quantity || 0;
                 existing.stockIds.push(stock._id);
+                if (expiryItem.stockBalanceIds) {
+                  existing.stockBalanceIds = Array.from(new Set([...existing.stockBalanceIds, ...expiryItem.stockBalanceIds]));
+                }
+                if (expiryItem.batches) {
+                  existing.batches = [...(existing.batches || []), ...expiryItem.batches];
+                }
               } else {
                 expiryMap.set(mapKey, {
                   _id: mapKey,
+                  groupId: expiryItem.groupId || mapKey,
                   originalStockId: stock._id,
                   stockIds: [stock._id],
+                  stockBalanceId: expiryItem.stockBalanceId || expiryItem._id,
+                  stockBalanceIds: expiryItem.stockBalanceIds || (expiryItem.stockBalanceId ? [expiryItem.stockBalanceId] : []),
+                  batches: expiryItem.batches || [],
+                  batchNumber: expiryItem.batchNumber || '',
                   name: baseName,
                   productName: baseName,
                   slug: baseSlug,

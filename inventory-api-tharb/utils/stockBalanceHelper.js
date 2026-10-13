@@ -195,8 +195,21 @@ async function consolidateAllStockBalances() {
   }
 }
 
+const {
+  groupStockBalances,
+  resolveEligibleBalances,
+  getExpiryKey,
+  buildExpiryDateRange,
+  buildLogicalGroupKey
+} = require('./inventoryGroupingHelper');
+
 module.exports = {
   normalizeExpiryDate,
+  getExpiryKey,
+  buildExpiryDateRange,
+  buildLogicalGroupKey,
+  groupStockBalances,
+  resolveEligibleBalances,
   buildStockBalanceFilter,
   findMatchingStockBalance,
   consolidateAllStockBalances
